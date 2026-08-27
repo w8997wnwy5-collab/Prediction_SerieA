@@ -78,7 +78,8 @@ def pare_csv_seriea(dati):
     """None se va bene, altrimenti il motivo del rifiuto."""
     if not dati or len(dati) < 400:
         return 'solo %d byte' % len(dati or b'')
-    testa = dati[:3000].decode('utf-8', errors='replace').lstrip()
+    # utf-8-sig toglie il BOM: certe stagioni ce l'hanno, altre no, ed è invisibile
+    testa = dati[:3000].decode('utf-8-sig', errors='replace').lstrip('\ufeff').lstrip()
     if testa[:1] == '<' or '<html' in testa[:400].lower():
         return 'è una pagina HTML, non un CSV'
     prima = testa.split('\n', 1)[0]
@@ -174,7 +175,13 @@ def stagioni_da_prendere(oggi=None):
 
 def leggi_csv(testo, stagione):
     fuori = []
-    for r in csv.DictReader(io.StringIO(testo.replace('\r\n', '\n'))):
+    lettore = csv.DictReader(io.StringIO(testo.replace('\r\n', '\n')))
+    # Il BOM in testa al file diventerebbe parte del nome della prima colonna:
+    # 'Div' si chiamerebbe '\ufeffDiv' e ogni riga verrebbe scartata in silenzio.
+    # È esattamente il modo in cui tre stagioni sono sparite senza un errore.
+    if lettore.fieldnames:
+        lettore.fieldnames = [(c or '').replace('\ufeff', '').strip() for c in lettore.fieldnames]
+    for r in lettore:
         if (r.get('Div') or '').strip() != 'I1':
             continue
         casa, via, d = nome(r.get('HomeTeam')), nome(r.get('AwayTeam')), data_iso(r.get('Date'))
@@ -213,7 +220,7 @@ def prendi_football_data(stagioni):
         url = 'https://www.football-data.co.uk/mmz4281/%s/I1.csv' % codice
         log('· football-data.co.uk %s' % etichetta)
         try:
-            testo = scarica(url, controllo=pare_csv_seriea).decode('utf-8', errors='replace')
+            testo = scarica(url, controllo=pare_csv_seriea).decode('utf-8-sig', errors='replace')
             p = leggi_csv(testo, etichetta)
             if not p:
                 raise RuntimeError('CSV scaricato ma nessuna partita di Serie A dentro')
@@ -257,7 +264,7 @@ def prendi_calendario(stagioni, esiti):
     fut = []
     try:
         testo = scarica('https://www.football-data.co.uk/fixtures.csv',
-                        tentativi=2, controllo=pare_csv_seriea).decode('utf-8', 'replace')
+                        tentativi=2, controllo=pare_csv_seriea).decode('utf-8-sig', 'replace')
         for r in csv.DictReader(io.StringIO(testo)):
             if (r.get('Div') or '').strip() != 'I1':
                 continue
