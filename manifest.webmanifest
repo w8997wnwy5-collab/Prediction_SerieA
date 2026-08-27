@@ -1,0 +1,13 @@
+{
+  "name": "Modello Serie A",
+  "short_name": "Serie A",
+  "description": "Modello statistico per la Serie A: forze delle squadre, probabilità di ogni partita, arbitri e calibrazione.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#F5F7F5",
+  "theme_color": "#F5F7F5",
+  "orientation": "portrait",
+  "lang": "it",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}
