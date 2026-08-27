@@ -401,21 +401,56 @@ def carica_esistente():
         return None
 
 
+def giorni_tra(a, b):
+    try:
+        return abs((datetime.strptime(a, '%Y-%m-%d') - datetime.strptime(b, '%Y-%m-%d')).days)
+    except Exception:                 # noqa: BLE001
+        return 999
+
+
 def unisci(vecchie, nuove):
     """Il nuovo vince, ma solo dove ha qualcosa da dire: un campo assente non
     cancella quello che c'era. Così l'arbitro trovato ieri resta anche se oggi
-    la fonte principale non l'ha dato."""
-    indice = {}
+    la fonte principale non l'ha dato.
+
+    Il punto delicato è che due fonti diverse datano la stessa partita in modo
+    diverso — un rinvio, un fuso orario, una partita di sabato sera segnata alla
+    domenica. Senza accorgersene si finisce con la stessa partita due volte, e un
+    modello che conta due volte gli stessi gol è peggio di un modello con meno dati.
+    Quindi: stessa squadra di casa, stessa squadra ospite, meno di quattro giorni
+    di distanza = è la stessa partita, e vince la data della fonte nuova."""
+    indice, per_sfida = {}, {}
+
+    def registra(p, k):
+        indice[k] = p
+        per_sfida.setdefault((p.get('c'), p.get('v')), set()).add(k)
+
     for p in (vecchie or []):
-        indice[chiave(p)] = dict(p)
+        registra(dict(p), chiave(p))
+
     for p in nuove:
         k = chiave(p)
-        if k in indice:
-            for campo, valore in p.items():
-                if valore is not None:
-                    indice[k][campo] = valore
-        else:
-            indice[k] = dict(p)
+        esistente = indice.get(k)
+        vecchia_chiave = k
+        if esistente is None:
+            for k2 in list(per_sfida.get((p.get('c'), p.get('v')), ())):
+                altra = indice.get(k2)
+                if not altra:
+                    continue
+                stessa_stagione = (not altra.get('s') or not p.get('s') or altra['s'] == p['s'])
+                if stessa_stagione and giorni_tra(altra.get('d', ''), p.get('d', '')) <= 3:
+                    esistente, vecchia_chiave = altra, k2
+                    break
+        if esistente is None:
+            registra(dict(p), k)
+            continue
+        for campo, valore in p.items():
+            if valore is not None:
+                esistente[campo] = valore
+        if vecchia_chiave != k:       # la data è cambiata: si sposta sotto la chiave nuova
+            indice.pop(vecchia_chiave, None)
+            per_sfida[(p.get('c'), p.get('v'))].discard(vecchia_chiave)
+            registra(esistente, k)
     return indice
 
 
