@@ -1,0 +1,20 @@
+{
+ "aggiornato": "2026-08-27T13:24:00+00:00",
+ "esito": "ok",
+ "fonte": "football-data.co.uk",
+ "partite_totali": 1140,
+ "partite_giocate": 1140,
+ "partite_in_arrivo": 370,
+ "con_arbitro": 0,
+ "con_tiri": 1140,
+ "con_quote": 1139,
+ "giocatori": 0,
+ "stagioni": [
+  "2021-22",
+  "2022-23",
+  "2023-24"
+ ],
+ "errori": [
+  "nessuna chiave: modulo giocatori non attivo"
+ ]
+}
