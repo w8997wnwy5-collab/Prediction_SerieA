@@ -43,8 +43,14 @@ self.onmessage = function (ev) {
       iterazioni: 400, pesoTiri: peso
     });
 
-    stato('arbitri', 0.92, 'Conto i cartellini di ogni arbitro');
+    stato('incertezza', 0.86, 'Rigioco il campionato per misurare quanto posso sbagliarmi');
+    var repliche = M.bootstrap(dati, { xi: opz.xi, ridge: opz.ridge, iterazioni: 120 },
+                               opz.repliche || 40, mod.gol);
+    var se = M.sintesiBootstrap(repliche, mod.squadre.length);
+
+    stato('arbitri', 0.94, 'Conto i cartellini di ogni arbitro');
     var arb = M.statisticheArbitri(partite, { da: opz.daArbitri || null, k: 12 });
+    var rosso = M.effettoRosso(partite, mod);
 
     self.postMessage({
       tipo: 'pronto',
@@ -52,6 +58,14 @@ self.onmessage = function (ev) {
         squadre: mod.squadre, gol: semplifica(mod.gol), tiri: semplifica(mod.tiri),
         pesoTiri: peso, calibrazioneTiri: mod.calibrazioneTiri,
         arbitri: arb, backtest: back,
+        repliche: repliche, se: se ? {
+          att: Array.prototype.slice.call(se.att), dif: Array.prototype.slice.call(se.dif),
+          gamma: se.gamma, mu0: se.mu0, repliche: se.repliche,
+          centro: { att: Array.prototype.slice.call(se.centro.att),
+                    dif: Array.prototype.slice.call(se.centro.dif),
+                    gamma: se.centro.gamma, mu0: se.centro.mu0 }
+        } : null,
+        effettoRosso: rosso,
         partiteUsate: dati.righe.length, ultimaData: dati.ultimaData
       }
     });

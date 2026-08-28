@@ -299,6 +299,325 @@ function prevedi(modello, casa, via, opz) {
   return e;
 }
 
+/* ───────────────────── incertezza: quanto NON sappiamo ───────────────────── */
+
+/* Le forze stimate non sono la verità: sono la miglior lettura di un campione.
+   Rigiocando lo stesso campionato con la stessa fortuna diversa, verrebbero
+   numeri un po' diversi. Il bootstrap misura proprio questo: si ricampiona
+   l'archivio con ripetizione e si ristima. La dispersione dei risultati è
+   l'incertezza vera del modello, quella che poi diventa una fascia invece di
+   un numero secco. */
+function bootstrap(dati, opzioni, K, parBase) {
+  opzioni = opzioni || {};
+  K = K || 20;
+  var righeOrig = dati.righe, n = righeOrig.length, k, i;
+  if (n < 200 || !parBase) return [];
+  var seme = 12345;
+  function rnd() {                    /* deterministico: stessi dati, stessa risposta */
+    seme = (seme * 1103515245 + 12345) & 0x7fffffff;
+    return seme / 0x7fffffff;
+  }
+  function poissonCasuale(lam) {
+    /* Knuth: per i valori piccoli di una partita di calcio va benissimo */
+    var L = Math.exp(-lam), p = 1, x = -1;
+    do { x++; p *= rnd(); } while (p > L && x < 20);
+    return x;
+  }
+  /* Ricampionare le partite a caso sembra la cosa ovvia, ma rompe una cosa che
+     nel calcio è vera per costruzione: ogni squadra gioca 38 partite, metà in
+     casa e metà fuori. Un campionato ricampionato è più sbilanciato di
+     qualunque campionato vero, e l'incertezza esce gonfiata.
+     Si tiene quindi fisso il calendario e si rigiocano i RISULTATI, pescandoli
+     dal modello stimato. È la stessa domanda, posta bene: se questo campionato
+     si rigiocasse con la stessa fortuna diversa, che forze stimeremmo? */
+  var repliche = [];
+  for (k = 0; k < K; k++) {
+    var campione = new Array(n);
+    for (i = 0; i < n; i++) {
+      var r0 = righeOrig[i];
+      var lam = limita(Math.exp(parBase.mu0 + parBase.att[r0.i] - parBase.dif[r0.j] + parBase.gamma), 0.03, 8);
+      var mu = limita(Math.exp(parBase.mu0 + parBase.att[r0.j] - parBase.dif[r0.i]), 0.03, 8);
+      campione[i] = { i: r0.i, j: r0.j, d: r0.d, s: r0.s,
+                      x: poissonCasuale(lam), y: poissonCasuale(mu),
+                      xgc: r0.xgc, xgv: r0.xgv };
+    }
+    var finti = { squadre: dati.squadre, indice: dati.indice, righe: campione,
+                  calibrazioneTiri: dati.calibrazioneTiri, ultimaData: dati.ultimaData };
+    var r = stima(finti, { xi: opzioni.xi, ridge: opzioni.ridge, fino: opzioni.fino,
+                           iterazioni: opzioni.iterazioni || 120, rho: parBase.rho }, parBase);
+    if (r.ok) repliche.push({ mu0: r.par.mu0, gamma: r.par.gamma, rho: r.par.rho,
+                              att: Array.prototype.slice.call(r.par.att),
+                              dif: Array.prototype.slice.call(r.par.dif) });
+  }
+  return repliche;
+}
+
+/* Dalle repliche del bootstrap a un numero per parametro: di quanto può
+   sbagliarsi la forza di ogni squadra. Con poche repliche i percentili sarebbero
+   a scalini, quindi si usa la loro dispersione per pescare da una normale:
+   la fascia resta liscia e non finge una precisione che non c'è. */
+function sintesiBootstrap(repliche, nSquadre) {
+  if (!repliche || repliche.length < 4) return null;
+  var K = repliche.length, i, k;
+  var se = { att: new Float64Array(nSquadre), dif: new Float64Array(nSquadre), gamma: 0, mu0: 0 };
+  function scarto(valori) {
+    var m = 0, q = 0, z;
+    for (z = 0; z < valori.length; z++) m += valori[z];
+    m /= valori.length;
+    for (z = 0; z < valori.length; z++) q += (valori[z] - m) * (valori[z] - m);
+    return Math.sqrt(q / Math.max(1, valori.length - 1));
+  }
+  for (i = 0; i < nSquadre; i++) {
+    var a = [], d = [];
+    for (k = 0; k < K; k++) { a.push(repliche[k].att[i]); d.push(repliche[k].dif[i]); }
+    se.att[i] = scarto(a);
+    se.dif[i] = scarto(d);
+  }
+  se.gamma = scarto(repliche.map(function (r) { return r.gamma; }));
+  se.mu0 = scarto(repliche.map(function (r) { return r.mu0; }));
+  se.repliche = K;
+  /* Il centro delle repliche non coincide con la stima piena: ricampionando,
+     certe squadre finiscono con meno partite e la regolarizzazione le schiaccia
+     un po' di più verso la media. Se si usassero le repliche così come sono, la
+     probabilità media scivolerebbe verso il 50-50. Si tiene quindi la stima
+     piena come centro e dalle repliche si prende solo lo SCOSTAMENTO. */
+  var centro = { att: new Float64Array(nSquadre), dif: new Float64Array(nSquadre), gamma: 0, mu0: 0 };
+  for (i = 0; i < nSquadre; i++) {
+    for (k = 0; k < K; k++) { centro.att[i] += repliche[k].att[i]; centro.dif[i] += repliche[k].dif[i]; }
+    centro.att[i] /= K; centro.dif[i] /= K;
+  }
+  for (k = 0; k < K; k++) { centro.gamma += repliche[k].gamma; centro.mu0 += repliche[k].mu0; }
+  centro.gamma /= K; centro.mu0 /= K;
+  se.centro = centro;
+  return se;
+}
+
+/* Quanto pesa un'espulsione, misurato invece che immaginato: si confrontano i
+   gol segnati e subiti da chi resta in dieci con quelli di tutti gli altri. */
+function effettoRosso(partite, modello) {
+  /* Confrontare chi resta in dieci con la media della lega non basta: il rosso
+     lo prende più spesso chi sta già soffrendo, e il conto verrebbe gonfiato.
+     Se c'è un modello si usa quello che LUI si aspettava da quella partita: così
+     il confronto è con la squadra giusta, non con una squadra media. */
+  var attesiF = 0, attesiS = 0, fattiF = 0, fattiS = 0, nCon = 0;
+  var rossi = 0, nPartite = 0, i, p;
+  for (i = 0; i < partite.length; i++) {
+    p = partite[i];
+    if (p.gc == null || p.rc == null) continue;
+    nPartite++;
+    rossi += (p.rc || 0 ? 1 : 0) + (p.rv || 0 ? 1 : 0);
+    var rc = (p.rc || 0) > 0, rv = (p.rv || 0) > 0;
+    if (rc === rv) continue;                    /* nessuno o entrambi: non dice niente */
+    var casaInDieci = rc;
+    var iC = modello ? modello.indice[p.c] : null, iV = modello ? modello.indice[p.v] : null;
+    var att;
+    if (modello && iC != null && iV != null) {
+      att = attesi(modello.gol, iC, iV);
+    } else {
+      att = [1.45, 1.15];                       /* senza modello: medie di lega ragionevoli */
+    }
+    if (casaInDieci) { attesiF += att[0]; attesiS += att[1]; fattiF += p.gc; fattiS += p.gv; }
+    else { attesiF += att[1]; attesiS += att[0]; fattiF += p.gv; fattiS += p.gc; }
+    nCon++;
+  }
+  var prob = nPartite > 50 ? limita(rossi / (2 * nPartite), 0.005, 0.25) : 0.05;
+  var base = { attacco: 0.80, difesa: 1.28, prob: prob, misurato: false, n: nCon };
+  if (nCon < 40 || attesiF <= 0 || attesiS <= 0) return base;
+  /* si tira il risultato verso "nessun effetto" in proporzione a quanto è magro
+     il campione: con 40 partite non si riscrive la letteratura */
+  var forza = Math.min(1, nCon / 150);
+  var att0 = fattiF / attesiF, dif0 = fattiS / attesiS;
+  return {
+    attacco: limita(1 + (att0 - 1) * forza, 0.45, 1.05),
+    difesa: limita(1 + (dif0 - 1) * forza, 0.95, 2.2),
+    prob: prob, misurato: true, n: nCon
+  };
+}
+
+/* ───────────────────── mercati ───────────────────── */
+
+function mercatiDaMatrice(m) {
+  var n = m.length, i, j, p;
+  var s = { casa: 0, pari: 0, via: 0, gol: 0, o05: 0, o15: 0, o25: 0, o35: 0, o45: 0,
+            mg13: 0, mg24: 0, mg15: 0, segnaC: 0, segnaV: 0, cnp: 0, vnp: 0,
+            c1x: 0, cx2: 0, c12: 0 };
+  for (i = 0; i < n; i++) for (j = 0; j < n; j++) {
+    p = m[i][j];
+    var t = i + j;
+    if (i > j) s.casa += p; else if (i === j) s.pari += p; else s.via += p;
+    if (i > 0 && j > 0) s.gol += p;
+    if (i > 0) s.segnaC += p;
+    if (j > 0) s.segnaV += p;
+    if (j === 0) s.cnp += p;
+    if (i === 0) s.vnp += p;
+    if (t > 0.5) s.o05 += p;
+    if (t > 1.5) s.o15 += p;
+    if (t > 2.5) s.o25 += p;
+    if (t > 3.5) s.o35 += p;
+    if (t > 4.5) s.o45 += p;
+    if (t >= 1 && t <= 3) s.mg13 += p;
+    if (t >= 2 && t <= 4) s.mg24 += p;
+    if (t >= 1 && t <= 5) s.mg15 += p;
+  }
+  /* le doppie chance si sommano QUI, dentro ogni simulazione: sommare i
+     percentili di due mercati separati gonfierebbe la fascia */
+  s.c1x = s.casa + s.pari;
+  s.cx2 = s.via + s.pari;
+  s.c12 = s.casa + s.via;
+  return s;
+}
+
+function elencoMercati(s, nomiSquadre) {
+  var c = nomiSquadre ? nomiSquadre[0] : 'casa', v = nomiSquadre ? nomiSquadre[1] : 'trasferta';
+  return [
+    { id: '1', nome: 'Vince ' + c, gruppo: 'Esito', p: s.casa },
+    { id: 'X', nome: 'Pareggio', gruppo: 'Esito', p: s.pari },
+    { id: '2', nome: 'Vince ' + v, gruppo: 'Esito', p: s.via },
+    { id: '1X', nome: c + ' non perde', gruppo: 'Doppia chance', p: s.casa + s.pari },
+    { id: 'X2', nome: v + ' non perde', gruppo: 'Doppia chance', p: s.pari + s.via },
+    { id: '12', nome: 'Non finisce pari', gruppo: 'Doppia chance', p: s.casa + s.via },
+    { id: 'O05', nome: 'Almeno un gol', gruppo: 'Gol totali', p: s.o05 },
+    { id: 'O15', nome: 'Over 1.5', gruppo: 'Gol totali', p: s.o15 },
+    { id: 'O25', nome: 'Over 2.5', gruppo: 'Gol totali', p: s.o25 },
+    { id: 'U25', nome: 'Under 2.5', gruppo: 'Gol totali', p: 1 - s.o25 },
+    { id: 'O35', nome: 'Over 3.5', gruppo: 'Gol totali', p: s.o35 },
+    { id: 'U35', nome: 'Under 3.5', gruppo: 'Gol totali', p: 1 - s.o35 },
+    { id: 'MG13', nome: 'Multigol 1-3', gruppo: 'Gol totali', p: s.mg13 },
+    { id: 'MG24', nome: 'Multigol 2-4', gruppo: 'Gol totali', p: s.mg24 },
+    { id: 'GG', nome: 'Segnano entrambe', gruppo: 'Chi segna', p: s.gol },
+    { id: 'NG', nome: 'Non segnano entrambe', gruppo: 'Chi segna', p: 1 - s.gol },
+    { id: 'SC', nome: c + ' segna', gruppo: 'Chi segna', p: s.segnaC },
+    { id: 'SV', nome: v + ' segna', gruppo: 'Chi segna', p: s.segnaV }
+  ];
+}
+
+/* ───────────────────── simulazione ───────────────────── */
+
+/* Il punto della simulazione non è rifare quello che la matrice già calcola.
+   È aggiungere le due cose che la matrice dà per scontate:
+     · le forze delle squadre sono NOTE  → invece sono stimate, e ogni giro ne
+       pesca una versione diversa fra quelle plausibili;
+     · la partita fila liscia            → invece qualcuno può restare in dieci,
+       e l'effetto è misurato sull'archivio.
+   Quello che esce non è una probabilità, ma una fascia di probabilità. */
+function simula(modello, casa, via, opz) {
+  opz = opz || {};
+  var N = opz.N || 3000;
+  var i = modello.indice[casa], j = modello.indice[via];
+  if (i == null || j == null) return null;
+  /* Meglio pescare una replica intera del bootstrap che perturbare ogni forza
+     per conto suo: dentro una replica attacco, difesa e vantaggio del campo si
+     muovono INSIEME come si muovono davvero. Trattandoli come indipendenti la
+     fascia si gonfia e il modello sembra più ignorante di quanto sia. */
+  var centro = modello.se && modello.se.centro ? modello.se.centro : null;
+  var repliche = (modello.repliche && modello.repliche.length >= 8 && centro) ? modello.repliche : null;
+  var se = repliche ? null : (modello.se || null);
+  var rosso = modello.effettoRosso || { attacco: 0.78, difesa: 1.32, prob: 0.10 };
+  var pRossoC = opz.pRossoCasa != null ? opz.pRossoCasa : (rosso.prob || 0.10);
+  var pRossoV = opz.pRossoVia != null ? opz.pRossoVia : (rosso.prob || 0.10);
+  var agg = opz.agg || {};
+  var peso = opz.pesoTiri == null ? modello.pesoTiri : opz.pesoTiri;
+
+  var seme = 987654321;
+  function rnd() { seme = (seme * 1103515245 + 12345) & 0x7fffffff; return seme / 0x7fffffff; }
+  function gauss() {
+    var u = 1 - rnd(), w = rnd();
+    return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * w);
+  }
+
+  var esitiSim = [], conta = {}, k, campi;
+  var somma = null, sommaGolC = 0, sommaGolV = 0;
+  var risultatiConta = {};
+  var rossoCasa = 0, rossoVia = 0;
+  var base = mercatiDaMatrice(matriceRisultati(1, 1, 0, 3));  /* solo per avere le chiavi */
+  campi = Object.keys(base);
+  somma = {};
+  for (k = 0; k < campi.length; k++) somma[campi[k]] = 0;
+  var quadrati = {};
+  for (k = 0; k < campi.length; k++) quadrati[campi[k]] = 0;
+  var campione = [];
+
+  for (var n = 0; n < N; n++) {
+    var par = modello.gol, parT = modello.tiri;
+    /* la stessa scossa di incertezza vale per entrambi i modelli: sono stimati
+       sulle stesse partite, se sbagliano lo fanno insieme */
+    var dAttC = 0, dDifC = 0, dAttV = 0, dDifV = 0, dGamma = 0, dMu0 = 0;
+    if (repliche) {
+      var r = repliche[(rnd() * repliche.length) | 0];
+      dAttC = r.att[i] - centro.att[i]; dDifC = r.dif[i] - centro.dif[i];
+      dAttV = r.att[j] - centro.att[j]; dDifV = r.dif[j] - centro.dif[j];
+      dGamma = r.gamma - centro.gamma; dMu0 = r.mu0 - centro.mu0;
+    } else if (se) {
+      dAttC = se.att[i] * gauss(); dDifC = se.dif[i] * gauss();
+      dAttV = se.att[j] * gauss(); dDifV = se.dif[j] * gauss();
+      dGamma = se.gamma * gauss(); dMu0 = se.mu0 * gauss();
+    }
+    var rho = par.rho;
+    function coppia(pp) {
+      var aC = pp.att[i] + dAttC + (agg.attC || 0), dC = pp.dif[i] + dDifC + (agg.difC || 0);
+      var aV = pp.att[j] + dAttV + (agg.attV || 0), dV = pp.dif[j] + dDifV + (agg.difV || 0);
+      return [limita(Math.exp(pp.mu0 + dMu0 + aC - dV + pp.gamma + dGamma), 0.05, 7),
+              limita(Math.exp(pp.mu0 + dMu0 + aV - dC), 0.05, 7)];
+    }
+    var g = coppia(par), lam = g[0], mu = g[1];
+    if (parT && peso > 0) {                     /* media dei gol attesi, non dei parametri */
+      var t = coppia(parT);
+      lam = (1 - peso) * lam + peso * t[0];
+      mu = (1 - peso) * mu + peso * t[1];
+    }
+    /* imprevisti: qualcuno resta in dieci */
+    if (rnd() < pRossoC) { lam *= rosso.attacco; mu *= rosso.difesa; rossoCasa++; }
+    if (rnd() < pRossoV) { mu *= rosso.attacco; lam *= rosso.difesa; rossoVia++; }
+    var m = matriceRisultati(lam, mu, rho, 11);
+    var s = mercatiDaMatrice(m);
+    for (k = 0; k < campi.length; k++) {
+      somma[campi[k]] += s[campi[k]];
+      quadrati[campi[k]] += s[campi[k]] * s[campi[k]];
+    }
+    campione.push(s);
+    var gc = 0, gv = 0;
+    for (var a = 0; a < m.length; a++) for (var b = 0; b < m.length; b++) { gc += m[a][b] * a; gv += m[a][b] * b; }
+    sommaGolC += gc; sommaGolV += gv;
+  }
+
+  function fascia(campo) {
+    var v = new Array(N);
+    for (var q = 0; q < N; q++) v[q] = campione[q][campo];
+    v.sort(function (a, b) { return a - b; });
+    return { p: somma[campo] / N, p05: v[Math.floor(N * 0.05)], p95: v[Math.floor(N * 0.95)],
+             p25: v[Math.floor(N * 0.25)] };
+  }
+  var fasce = {};
+  for (k = 0; k < campi.length; k++) fasce[campi[k]] = fascia(campi[k]);
+  return {
+    N: N, fasce: fasce, golCasa: sommaGolC / N, golVia: sommaGolV / N,
+    quotaRossi: { casa: rossoCasa / N, via: rossoVia / N },
+    effettoRosso: rosso
+  };
+}
+
+/* Dalla probabilità del modello a quella corretta con la storia: se nella fascia
+   60-70% il modello ha visto succedere il 64%, non c'è motivo di credergli sulla
+   parola oggi. Correzione dolce, proporzionale a quanti casi ci sono. */
+function calibra(p, bins) {
+  if (!bins || !bins.length) return p;
+  var b = bins[Math.min(bins.length - 1, Math.max(0, Math.floor(p * bins.length)))];
+  if (!b || !b.n || b.previsto == null || b.osservato == null || b.n < 25) return p;
+  var forza = Math.min(1, b.n / 250);
+  var spostata = p + (b.osservato - b.previsto) * forza;
+  return limita(spostata, 0.005, 0.995);
+}
+
+/* Ordina i mercati per quanto sono solidi: non la probabilità più alta, ma il
+   pavimento — quanto resta anche nello scenario in cui il modello ha sbagliato
+   la lettura delle forze e in campo succede l'imprevisto. */
+function piuSicure(mercati, quante) {
+  return mercati.slice()
+    .filter(function (m) { return m.p05 != null; })
+    .sort(function (a, b) { return b.p05 - a.p05; })
+    .slice(0, quante || 3);
+}
+
 /* ─────────────────────────── misure ─────────────────────────── */
 
 function esitoReale(x, y) { return x > y ? 0 : (x === y ? 1 : 2); }
@@ -620,6 +939,9 @@ var API = {
   attesi: attesi, matriceRisultati: matriceRisultati, esiti: esiti, prevedi: prevedi,
   forze: forze, calibraTiri: calibraTiri, xgDaTiri: xgDaTiri,
   statisticheArbitri: statisticheArbitri, cartelliniAttesi: cartelliniAttesi, verso: verso,
+  bootstrap: bootstrap, sintesiBootstrap: sintesiBootstrap, effettoRosso: effettoRosso,
+  simula: simula, calibra: calibra,
+  mercatiDaMatrice: mercatiDaMatrice, elencoMercati: elencoMercati, piuSicure: piuSicure,
   campionaBacktest: campionaBacktest, valutaBacktest: valutaBacktest,
   probabilitaDaCampione: probabilitaDaCampione, misura: misura,
   logLoss: logLoss, brier: brier, rps: rps, daQuote: daQuote, esitoReale: esitoReale,

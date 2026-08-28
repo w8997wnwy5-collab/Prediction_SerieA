@@ -164,6 +164,23 @@ h1,h2,h3,h4{margin:0;}
 .cbar .cv{flex:none;font-family:var(--mono);font-size:12px;font-weight:600;width:66px;text-align:right;}
 .cbar .cv em{font-style:normal;display:block;font-size:9.5px;color:var(--mute);font-weight:400;}
 
+/* ── mercati ── */
+.mkt{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line2);}
+.mkt:last-child{border-bottom:0;}
+.mkt .mn{flex:1;min-width:0;font-size:13.5px;font-weight:500;}
+.mkt .mn em{font-style:normal;display:block;font-size:10.5px;color:var(--mute);font-weight:400;margin-top:2px;
+  font-family:var(--mono);}
+.mkt .mb{flex:none;width:84px;}
+.mkt .mp{flex:none;width:56px;text-align:right;font-family:var(--mono);font-size:13.5px;font-weight:600;}
+.mkt .mp span{display:block;font-size:9px;color:var(--mute);font-weight:400;}
+.fascia{position:relative;height:10px;background:var(--line2);border-radius:5px;overflow:hidden;}
+.fascia .banda{position:absolute;top:0;height:100%;background:var(--c1);opacity:.30;border-radius:5px;display:block;}
+.fascia .punto{position:absolute;top:0;width:2.5px;height:100%;background:var(--c1);display:block;border-radius:2px;}
+.cons{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin-top:10px;padding:9px 11px;
+  background:var(--accent-soft);border-radius:10px;}
+.cons .ct{font-family:var(--mono);font-size:9px;letter-spacing:.8px;text-transform:uppercase;color:var(--accent);}
+.cons b{font-size:13.5px;font-weight:600;flex:1;min-width:0;}
+.cons .cq{font-family:var(--mono);font-size:10.5px;color:var(--mute);}
 svg.chart{display:block;width:100%;overflow:visible;}
 .legend{display:flex;flex-wrap:wrap;gap:10px;margin-top:10px;}
 .legend span{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--mute);}
@@ -224,7 +241,7 @@ var S = {
   stato: 'carico', errore: null, avanzamento: 0, fase: 'Carico i dati',
   aggiustamenti: {}, arbitroScelto: {}, aggiornando: false, tempoCalcolo: 0
 };
-var CHIAVE_CACHE = 'seriea_modello_v1';
+var CHIAVE_CACHE = 'seriea_modello_v2';
 
 /* ══════════════════════════════════════════════════════════════
    UTILI
@@ -292,6 +309,9 @@ function leggiCache(){
     var firma = (S.meta && S.meta.aggiornato) || (S.doc && S.doc.aggiornato) || '';
     if(c.firma !== firma) return null;
     if(c.partite !== (S.doc.partite||[]).length) return null;
+    /* una copia salvata da una versione precedente dell'app non ha tutto quello
+       che serve adesso: meglio rifare i conti che mostrare mezza app */
+    if(!c.risultato || !c.risultato.se || !c.risultato.repliche) return null;
     return c.risultato;
   }catch(e){ return null; }
 }
@@ -362,11 +382,14 @@ function calcolaQui(fatto, fallito){
     var back = res.campioni.length > 50 ? M.valutaBacktest(res) : null;
     var peso = back ? back.pesoMigliore : 0.6;
     var mod = M.costruisci(S.doc.partite, {dati:dati, iterazioni:400, pesoTiri:peso});
+    var repliche = M.bootstrap(dati, {iterazioni:120}, 24, mod.gol);
+    var se = M.sintesiBootstrap(repliche, mod.squadre.length);
     fatto({
       squadre: mod.squadre,
       gol: semplificaPar(mod.gol), tiri: semplificaPar(mod.tiri),
       pesoTiri: peso, calibrazioneTiri: mod.calibrazioneTiri,
       arbitri: M.statisticheArbitri(S.doc.partite, {k:12}), backtest: back,
+      repliche: repliche, se: se, effettoRosso: M.effettoRosso(S.doc.partite, mod),
       partiteUsate: dati.righe.length, ultimaData: dati.ultimaData
     });
   }catch(e){ fallito(e.message||String(e)); }
@@ -383,7 +406,10 @@ function applicaRisultato(ris, daCache){
   var indice = {};
   ris.squadre.forEach(function(s,i){ indice[s] = i; });
   S.mod = { squadre: ris.squadre, indice: indice, gol: ris.gol, tiri: ris.tiri,
-            pesoTiri: ris.pesoTiri, calibrazioneTiri: ris.calibrazioneTiri };
+            pesoTiri: ris.pesoTiri, calibrazioneTiri: ris.calibrazioneTiri,
+            repliche: ris.repliche || null, se: ris.se || null,
+            effettoRosso: ris.effettoRosso || null };
+  S.simCache = {};
   S.daCache = !!daCache;
   S.stato = 'pronto';
   render();
@@ -444,12 +470,62 @@ function chiavePartita(p){ return p.d+'|'+p.c+'|'+p.v; }
 /* ══════════════════════════════════════════════════════════════
    PREVISIONE CON AGGIUSTAMENTI
    ══════════════════════════════════════════════════════════════ */
-function previsione(p){
-  var k = chiavePartita(p), a = S.aggiustamenti[k] || {};
+function aggiustamentiDi(p){
+  var a = S.aggiustamenti[chiavePartita(p)] || {};
   var agg = {};
   if(a.casa) agg.attC = Math.log(Math.max(0.4, 1 - a.casa/100));
   if(a.via)  agg.attV = Math.log(Math.max(0.4, 1 - a.via/100));
-  return M.prevedi(S.mod, p.c, p.v, {agg: agg});
+  return agg;
+}
+function previsione(p){
+  return M.prevedi(S.mod, p.c, p.v, {agg: aggiustamentiDi(p)});
+}
+/* La simulazione costa: si tiene in memoria finché non cambia qualcosa. */
+function simulazione(p, N){
+  var a = S.aggiustamenti[chiavePartita(p)] || {};
+  var k = chiavePartita(p) + '|' + (a.casa||0) + '|' + (a.via||0) + '|' + (N||1200);
+  if(S.simCache[k]) return S.simCache[k];
+  var pRosso = null;
+  if(S.arb){
+    var st = S.arb.indiceSquadre || {};
+    pRosso = (S.mod.effettoRosso && S.mod.effettoRosso.prob) || 0.05;
+  }
+  var sim = M.simula(S.mod, p.c, p.v, {
+    N: N || 1200, agg: aggiustamentiDi(p),
+    pRossoCasa: pRosso, pRossoVia: pRosso
+  });
+  if(sim) S.simCache[k] = sim;
+  return sim;
+}
+/* I mercati con la loro fascia, la quota equa e la correzione storica. */
+function mercatiDi(p, N){
+  var sim = simulazione(p, N);
+  if(!sim) return null;
+  var f = sim.fasce;
+  var bins = S.back && S.back.modello ? S.back.modello.calibrazione : null;
+  var voci = M.elencoMercati({
+    casa:f.casa.p, pari:f.pari.p, via:f.via.p, gol:f.gol.p,
+    o05:f.o05.p, o15:f.o15.p, o25:f.o25.p, o35:f.o35.p, o45:f.o45.p,
+    c1x:f.c1x.p, cx2:f.cx2.p, c12:f.c12.p,
+    mg13:f.mg13.p, mg24:f.mg24.p, mg15:f.mg15.p,
+    segnaC:f.segnaC.p, segnaV:f.segnaV.p, cnp:f.cnp.p, vnp:f.vnp.p
+  }, [p.c, p.v]);
+  var mappa = {'1':'casa','X':'pari','2':'via','O05':'o05','O15':'o15','O25':'o25',
+               'O35':'o35','MG13':'mg13','MG24':'mg24','GG':'gol','SC':'segnaC','SV':'segnaV',
+               '1X':'c1x','X2':'cx2','12':'c12'};
+  voci.forEach(function(m){
+    var campo = mappa[m.id];
+    if(campo && f[campo]){ m.p05 = f[campo].p05; m.p95 = f[campo].p95; }
+    else if(m.id==='U25'){ m.p05 = 1 - f.o25.p95; m.p95 = 1 - f.o25.p05; }
+    else if(m.id==='U35'){ m.p05 = 1 - f.o35.p95; m.p95 = 1 - f.o35.p05; }
+    else if(m.id==='NG'){ m.p05 = 1 - f.gol.p95; m.p95 = 1 - f.gol.p05; }
+    m.p05 = Math.max(0, Math.min(m.p, m.p05 == null ? m.p : m.p05));
+    m.p95 = Math.min(1, Math.max(m.p, m.p95 == null ? m.p : m.p95));
+    m.quota = m.p > 0.001 ? 1/m.p : null;
+    m.quotaPrudente = m.p05 > 0.001 ? 1/m.p05 : null;
+    m.pStorica = bins ? M.calibra(m.p, bins) : m.p;
+  });
+  return {voci: voci, sim: sim};
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -596,6 +672,33 @@ function barreOriz(items, opz){
   }).join('');
 }
 
+function consiglio(voci){
+  if(!voci || !voci.length) return null;
+  var ordinate = voci.slice().sort(function(a,b){ return b.p05 - a.p05; });
+  var solida = ordinate[0];
+  /* Una cosa che succede il 97% delle volte non è un'informazione: è una
+     constatazione. Qui si cerca la più solida FRA QUELLE CHE DICONO QUALCOSA,
+     cioè con una quota equa che non sia praticamente 1. */
+  var conQuota = null;
+  for(var i=0;i<ordinate.length;i++){
+    if(ordinate[i].p <= 0.74 && ordinate[i].p >= 0.30){ conQuota = ordinate[i]; break; }
+  }
+  return {solida: solida, conQuota: conQuota, tutte: ordinate};
+}
+function barrettaFascia(m){
+  var a = Math.max(0, m.p05*100), b = Math.min(100, m.p95*100), c = m.p*100;
+  return '<div class="fascia"><i class="banda" style="left:'+a.toFixed(1)+'%;width:'+
+    Math.max(1.5,(b-a)).toFixed(1)+'%"></i><i class="punto" style="left:'+c.toFixed(1)+'%"></i></div>';
+}
+function rigaMercato(m){
+  return '<div class="mkt">'+
+    '<div class="mn">'+esc(m.nome)+'<em>quota equa '+(m.quota?nu(m.quota,2):'—')+
+      ' · prudente '+(m.quotaPrudente?nu(m.quotaPrudente,2):'—')+'</em></div>'+
+    '<div class="mb">'+barrettaFascia(m)+'</div>'+
+    '<div class="mp">'+pc(m.p)+'<span>'+pc(m.p05)+'–'+pc(m.p95)+'</span></div>'+
+  '</div>';
+}
+
 /* ══════════════════════════════════════════════════════════════
    VISTA: GIORNATA
    ══════════════════════════════════════════════════════════════ */
@@ -604,6 +707,8 @@ function schedaPartita(p, indice){
   if(!pr) return '';
   var k = chiavePartita(p);
   var mercato = p.q ? M.daQuote(p.q) : null;
+  var mk = mercatiDi(p, 600);
+  var cons = mk ? consiglio(mk.voci) : null;
   return '<div class="match" onclick="apriPartita('+indice+')">'+
     '<div class="quando"><span>'+esc(dataBreve(p.d))+(p.o?' · '+esc(p.o):'')+'</span>'+
       (S.aggiustamenti[k]?'<span class="gg" style="color:var(--amber)">assenze</span>':'')+'</div>'+
@@ -614,8 +719,12 @@ function schedaPartita(p, indice){
       '<div><div class="l">Gol attesi</div><div class="v">'+nu(pr.golCasa,1)+'–'+nu(pr.golVia,1)+'</div></div>'+
       '<div><div class="l">Over 2.5</div><div class="v">'+pc(pr.over25)+'</div></div>'+
       '<div><div class="l">Gol/Gol</div><div class="v">'+pc(pr.gol)+'</div></div>'+
-      '<div><div class="l">Più probabile</div><div class="v">'+esc(pr.risultati[0].r)+'</div></div>'+
+      '<div><div class="l">Esatto</div><div class="v">'+esc(pr.risultati[0].r)+'</div>'+
+        '<div class="s" style="font-size:9px;color:var(--mute)">'+pc(pr.risultati[0].p)+'</div></div>'+
     '</div>'+
+    (cons && cons.conQuota ? '<div class="cons"><span class="ct">Più solida</span>'+
+      '<b>'+esc(cons.conQuota.nome)+'</b>'+
+      '<span class="cq">'+pc(cons.conQuota.p)+' · min '+pc(cons.conQuota.p05)+' · quota '+nu(cons.conQuota.quota,2)+'</span></div>' : '')+
     (mercato ? '<div class="note" style="margin-top:10px">Il mercato dice '+pc(mercato[0])+' · '+
       pc(mercato[1])+' · '+pc(mercato[2])+'. '+scartoTesto(pr, mercato)+'</div>' : '')+
   '</div>';
@@ -833,8 +942,19 @@ function tabAffidabilita(){
 /* ══════════════════════════════════════════════════════════════
    VISTA: DATI
    ══════════════════════════════════════════════════════════════ */
+function prossimoGiro(){
+  /* il robot parte ai minuti :17 di ogni terza ora UTC */
+  var ora = new Date();
+  var d = new Date(Date.UTC(ora.getUTCFullYear(), ora.getUTCMonth(), ora.getUTCDate(),
+                            ora.getUTCHours(), 17, 0));
+  while(d <= ora || d.getUTCHours() % 3 !== 0) d = new Date(d.getTime() + 3600000);
+  var min = Math.round((d - ora)/60000);
+  return {quando: d, fra: min < 60 ? min + ' minuti' : Math.round(min/60) + ' ore',
+          ora: String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')};
+}
 function cardStatoDati(){
   var m = S.meta || {};
+  var pg = prossimoGiro();
   return '<div class="h2">Stato dei dati</div><div class="card">'+
     '<div class="row"><div class="n">Ultimo aggiornamento<em>'+esc(m.fonte||S.doc&&S.doc.fonte||'—')+'</em></div>'+
       '<div class="v" style="font-size:12px">'+esc(daOra(m.aggiornato || (S.doc&&S.doc.aggiornato)))+'</div></div>'+
@@ -842,11 +962,18 @@ function cardStatoDati(){
     '<div class="row"><div class="n">Partite in calendario</div><div class="v">'+(m.partite_in_arrivo!=null?m.partite_in_arrivo:(S.doc&&S.doc.calendario?S.doc.calendario.length:0))+'</div></div>'+
     (m.con_arbitro!=null?'<div class="row"><div class="n">Con arbitro<em>servono per la sezione arbitri</em></div><div class="v">'+m.con_arbitro+'</div></div>':'')+
     (m.con_tiri!=null?'<div class="row"><div class="n">Con i tiri<em>il modello che pesa di più</em></div><div class="v">'+m.con_tiri+'</div></div>':'')+
+    (m.ultima_partita?'<div class="row"><div class="n">Ultima partita in archivio</div>'+
+      '<div class="v" style="font-size:12.5px">'+esc(dataLunga(m.ultima_partita))+'</div></div>':'')+
     '<button class="btn acc" style="margin-top:12px" onclick="aggiorna()"'+(S.aggiornando?' disabled':'')+'>'+
       (S.aggiornando?'Sto aggiornando…':'Aggiorna adesso')+'</button>'+
-    '<div class="note">Il tasto rilegge il file dei dati e rifà tutti i conti. Il file lo aggiorna una volta al giorno '+
-    'un robot su GitHub: se vuoi forzarlo, vai nella scheda <b>Actions</b> del repository e lancia a mano '+
-    '"Aggiorna dati Serie A".</div></div>';
+    (S.esitoAggiornamento?'<div class="note '+(S.esitoAggiornamento.nuovo?'ok':'')+'">'+
+      esc(S.esitoAggiornamento.testo)+'</div>':'')+
+    '<div class="note"><p>Questo tasto <b>rilegge</b> il file dei dati e rifà tutti i conti. Non scarica '+
+    'niente da internet: a scaricare è il robot su GitHub, che passa <b>ogni 3 ore</b>.</p>'+
+    '<p>Prossimo giro previsto verso le <b>'+pg.ora+'</b>, cioè fra '+pg.fra+'. '+
+    'Se non vuoi aspettare: scheda <b>Actions</b> del repository → "Aggiorna dati Serie A" → Run workflow.</p>'+
+    '<p>Fra una giornata e l\'altra è normale che non cambi niente: i dati nuovi arrivano quando si gioca.</p>'+
+    '</div></div>';
 }
 function tabDati(){
   var m = S.meta || {}, h = '';
@@ -856,9 +983,13 @@ function tabDati(){
       m.errori.map(function(e){ return '<p>'+esc(e)+'</p>'; }).join('')+'</div></div>';
   }
   h += '<div class="h2">Stagioni caricate</div><div class="card">'+
+    '<p class="lede">In Serie A ogni giornata sono 10 partite (20 squadre) e le giornate sono 38: '+
+    '<b>380 partite a stagione</b>. Il modello lavora sulle partite, non sulle giornate.</p>'+
     (S.doc.stagioni||[]).map(function(s){
       var n = S.doc.partite.filter(function(p){ return p.s===s && p.gc!=null; }).length;
-      return '<div class="row"><div class="n">'+esc(s)+'</div><div class="v">'+n+'<span>partite</span></div></div>';
+      var g = Math.round(n/10);
+      return '<div class="row"><div class="n">'+esc(s)+'<em>'+g+' giornate da 10 partite</em></div>'+
+        '<div class="v">'+n+'<span>partite</span></div></div>';
     }).join('')+'</div>';
   h += '<div class="h2">Come funziona</div><div class="card"><div class="note">'+
     '<p><b>1. Le forze.</b> Ogni squadra ha due numeri: quanto segna e quanto concede. Si stimano tutti insieme '+
@@ -937,11 +1068,78 @@ function renderPartita(){
       '<div class="s">nogol '+pc(pr.nogol)+'</div></div>'+
   '</div>';
 
-  h += '<div class="h2">Risultati più probabili</div><div class="card">'+
+  var mk = mercatiDi(p, 4000);
+  var cons = mk ? consiglio(mk.voci) : null;
+  var sim = mk ? mk.sim : null;
+
+  if(cons){
+    var sol = cons.conQuota || cons.solida;
+    h += '<div class="h2">La scelta più solida</div><div class="card">'+
+      '<div class="hero" style="margin-bottom:12px"><div class="l">'+
+        (cons.conQuota ? 'più solida fra quelle che pagano qualcosa' : 'la più solida in assoluto')+'</div>'+
+      '<div class="v" style="font-size:26px">'+esc(sol.nome)+'</div>'+
+      '<div class="s">Probabilità <b>'+pc(sol.p)+'</b>, e anche nello scenario sfavorevole resta sopra il '+
+      '<b>'+pc(sol.p05)+'</b>. Quota equa '+nu(sol.quota,2)+
+      ' — sotto quella cifra il banco ci guadagna comunque.</div></div>'+
+      (cons.conQuota && cons.solida.id !== cons.conQuota.id
+        ? '<div class="row"><div class="n">Ancora più sicura<em>ma paga quasi niente</em></div>'+
+          '<div class="v" style="font-size:12.5px">'+esc(cons.solida.nome)+'<span>'+pc(cons.solida.p)+
+          ' · quota '+nu(cons.solida.quota,2)+'</span></div></div>' : '')+
+      '<div class="note">"Più solida" non vuol dire sicura: vuol dire che regge anche se ho sbagliato '+
+      'la lettura delle forze e se in campo succede l\'imprevisto. La classifica è fatta sul '+
+      '<b>pavimento</b> della fascia, non sul numero centrale.</div></div>';
+  }
+
+  if(sim){
+    var largh = (sim.fasce.casa.p95 - sim.fasce.casa.p05);
+    var storica = S.back && S.back.modello ? M.calibra(pr.casa, S.back.modello.calibrazione) : null;
+    h += '<div class="h2">Quanto fidarsi</div><div class="card">'+
+      '<div class="kpi">'+
+      '<div><div class="l">Simulazioni</div><div class="v">'+(sim.N/1000).toFixed(1)+'k</div>'+
+        '<div class="s">partite rigiocate</div></div>'+
+      '<div><div class="l">Fascia</div><div class="v">±'+pc(largh/2,0)+'</div>'+
+        '<div class="s">sull\'esito 1</div></div>'+
+      '<div><div class="l">Uno in dieci</div><div class="v">'+
+        pc(sim.quotaRossi.casa + sim.quotaRossi.via)+'</div>'+
+        '<div class="s">almeno un rosso</div></div>'+
+      '</div>'+
+      '<div class="note"><p>Ogni giro pesca una versione plausibile delle forze delle due squadre, '+
+      'tira a sorte se qualcuno resta in dieci — con l\'effetto misurato sull\'archivio, non inventato — '+
+      'e poi lascia decidere al caso i gol. Da '+sim.N+' partite rigiocate esce una fascia, non un numero.</p>'+
+      (storica!=null && Math.abs(storica-pr.casa)>0.015
+        ? '<p>Storicamente, quando il modello ha detto <b>'+pc(pr.casa)+'</b> in questa fascia, è finita così '+
+          'il <b>'+pc(storica)+'</b> delle volte. Il numero corretto con la storia è quello.</p>'
+        : '<p>Nella fascia di probabilità di questa partita, storicamente il modello ci ha preso '+
+          'quanto prometteva.</p>')+
+      '<p><b>E il Monza che batte il Real?</b> È dentro il conto: se qui il meno probabile dei tre esiti '+
+      'sta al '+pc(Math.min(pr.casa, pr.pari, pr.via))+', vuol dire che una partita su '+
+      Math.round(1/Math.max(0.01, Math.min(pr.casa, pr.pari, pr.via)))+' finisce proprio così.</p></div></div>';
+  }
+
+  if(mk){
+    var gruppi = {};
+    mk.voci.forEach(function(m){ (gruppi[m.gruppo] = gruppi[m.gruppo] || []).push(m); });
+    h += '<div class="h2">Tutti i mercati<span class="r">'+mk.voci.length+'</span></div>';
+    Object.keys(gruppi).forEach(function(g){
+      h += '<div class="card"><div style="font-family:var(--mono);font-size:9.5px;letter-spacing:.8px;'+
+        'text-transform:uppercase;color:var(--mute);margin-bottom:4px">'+esc(g)+'</div>'+
+        gruppi[g].sort(function(a,b){ return b.p - a.p; }).map(rigaMercato).join('')+'</div>';
+    });
+    h += '<div class="note">La barra chiara è la fascia, il trattino è la stima centrale. '+
+      '<b>Quota equa</b> = quella che renderebbe la scommessa un pareggio nel lungo periodo; '+
+      '<b>prudente</b> = quella che servirebbe partendo dal pavimento della fascia. '+
+      'Sotto la quota equa, nel lungo periodo si perde.</div>';
+  }
+
+  h += '<div class="h2">Risultati esatti più probabili</div><div class="card">'+
     pr.risultati.map(function(r,idx){
       return '<div class="row"><div class="pos">'+(idx+1)+'</div><div class="n">'+esc(r.r)+
         (idx===0?' <span class="tag">più probabile</span>':'')+'</div><div class="v">'+pc(r.p,1)+'</div></div>';
-    }).join('')+'</div>';
+    }).join('')+
+    '<div class="note">Il risultato esatto più probabile è quasi sempre 1-0 o 1-1: succede perché nel calcio '+
+    'si segna poco, e con pochi gol le combinazioni possibili sono poche. Che sia il più probabile non vuol '+
+    'dire che sia probabile: qui vale <b>'+pc(pr.risultati[0].p)+'</b>, cioè capita circa una volta su '+
+    Math.round(1/pr.risultati[0].p)+'.</div></div>';
 
   h += '<div class="h2">Tutti i punteggi</div><div class="card">'+matriceHTML(pr.matrice)+
     '<div class="note">Righe: gol di '+esc(p.c)+'. Colonne: gol di '+esc(p.v)+
@@ -1073,10 +1271,26 @@ function apriSquadra(nome){
    ══════════════════════════════════════════════════════════════ */
 function aggiorna(){
   if(S.aggiornando) return;
-  S.aggiornando = true; render();
+  var prima = (S.meta && S.meta.aggiornato) || '';
+  var primaN = (S.meta && S.meta.partite_giocate) || 0;
+  S.aggiornando = true; S.esitoAggiornamento = null; render();
   try{ localStorage.removeItem(CHIAVE_CACHE); }catch(e){}
-  carica(true).then(function(){ S.aggiornando = false; render(); })
-              .catch(function(){ S.aggiornando = false; render(); });
+  carica(true).then(function(){
+    var dopo = (S.meta && S.meta.aggiornato) || '';
+    var dopoN = (S.meta && S.meta.partite_giocate) || 0;
+    if(dopo && dopo !== prima){
+      S.esitoAggiornamento = {nuovo:true, testo: 'Dati nuovi: ' + (dopoN - primaN) +
+        ' partite in più, aggiornati ' + daOra(dopo) + '.'};
+    } else {
+      var pg = prossimoGiro();
+      S.esitoAggiornamento = {nuovo:false, testo: 'Nessun dato nuovo: questi sono già gli ultimi che il robot '+
+        'ha trovato (' + daOra(dopo) + '). Il prossimo giro è verso le ' + pg.ora + '.'};
+    }
+    S.aggiornando = false; render();
+  }).catch(function(){
+    S.esitoAggiornamento = {nuovo:false, testo:'Non sono riuscito a rileggere il file dei dati.'};
+    S.aggiornando = false; render();
+  });
 }
 function ricalcola(){
   try{ localStorage.removeItem(CHIAVE_CACHE); }catch(e){}
