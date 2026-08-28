@@ -1,8 +1,8 @@
-/* Rete prima, cache come riserva: offline funziona, e quando pubblichi una
-   versione nuova la vedi subito. I dati (data/*.json) non vengono mai serviti
-   dalla cache se la rete c'è: un modello che gira su numeri vecchi è peggio
-   di un modello che non gira. */
-var CACHE = 'seriea-v1';
+/* Rete prima, cache come riserva. La pagina e gli script vengono chiesti alla
+   rete SALTANDO la cache del browser: GitHub Pages dice ai browser di tenersi
+   index.html per dieci minuti, e senza questo si finisce a guardare la versione
+   di ieri chiedendosi perché non è cambiato niente. */
+var CACHE = 'seriea-v2';
 var ASSETS = ['./', './index.html', './modello.js', './worker.js', './manifest.webmanifest'];
 
 self.addEventListener('install', function(e){
@@ -17,8 +17,14 @@ self.addEventListener('activate', function(e){
 });
 self.addEventListener('fetch', function(e){
   if(e.request.method !== 'GET') return;
+  var url = e.request.url;
+  var sempreFresco = e.request.mode === 'navigate' ||
+                     /\.(html|js|json|webmanifest)(\?|$)/.test(url);
+  var richiesta = sempreFresco
+    ? new Request(e.request, { cache: 'reload' })
+    : e.request;
   e.respondWith(
-    fetch(e.request).then(function(resp){
+    fetch(richiesta).then(function(resp){
       var copia = resp.clone();
       caches.open(CACHE).then(function(c){ c.put(e.request, copia); }).catch(function(){});
       return resp;

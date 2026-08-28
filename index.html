@@ -241,6 +241,7 @@ var S = {
   stato: 'carico', errore: null, avanzamento: 0, fase: 'Carico i dati',
   aggiustamenti: {}, arbitroScelto: {}, aggiornando: false, tempoCalcolo: 0
 };
+var VERSIONE = '2.0';           // si vede nella sezione Dati: serve a sapere cosa si sta guardando
 var CHIAVE_CACHE = 'seriea_modello_v2';
 
 /* ══════════════════════════════════════════════════════════════
@@ -1018,7 +1019,11 @@ function tabDati(){
         'nei segreti del repository, come spiegato nel README.</p>')+
     '</div></div>';
   h += '<div class="h2">Prestazioni</div><div class="card">'+
+    '<div class="row"><div class="n">Versione dell\'app<em>se non corrisponde all\'ultima, il browser ti sta '+
+      'mostrando una copia vecchia</em></div><div class="v">'+VERSIONE+'</div></div>'+
     '<div class="row"><div class="n">Partite usate per stimare</div><div class="v">'+(S.risultato.partiteUsate||0)+'</div></div>'+
+    '<div class="row"><div class="n">Ristime per l\'incertezza<em>bootstrap parametrico</em></div>'+
+      '<div class="v">'+((S.mod.repliche&&S.mod.repliche.length)||0)+'</div></div>'+
     (S.tempoCalcolo?'<div class="row"><div class="n">Tempo di calcolo<em>stima + backtest completo</em></div>'+
       '<div class="v">'+nu(S.tempoCalcolo/1000,1)+'s</div></div>':'')+
     '<div class="row"><div class="n">Risultati in memoria<em>per non rifare i conti a ogni apertura</em></div>'+
