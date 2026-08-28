@@ -478,6 +478,7 @@ function elencoMercati(s, nomiSquadre) {
     { id: '12', nome: 'Non finisce pari', gruppo: 'Doppia chance', p: s.casa + s.via },
     { id: 'O05', nome: 'Almeno un gol', gruppo: 'Gol totali', p: s.o05 },
     { id: 'O15', nome: 'Over 1.5', gruppo: 'Gol totali', p: s.o15 },
+    { id: 'U15', nome: 'Under 1.5', gruppo: 'Gol totali', p: 1 - s.o15 },
     { id: 'O25', nome: 'Over 2.5', gruppo: 'Gol totali', p: s.o25 },
     { id: 'U25', nome: 'Under 2.5', gruppo: 'Gol totali', p: 1 - s.o25 },
     { id: 'O35', nome: 'Over 3.5', gruppo: 'Gol totali', p: s.o35 },
@@ -580,12 +581,28 @@ function simula(modello, casa, via, opz) {
     sommaGolC += gc; sommaGolV += gv;
   }
 
+  var quantiCampioni = opz.campioni || 0;
   function fascia(campo) {
     var v = new Array(N);
     for (var q = 0; q < N; q++) v[q] = campione[q][campo];
     v.sort(function (a, b) { return a - b; });
-    return { p: somma[campo] / N, p05: v[Math.floor(N * 0.05)], p95: v[Math.floor(N * 0.95)],
-             p25: v[Math.floor(N * 0.25)] };
+    var f = { p: somma[campo] / N, p05: v[Math.floor(N * 0.05)], p95: v[Math.floor(N * 0.95)],
+              p25: v[Math.floor(N * 0.25)] };
+    if (quantiCampioni) {
+      /* Per combinare più partite non bastano media e fascia: serve un campione.
+         E soprattutto va tenuto NELL'ORDINE IN CUI È STATO ESTRATTO, non
+         ordinato: il giro numero k usa la stessa lettura delle forze in tutte le
+         partite, perché l'errore del modello sul livello dei gol è uno solo per
+         tutta la lega. Moltiplicando i campioni posizione per posizione, tre
+         "Under 1.5" in tre partite diverse restano legati fra loro come lo sono
+         davvero — e la schedina smette di sembrare più sicura di quello che è. */
+      f.campioni = [];
+      var passo = N / quantiCampioni;
+      for (q = 0; q < quantiCampioni; q++) {
+        f.campioni.push(campione[Math.min(N - 1, Math.floor(q * passo))][campo]);
+      }
+    }
+    return f;
   }
   var fasce = {};
   for (k = 0; k < campi.length; k++) fasce[campi[k]] = fascia(campi[k]);
@@ -606,6 +623,46 @@ function calibra(p, bins) {
   var forza = Math.min(1, b.n / 250);
   var spostata = p + (b.osservato - b.previsto) * forza;
   return limita(spostata, 0.005, 0.995);
+}
+
+/* Mettere insieme più partite moltiplica le quote e DIVIDE le probabilità: è la
+   parte di matematica che le schedine nascondono meglio. Qui si fa il contrario:
+   si moltiplica pescando ogni volta un valore diverso dal campione di ciascuna
+   partita, così esce anche la fascia della combinazione e non solo il numero.
+   Partite diverse si trattano come indipendenti: quello che succede a Milano non
+   cambia quello che succede a Lecce. */
+function combina(selezioni, giri) {
+  if (!selezioni || !selezioni.length) return null;
+  giri = giri || 2000;
+  var media = 1, i, k;
+  for (i = 0; i < selezioni.length; i++) media *= selezioni[i].p;
+  var conCampioni = selezioni.filter(function (s) { return s.campioni && s.campioni.length; });
+  if (conCampioni.length !== selezioni.length) {
+    var basso = 1, alto = 1;
+    for (i = 0; i < selezioni.length; i++) {
+      basso *= (selezioni[i].p05 != null ? selezioni[i].p05 : selezioni[i].p);
+      alto *= (selezioni[i].p95 != null ? selezioni[i].p95 : selezioni[i].p);
+    }
+    return { p: media, p05: basso, p95: alto, quota: media > 0 ? 1 / media : null,
+             quotaPrudente: basso > 0 ? 1 / basso : null, n: selezioni.length, approssimata: true };
+  }
+  /* Stesso indice per tutte le partite: è quello che tiene insieme l'errore
+     comune. Se i campioni avessero lunghezze diverse si ripiega sul più corto. */
+  var lung = selezioni[0].campioni.length;
+  for (i = 1; i < selezioni.length; i++) lung = Math.min(lung, selezioni[i].campioni.length);
+  var valori = new Array(lung);
+  for (k = 0; k < lung; k++) {
+    var prod = 1;
+    for (i = 0; i < selezioni.length; i++) prod *= selezioni[i].campioni[k];
+    valori[k] = prod;
+  }
+  giri = lung;
+  valori.sort(function (a, b) { return a - b; });
+  var p05 = valori[Math.floor(giri * 0.05)], p95 = valori[Math.floor(giri * 0.95)];
+  return { p: media, p05: p05, p95: p95,
+           quota: media > 0 ? 1 / media : null,
+           quotaPrudente: p05 > 0 ? 1 / p05 : null,
+           n: selezioni.length, approssimata: false };
 }
 
 /* Ordina i mercati per quanto sono solidi: non la probabilità più alta, ma il
@@ -940,7 +997,7 @@ var API = {
   forze: forze, calibraTiri: calibraTiri, xgDaTiri: xgDaTiri,
   statisticheArbitri: statisticheArbitri, cartelliniAttesi: cartelliniAttesi, verso: verso,
   bootstrap: bootstrap, sintesiBootstrap: sintesiBootstrap, effettoRosso: effettoRosso,
-  simula: simula, calibra: calibra,
+  simula: simula, calibra: calibra, combina: combina,
   mercatiDaMatrice: mercatiDaMatrice, elencoMercati: elencoMercati, piuSicure: piuSicure,
   campionaBacktest: campionaBacktest, valutaBacktest: valutaBacktest,
   probabilitaDaCampione: probabilitaDaCampione, misura: misura,

@@ -70,7 +70,9 @@ h1,h2,h3,h4{margin:0;}
 .tab{flex:1;border:0;background:none;padding:9px 2px 8px;display:flex;flex-direction:column;
   align-items:center;gap:3px;cursor:pointer;color:var(--mute);}
 .tab svg{width:21px;height:21px;}
-.tab span{font-size:9.5px;font-weight:500;}
+.tab span{font-size:9px;font-weight:500;white-space:nowrap;}
+.tab svg{width:20px;height:20px;}
+.tab{padding:9px 0 8px;}
 .tab.on{color:var(--accent);}
 
 .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:12px;}
@@ -164,6 +166,20 @@ h1,h2,h3,h4{margin:0;}
 .cbar .cv{flex:none;font-family:var(--mono);font-size:12px;font-weight:600;width:66px;text-align:right;}
 .cbar .cv em{font-style:normal;display:block;font-size:9.5px;color:var(--mute);font-weight:400;}
 
+.chips{display:flex;flex-wrap:wrap;gap:6px;}
+.chips button{border:1px solid var(--line);background:var(--card);border-radius:20px;padding:7px 12px;
+  font-size:12.5px;cursor:pointer;color:var(--mute);line-height:1.2;}
+.chips button.on{border-color:var(--accent);color:var(--ink);font-weight:600;background:var(--accent-soft);}
+.chips button:active{opacity:.7;}
+.field{margin-bottom:14px;}
+.field label{display:block;font-size:12.5px;font-weight:600;color:var(--mute);margin-bottom:6px;}
+.qbox{margin-top:12px;padding:12px 13px;background:var(--card2);border-radius:11px;}
+.qbox label{display:block;font-size:12px;font-weight:600;color:var(--mute);margin-bottom:7px;}
+.qbox input{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:10px;
+  background:var(--card);outline:none;font-family:var(--mono);font-size:16px;font-weight:600;}
+.qbox input:focus{border-color:var(--accent);}
+.qesito{font-size:12px;line-height:1.55;color:var(--mute);margin-top:9px;}
+.qesito b{color:var(--ink);}
 /* ── mercati ── */
 .mkt{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line2);}
 .mkt:last-child{border-bottom:0;}
@@ -238,15 +254,43 @@ var M = window.Modello;
    ══════════════════════════════════════════════════════════════ */
 var S = {
   tab: 'giornata', doc: null, meta: null, mod: null, back: null, arb: null,
+  mercatiAttivi: null, quotaProva: {},
   stato: 'carico', errore: null, avanzamento: 0, fase: 'Carico i dati',
   aggiustamenti: {}, arbitroScelto: {}, aggiornando: false, tempoCalcolo: 0
 };
-var VERSIONE = '2.0';           // si vede nella sezione Dati: serve a sapere cosa si sta guardando
+var VERSIONE = '2.2';
+/* Un consiglio su una scommessa che il tuo operatore non accetta è un consiglio
+   inutile. Questo è l'insieme standard che si trova su Sporttip; il resto resta
+   disponibile ma spento, e si accende dalla sezione Dati. */
+var MERCATI_PRESET = ['1','X','2','1X','X2','12','O15','U15','O25','U25','O35','U35','GG','NG'];
+var CHIAVE_MERCATI = 'seriea_mercati_v1';           // si vede nella sezione Dati: serve a sapere cosa si sta guardando
 var CHIAVE_CACHE = 'seriea_modello_v2';
 
 /* ══════════════════════════════════════════════════════════════
    UTILI
    ══════════════════════════════════════════════════════════════ */
+function mercatiAttivi(){
+  if(S.mercatiAttivi) return S.mercatiAttivi;
+  try{
+    var raw = localStorage.getItem(CHIAVE_MERCATI);
+    S.mercatiAttivi = raw ? JSON.parse(raw) : MERCATI_PRESET.slice();
+  }catch(e){ S.mercatiAttivi = MERCATI_PRESET.slice(); }
+  if(!S.mercatiAttivi.length) S.mercatiAttivi = MERCATI_PRESET.slice();
+  return S.mercatiAttivi;
+}
+function mercatoAttivo(id){ return mercatiAttivi().indexOf(id) >= 0; }
+function commutaMercato(id){
+  var a = mercatiAttivi().slice(), i = a.indexOf(id);
+  if(i >= 0){ if(a.length <= 3) return; a.splice(i,1); } else a.push(id);
+  S.mercatiAttivi = a;
+  try{ localStorage.setItem(CHIAVE_MERCATI, JSON.stringify(a)); }catch(e){}
+  render();
+}
+function ripristinaMercati(){
+  S.mercatiAttivi = MERCATI_PRESET.slice();
+  try{ localStorage.setItem(CHIAVE_MERCATI, JSON.stringify(S.mercatiAttivi)); }catch(e){}
+  render();
+}
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){
   return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
 function pc(x, dec){ return (x*100).toFixed(dec==null?0:dec)+'%'; }
@@ -482,9 +526,9 @@ function previsione(p){
   return M.prevedi(S.mod, p.c, p.v, {agg: aggiustamentiDi(p)});
 }
 /* La simulazione costa: si tiene in memoria finché non cambia qualcosa. */
-function simulazione(p, N){
+function simulazione(p, N, conCampioni){
   var a = S.aggiustamenti[chiavePartita(p)] || {};
-  var k = chiavePartita(p) + '|' + (a.casa||0) + '|' + (a.via||0) + '|' + (N||1200);
+  var k = chiavePartita(p) + '|' + (a.casa||0) + '|' + (a.via||0) + '|' + (N||1200) + (conCampioni?'|c':'');
   if(S.simCache[k]) return S.simCache[k];
   var pRosso = null;
   if(S.arb){
@@ -493,14 +537,15 @@ function simulazione(p, N){
   }
   var sim = M.simula(S.mod, p.c, p.v, {
     N: N || 1200, agg: aggiustamentiDi(p),
-    pRossoCasa: pRosso, pRossoVia: pRosso
+    pRossoCasa: pRosso, pRossoVia: pRosso,
+    campioni: conCampioni ? 140 : 0
   });
   if(sim) S.simCache[k] = sim;
   return sim;
 }
 /* I mercati con la loro fascia, la quota equa e la correzione storica. */
-function mercatiDi(p, N){
-  var sim = simulazione(p, N);
+function mercatiDi(p, N, conCampioni){
+  var sim = simulazione(p, N, conCampioni);
   if(!sim) return null;
   var f = sim.fasce;
   var bins = S.back && S.back.modello ? S.back.modello.calibrazione : null;
@@ -520,6 +565,11 @@ function mercatiDi(p, N){
     else if(m.id==='U25'){ m.p05 = 1 - f.o25.p95; m.p95 = 1 - f.o25.p05; }
     else if(m.id==='U35'){ m.p05 = 1 - f.o35.p95; m.p95 = 1 - f.o35.p05; }
     else if(m.id==='NG'){ m.p05 = 1 - f.gol.p95; m.p95 = 1 - f.gol.p05; }
+    if(campo && f[campo] && f[campo].campioni) m.campioni = f[campo].campioni;
+    else if(m.id==='U25' && f.o25.campioni) m.campioni = f.o25.campioni.map(function(x){ return 1-x; });
+    else if(m.id==='U35' && f.o35.campioni) m.campioni = f.o35.campioni.map(function(x){ return 1-x; });
+    else if(m.id==='U15' && f.o15.campioni) m.campioni = f.o15.campioni.map(function(x){ return 1-x; });
+    else if(m.id==='NG' && f.gol.campioni) m.campioni = f.gol.campioni.map(function(x){ return 1-x; });
     m.p05 = Math.max(0, Math.min(m.p, m.p05 == null ? m.p : m.p05));
     m.p95 = Math.min(1, Math.max(m.p, m.p95 == null ? m.p : m.p95));
     m.quota = m.p > 0.001 ? 1/m.p : null;
@@ -675,7 +725,9 @@ function barreOriz(items, opz){
 
 function consiglio(voci){
   if(!voci || !voci.length) return null;
-  var ordinate = voci.slice().sort(function(a,b){ return b.p05 - a.p05; });
+  var giocabili = voci.filter(function(m){ return mercatoAttivo(m.id); });
+  if(!giocabili.length) giocabili = voci;
+  var ordinate = giocabili.sort(function(a,b){ return b.p05 - a.p05; });
   var solida = ordinate[0];
   /* Una cosa che succede il 97% delle volte non è un'informazione: è una
      constatazione. Qui si cerca la più solida FRA QUELLE CHE DICONO QUALCOSA,
@@ -685,6 +737,33 @@ function consiglio(voci){
     if(ordinate[i].p <= 0.74 && ordinate[i].p >= 0.30){ conQuota = ordinate[i]; break; }
   }
   return {solida: solida, conQuota: conQuota, tutte: ordinate};
+}
+function testoQuota(m, q){
+  q = Number(String(q||'').replace(',','.'));
+  if(!(q > 1)) return 'Scrivi la quota e ti dico se vale la pena. La equa è <b>'+nu(m.quota,2)+'</b>.';
+  var reso = m.p * q - 1;                 /* quanto ti aspetti di guadagnare per ogni franco giocato */
+  var resoPrudente = m.p05 * q - 1;
+  if(reso < 0){
+    return 'A <b>'+nu(q,2)+'</b> sei sotto l\'equa di '+nu(m.quota,2)+'. Su 100 giocate così ti aspetti '+
+      'di rimetterci circa <b>'+nu(-reso*100,0)+' su 100</b>: è il margine del banco.';
+  }
+  if(resoPrudente < 0){
+    return 'A <b>'+nu(q,2)+'</b> sei sopra l\'equa ('+nu(m.quota,2)+'), guadagno atteso <b>+'+nu(reso*100,0)+'%</b>. '+
+      'Ma partendo dal pavimento della fascia servirebbe almeno <b>'+nu(m.quotaPrudente,2)+'</b>: '+
+      'il vantaggio sta dentro il margine di errore del modello, quindi potrebbe non esserci.';
+  }
+  return 'A <b>'+nu(q,2)+'</b> sei sopra l\'equa ('+nu(m.quota,2)+') <b>e anche sopra la prudente</b> ('+
+    nu(m.quotaPrudente,2)+'). Guadagno atteso <b>+'+nu(reso*100,0)+'%</b>, che regge anche nello scenario '+
+    'sfavorevole. Resta il fatto che il mercato, nel backtest, è più preciso di questo modello.';
+}
+function verificaQuota(v){
+  var p = S._prossime[S._partitaAperta];
+  if(!p) return;
+  S.quotaProva[chiavePartita(p)] = v;
+  var mk = mercatiDi(p, 4000), c = mk ? consiglio(mk.voci) : null;
+  if(!c) return;
+  var el = document.getElementById('qEsito');
+  if(el) el.innerHTML = testoQuota(c.conQuota || c.solida, v);
 }
 function barrettaFascia(m){
   var a = Math.max(0, m.p05*100), b = Math.min(100, m.p95*100), c = m.p*100;
@@ -771,6 +850,189 @@ function tabGiornata(){
           '<div class="v">'+gr.partite.length+'</div></div>';
       }).join('')+'</div>';
   }
+  return h;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   VISTA: SCHEDINE
+   ══════════════════════════════════════════════════════════════ */
+var PROFILI = [
+  {id:'sicura', nome:'Prudente', min:1.6, max:2.4,
+   testo:'Poche selezioni, tutte solide. Quota bassa perché la probabilità è alta: è la stessa cosa detta due volte.'},
+  {id:'media', nome:'Equilibrata', min:3.5, max:6.5,
+   testo:'Il punto in cui la quota comincia a valere qualcosa senza che la probabilità crolli.'},
+  {id:'alta', nome:'Alta', min:12, max:26,
+   testo:'Quota interessante, ma qui siamo già sotto una probabilità su dieci.'},
+  {id:'sogno', nome:'Molto alta', min:50, max:130,
+   testo:'La schedina che si racconta agli amici. Guarda la probabilità prima di raccontarla.'}
+];
+
+/* Fra tutte le combinazioni che arrivano a una certa quota, quale scegliere?
+   La probabilità non aiuta: a parità di quota è identica (è il suo inverso).
+   Quello che cambia è quanto il modello è SICURO di ciascuna selezione. Si
+   massimizza quindi il pavimento della fascia — la probabilità nello scenario
+   sfavorevole — a parità di quota. */
+function cercaSchedine(candidati, maxSel){
+  var PASSO = 0.02, MAXB = 130;                 // fino a quota 400 circa
+  var dp = new Array(MAXB + 1);
+  dp[0] = {v: 0, scelte: []};
+  var perPartita = {};
+  candidati.forEach(function(c){ (perPartita[c.iPartita] = perPartita[c.iPartita] || []).push(c); });
+  Object.keys(perPartita).forEach(function(chiave){
+    var nuovo = dp.slice();
+    perPartita[chiave].forEach(function(c){
+      if(!(c.p > 0.02)) return;
+      var passi = Math.round(Math.log(1/c.p)/Math.LN10 / PASSO);
+      if(passi < 1) passi = 1;
+      var val = Math.log(Math.max(1e-6, c.p05));
+      for(var b=0; b<=MAXB; b++){
+        var st = dp[b];
+        if(!st || st.scelte.length >= maxSel) continue;
+        var nb = b + passi;
+        if(nb > MAXB) continue;
+        var nv = st.v + val;
+        if(!nuovo[nb] || nv > nuovo[nb].v){
+          nuovo[nb] = {v: nv, scelte: st.scelte.concat([c])};
+        }
+      }
+    });
+    dp = nuovo;
+  });
+  return {dp: dp, PASSO: PASSO, MAXB: MAXB, candidati: candidati};
+}
+function schedinaPerFascia(tab, min, max, minSel){
+  var da = Math.ceil(Math.log(min)/Math.LN10 / tab.PASSO);
+  var a = Math.floor(Math.log(max)/Math.LN10 / tab.PASSO);
+  var meglio = null;
+  for(var b=da; b<=Math.min(a, tab.MAXB); b++){
+    var st = tab.dp[b];
+    if(!st || st.scelte.length < (minSel||2)) continue;
+    if(!meglio || st.v > meglio.v) meglio = st;
+  }
+  return meglio ? migliora(meglio.scelte, tab.candidati, min, max) : null;
+}
+/* La ricerca a tabella massimizza la somma dei pavimenti delle singole
+   selezioni, che non è la stessa cosa del pavimento della SCHEDINA: due
+   selezioni che sbagliano insieme si trascinano a vicenda. Qui si prova a
+   sostituire una selezione alla volta e si tiene solo quello che alza il
+   pavimento della combinazione, restando nella fascia di quota. */
+function migliora(scelte, candidati, min, max){
+  if(!candidati || !candidati.length) return scelte;
+  var attuale = scelte.slice();
+  var punteggio = function(sel){
+    var c = M.combina(sel, 0);
+    return (c && c.quota >= min*0.94 && c.quota <= max*1.06) ? c.p05 : -1;
+  };
+  var meglio = punteggio(attuale);
+  for(var giro=0; giro<2; giro++){
+    for(var i=0;i<attuale.length;i++){
+      var alternativi = candidati.filter(function(c){
+        return c.iPartita === attuale[i].iPartita && c.id !== attuale[i].id;
+      });
+      for(var k=0;k<alternativi.length;k++){
+        var prova = attuale.slice();
+        prova[i] = alternativi[k];
+        var v = punteggio(prova);
+        if(v > meglio + 1e-6){ meglio = v; attuale = prova; }
+      }
+    }
+  }
+  return attuale;
+}
+function candidatiGiornata(){
+  var partite = (S._prossime||[]).slice(0, 10);
+  var fuori = [];
+  partite.forEach(function(p, i){
+    var mk = mercatiDi(p, 1500, true);
+    if(!mk) return;
+    mk.voci.forEach(function(m){
+      if(!mercatoAttivo(m.id)) return;
+      if(m.p < 0.12 || m.p > 0.97) return;      // né impossibili né scontate
+      fuori.push({iPartita: i, partita: p, id: m.id, nome: m.nome,
+                  p: m.p, p05: m.p05, p95: m.p95, campioni: m.campioni});
+    });
+  });
+  return fuori;
+}
+function schedaSchedina(profilo, scelte){
+  if(!scelte || !scelte.length) return '';
+  var c = M.combina(scelte, 3000);
+  var ogni = c.p > 0 ? Math.round(1/c.p) : 0;
+  var margine = Math.pow(1.07, scelte.length) - 1;   // ~7% di ricarico per selezione
+  return '<div class="card"><div style="display:flex;align-items:baseline;gap:8px;margin-bottom:4px">'+
+    '<h3 style="font-size:17px;font-weight:700;flex:1">'+esc(profilo.nome)+'</h3>'+
+    '<div style="font-family:var(--mono);font-size:22px;font-weight:700">'+nu(c.quota,2)+'</div></div>'+
+    '<div style="font-family:var(--mono);font-size:10.5px;color:var(--mute);margin-bottom:10px">'+
+      scelte.length+' SELEZIONI · QUOTA EQUA</div>'+
+    '<div class="kpi" style="margin-bottom:10px">'+
+      '<div><div class="l">Probabilità</div><div class="v">'+pc(c.p,1)+'</div>'+
+        '<div class="s">fascia '+pc(c.p05,1)+'–'+pc(c.p95,1)+'</div></div>'+
+      '<div><div class="l">Riesce</div><div class="v">1 su '+ogni+'</div>'+
+        '<div class="s">volte che la giochi</div></div>'+
+      '<div><div class="l">10 CHF danno</div><div class="v">'+nu(10*c.quota,0)+'</div>'+
+        '<div class="s">alla quota equa</div></div>'+
+    '</div>'+
+    scelte.map(function(s){
+      return '<div class="row"><span class="dot" style="background:var(--c1)"></span>'+
+        '<div class="n">'+esc(s.nome)+'<em>'+esc(sigla(s.partita.c))+'–'+esc(sigla(s.partita.v))+
+        ' · '+esc(dataBreve(s.partita.d))+'</em></div>'+
+        '<div class="v">'+pc(s.p)+'<span>min '+pc(s.p05)+'</span></div></div>';
+    }).join('')+
+    '<div class="note">'+esc(profilo.testo)+'</div>'+
+    '<div class="note amber">Su Sporttip la quota sarà più bassa di '+nu(c.quota,2)+
+      ': il ricarico è per selezione, quindi si moltiplica. Con '+scelte.length+
+      ' selezioni il margine del banco arriva intorno al <b>'+pc(margine,0)+'</b>.</div>'+
+  '</div>';
+}
+function tabSchedine(){
+  if(!(S._prossime||[]).length){
+    prossimePartite();
+    if(!(S._prossime||[]).length) S._prossime = prossimePartite();
+  }
+  var partite = (S._prossime||[]).slice(0,10);
+  if(!partite.length){
+    return '<div class="card"><div class="empty"><b>Nessuna partita in calendario</b>'+
+      'Le schedine si costruiscono sulle partite in arrivo.</div></div>';
+  }
+  var h = '';
+  var cand = candidatiGiornata();
+  if(!cand.length){
+    return '<div class="card"><div class="empty"><b>Nessun mercato attivo</b>'+
+      'Accendine qualcuno in Dati → Mercati.</div></div>';
+  }
+  /* l'ancora: una selezione per partita, la più solida di ognuna */
+  var migliori = {};
+  cand.forEach(function(c){
+    if(!migliori[c.iPartita] || c.p05 > migliori[c.iPartita].p05) migliori[c.iPartita] = c;
+  });
+  var tutte = Object.keys(migliori).map(function(k){ return migliori[k]; });
+  var cTutte = M.combina(tutte, 2000);
+
+  h += '<div class="hero"><div class="l">Tutte e '+tutte.length+' le più solide insieme</div>'+
+    '<div class="v">'+nu(cTutte.quota, cTutte.quota<10?2:0)+'</div>'+
+    '<div class="s">Prendi la giocata più solida di ognuna delle '+tutte.length+' partite — nessuna sotto il '+
+    pc(Math.min.apply(null, tutte.map(function(x){ return x.p; })))+' — e mettile insieme: la quota sale a '+
+    nu(cTutte.quota, cTutte.quota<10?2:0)+', ma la probabilità che escano <b>tutte</b> scende al '+
+    pc(cTutte.p,1)+'. Una volta ogni '+Math.round(1/cTutte.p)+' schedine.</div></div>';
+  h += '<div class="note" style="margin-bottom:14px">Ogni selezione che aggiungi moltiplica la quota e '+
+    '<b>divide</b> la probabilità. Sotto trovi quattro compromessi diversi: a parità di quota, ho scelto '+
+    'la combinazione su cui il modello è più sicuro — quella con il pavimento più alto, non con la media più alta.</div>';
+
+  var maxSel = Math.min(6, partite.length);
+  var tab = cercaSchedine(cand, maxSel);
+  var trovate = 0;
+  PROFILI.forEach(function(pr){
+    var scelte = schedinaPerFascia(tab, pr.min, pr.max, 2);
+    if(scelte){ h += schedaSchedina(pr, scelte); trovate++; }
+  });
+  if(!trovate) h += '<div class="card"><div class="empty">Con i mercati attivi non riesco a comporre '+
+    'nessuna schedina in queste fasce di quota. Provane ad accendere qualcun altro in Dati → Mercati.</div></div>';
+
+  h += '<div class="note warn"><p>Queste sono <b>quote eque</b>: quelle che renderebbero la giocata un '+
+    'pareggio nel lungo periodo. Nessun operatore te le offre, e la differenza è il suo guadagno.</p>'+
+    '<p>Le combinazioni sono la parte del mercato dove quel margine pesa di più, perché si moltiplica a '+
+    'ogni selezione. Il modello qui serve a sapere <b>quanto vale davvero</b> quello che stai per giocare, '+
+    'non a promettere che esce.</p></div>';
   return h;
 }
 
@@ -992,6 +1254,20 @@ function tabDati(){
       return '<div class="row"><div class="n">'+esc(s)+'<em>'+g+' giornate da 10 partite</em></div>'+
         '<div class="v">'+n+'<span>partite</span></div></div>';
     }).join('')+'</div>';
+  var tutti = M.elencoMercati({casa:.4,pari:.3,via:.3,gol:.5,o05:.9,o15:.7,o25:.5,o35:.3,o45:.2,
+    mg13:.6,mg24:.6,mg15:.7,segnaC:.7,segnaV:.6,cnp:.3,vnp:.3,c1x:.7,cx2:.6,c12:.7}, ['Casa','Trasferta']);
+  h += '<div class="h2">Mercati<span class="r">'+mercatiAttivi().length+' attivi</span></div><div class="card">'+
+    '<p class="lede">Un consiglio su una giocata che il tuo operatore non accetta non serve a niente. '+
+    'Qui scegli quali esistono davvero dove giochi: <b>la scelta più solida viene presa solo fra questi</b>. '+
+    'Partono attivi quelli che si trovano su Sporttip.</p>'+
+    '<div class="chips">'+tutti.map(function(m){
+      return '<button class="'+(mercatoAttivo(m.id)?'on':'')+'" onclick="commutaMercato(\''+m.id+'\')">'+
+        (mercatoAttivo(m.id)?'✓ ':'')+esc(m.nome.replace('Casa','1').replace('Trasferta','2'))+'</button>';
+    }).join('')+'</div>'+
+    '<button class="btn ghost sm" style="margin-top:12px" onclick="ripristinaMercati()">Rimetti quelli di Sporttip</button>'+
+    '<div class="note">Se su Sporttip trovi qualcosa che qui non c\'è, dimmelo e lo aggiungo: '+
+    'ogni mercato è solo una somma di caselle della matrice dei risultati.</div></div>';
+
   h += '<div class="h2">Come funziona</div><div class="card"><div class="note">'+
     '<p><b>1. Le forze.</b> Ogni squadra ha due numeri: quanto segna e quanto concede. Si stimano tutti insieme '+
     'da tutte le partite in archivio, dando più peso a quelle recenti — una gara di due anni fa conta meno di un decimo '+
@@ -1090,6 +1366,10 @@ function renderPartita(){
         ? '<div class="row"><div class="n">Ancora più sicura<em>ma paga quasi niente</em></div>'+
           '<div class="v" style="font-size:12.5px">'+esc(cons.solida.nome)+'<span>'+pc(cons.solida.p)+
           ' · quota '+nu(cons.solida.quota,2)+'</span></div></div>' : '')+
+      '<div class="qbox"><label>Quota che ti danno su questa</label>'+
+        '<input type="number" inputmode="decimal" step="0.01" id="qProva" placeholder="es. 1.60" '+
+        'value="'+esc(S.quotaProva[chiavePartita(p)]||'')+'" oninput="verificaQuota(this.value)">'+
+        '<div id="qEsito" class="qesito">'+testoQuota(sol, S.quotaProva[chiavePartita(p)])+'</div></div>'+
       '<div class="note">"Più solida" non vuol dire sicura: vuol dire che regge anche se ho sbagliato '+
       'la lettura delle forze e se in campo succede l\'imprevisto. La classifica è fatta sul '+
       '<b>pavimento</b> della fascia, non sul numero centrale.</div></div>';
@@ -1122,18 +1402,21 @@ function renderPartita(){
   }
 
   if(mk){
+    var giocabili = mk.voci.filter(function(m){ return mercatoAttivo(m.id); });
     var gruppi = {};
-    mk.voci.forEach(function(m){ (gruppi[m.gruppo] = gruppi[m.gruppo] || []).push(m); });
-    h += '<div class="h2">Tutti i mercati<span class="r">'+mk.voci.length+'</span></div>';
+    giocabili.forEach(function(m){ (gruppi[m.gruppo] = gruppi[m.gruppo] || []).push(m); });
+    h += '<div class="h2">Mercati<span class="r">'+giocabili.length+' di '+mk.voci.length+'</span></div>';
     Object.keys(gruppi).forEach(function(g){
       h += '<div class="card"><div style="font-family:var(--mono);font-size:9.5px;letter-spacing:.8px;'+
         'text-transform:uppercase;color:var(--mute);margin-bottom:4px">'+esc(g)+'</div>'+
         gruppi[g].sort(function(a,b){ return b.p - a.p; }).map(rigaMercato).join('')+'</div>';
     });
-    h += '<div class="note">La barra chiara è la fascia, il trattino è la stima centrale. '+
-      '<b>Quota equa</b> = quella che renderebbe la scommessa un pareggio nel lungo periodo; '+
+    h += '<div class="note">Vedi solo i mercati che hai segnato come disponibili. '+
+      'Per cambiarli: <b>Dati → Mercati</b>.</div>'+
+      '<div class="note">La barra chiara è la fascia, il trattino è la stima centrale. '+
+      '<b>Quota equa</b> = quella che renderebbe la giocata un pareggio nel lungo periodo; '+
       '<b>prudente</b> = quella che servirebbe partendo dal pavimento della fascia. '+
-      'Sotto la quota equa, nel lungo periodo si perde.</div>';
+      'Sotto la quota equa, nel lungo periodo si perde: è così che il banco campa.</div>';
   }
 
   h += '<div class="h2">Risultati esatti più probabili</div><div class="card">'+
@@ -1301,23 +1584,28 @@ function ricalcola(){
   try{ localStorage.removeItem(CHIAVE_CACHE); }catch(e){}
   calcola();
 }
-function vai(t){ S.tab = t; render(); window.scrollTo(0,0); }
+function vai(t){
+  if(t === 'schedine' && !(S._prossime||[]).length) S._prossime = prossimePartite();
+  S.tab = t; render(); window.scrollTo(0,0);
+}
 
 /* ══════════════════════════════════════════════════════════════
    GUSCIO
    ══════════════════════════════════════════════════════════════ */
 var TABS = [
   {k:'giornata', n:'Giornata', p:'M4 6h16M4 12h16M4 18h10'},
+  {k:'schedine', n:'Schedine', p:'M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6'},
   {k:'squadre', n:'Squadre', p:'M12 3l7 4v6c0 4-3 6.5-7 8-4-1.5-7-4-7-8V7z'},
   {k:'arbitri', n:'Arbitri', p:'M6 4h9l3 4v12H6zM9 9h6M9 13h6'},
-  {k:'affid', n:'Affidabilità', p:'M4 18L9 12l4 3 7-9M4 20h16'},
+  {k:'affid', n:'Precisione', p:'M4 18L9 12l4 3 7-9M4 20h16'},
   {k:'dati', n:'Dati', p:'M4 7c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3zM4 7v10c0 1.7 3.6 3 8 3s8-1.3 8-3V7'}
 ];
-var TITOLI = {giornata:'Giornata', squadre:'Squadre', arbitri:'Arbitri',
+var TITOLI = {giornata:'Giornata', schedine:'Schedine', squadre:'Squadre', arbitri:'Arbitri',
               affid:'Affidabilità', dati:'Dati'};
 
 function sottotitolo(){
   if(S.stato !== 'pronto') return 'MODELLO SERIE A';
+  if(S.tab === 'schedine') return 'COMBINAZIONI E QUOTE EQUE';
   var q = S.back ? ('RPS ' + nu(S.back.modello.rps,4)) : '';
   var n = S.risultato ? S.risultato.partiteUsate : 0;
   return (n + ' PARTITE' + (q ? ' · ' + q.toUpperCase() : '')) +
@@ -1353,6 +1641,7 @@ function render(){
     return;
   }
   var corpo =
+    S.tab==='schedine' ? tabSchedine() :
     S.tab==='squadre' ? tabSquadre() :
     S.tab==='arbitri' ? tabArbitri() :
     S.tab==='affid' ? tabAffidabilita() :
