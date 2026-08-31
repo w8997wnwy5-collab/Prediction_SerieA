@@ -492,8 +492,20 @@ def prendi_understat(stagioni, esiti):
     lo stesso numero scritto in un altro modo — ed è per questo che vale la pena
     di prenderla da una pagina HTML invece che da un'API pulita che non esiste."""
     fuori = []
+    impronte = set()
     for i, (_, etichetta) in enumerate(stagioni[:N_STAGIONI_XG]):
         anno = int(etichetta[:4])
+        # Sei URL diversi che restituiscono pagine identiche non sono sei
+        # stagioni mancanti: sono una porta chiusa, e continuare a bussare non
+        # la apre. Basta il confronto delle dimensioni per accorgersene.
+        if len(impronte) == 1 and i >= 2:
+            esiti['Understat'] = ('fermato dopo %d tentativi: %s risponde sempre con la stessa '
+                                  'pagina, la stessa per tutte le stagioni. Non è un formato '
+                                  'cambiato, è un blocco — probabilmente sull\'indirizzo da cui '
+                                  'gira la Action. Gli xG restano dedotti dai tiri.'
+                                  % (i, 'understat.com'))
+            log('· understat: stessa pagina per ogni stagione, è un blocco. Mi fermo.')
+            break
         if i:
             time.sleep(2)
         log('· understat %s' % etichetta)
@@ -506,7 +518,9 @@ def prendi_understat(stagioni, esiti):
             }).decode('utf-8', 'replace')
             righe = _json_da_understat(testo, 'datesData')
             if righe is None:
+                impronte.add(len(testo))
                 raise RuntimeError(_perche_understat_non_va(testo, 'datesData'))
+            impronte.add(-i)          # una pagina buona non fa impronta comune
             n = 0
             for m in righe:
                 if not m.get('isResult'):

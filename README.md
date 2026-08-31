@@ -89,21 +89,41 @@ Tutto funziona senza registrarsi da nessuna parte. Due chiavi gratuite aggiungon
 
 | Segreto | Da dove | Cosa aggiunge |
 |---|---|---|
-| `FOOTBALL_DATA_TOKEN` | football-data.org | Marcatori e assist, e **tutti gli arbitri di una stagione in una sola richiesta** invece che uno alla volta da ESPN |
-| `APIFOOTBALL_KEY` | api-sports.io | Statistiche partita dove le altre fonti non arrivano |
+| `APIFOOTBALL_KEY` | api-sports.io | **Gli arbitri**, che nessun'altra fonte gratuita dà più. Senza questa, la sezione Arbitri resta vuota |
+| `FOOTBALL_DATA_TOKEN` | football-data.org | Marcatori e assist, e gli arbitri della **stagione in corso**, che il piano gratuito di API-Football non copre |
 
 Si mettono in **Settings → Secrets and variables → Actions → New repository secret**.
 
 ## I dati
 
-| Fonte | Cosa dà | Chiave |
-|---|---|---|
-| **football-data.co.uk** | risultati, tiri, falli, corner, cartellini, quote di chiusura 1X2 e Over/Under. Sei stagioni | no |
-| **Understat** | gli **xG veri** di ogni partita | no |
-| **ESPN** | orario esatto, stadio, arbitro, quote delle partite in arrivo | no |
-| **openfootball** | calendario e risultati, come riserva che non si arrabbia mai | no |
-| **football-data.org** | arbitri in blocco, marcatori e assist | sì, gratuita |
-| **API-Football** | statistiche partita dove manca tutto il resto | sì, gratuita |
+| Fonte | Cosa dà | Chiave | Stato |
+|---|---|---|---|
+| **football-data.co.uk** | risultati, tiri, falli, corner, cartellini, quote di chiusura. Sei stagioni | no | funziona |
+| **football-data.co.uk** *fixtures* | orario e **quote delle partite in arrivo** | no | funziona |
+| **openfootball** | calendario di tutta la stagione | no | funziona |
+| **API-Football** | **arbitri** e statistiche partita | sì, gratuita | funziona (stagioni 2022→2024) |
+| **football-data.org** | arbitri in blocco, marcatori e assist | sì, gratuita | non provata: manca il token |
+| **Understat** | gli **xG veri** di ogni partita | no | **bloccata** dalle Action |
+| **ESPN** | orario, stadio, arbitro, quote | no | **bloccata** dalle Action |
+
+Le ultime due righe meritano una spiegazione, perché sono state scritte, provate e lasciate
+dentro lo stesso.
+
+**Understat** risponde `200` ma serve la stessa pagina da 18 704 byte per tutte e sei le
+stagioni, senza i dati dentro. Sei URL diversi che restituiscono pagine identiche non sono sei
+stagioni mancanti: sono una porta chiusa sull'indirizzo da cui gira la Action. **ESPN**
+risponde `403`: blocca gli indirizzi dei datacenter, e i runner di GitHub stanno su Azure.
+
+Il codice resta perché non costa niente e degrada in modo pulito — senza xG veri il modello
+continua a dedurli dai tiri, che è quello che faceva prima — e perché da un indirizzo
+domestico funzionano: chi fa girare `build_data.py` sul proprio computer li ottiene. Lo stato
+di ogni fonte è scritto in `data/meta.json` e visibile nella sezione **Dati** dell'app: se un
+giorno si sbloccano, l'app lo dice da sola.
+
+Gli **arbitri** erano il buco più grosso: la colonna di football-data.co.uk è vuota da tempo e
+la sezione Arbitri era morta su tutte e 1910 le partite. Adesso arrivano da API-Football, che
+con la chiave gratuita copre le stagioni 2022→2024: **1140 partite con arbitro**. Per la
+stagione in corso serve il token di football-data.org.
 
 Se tutte falliscono, lo script **non tocca i dati esistenti**: scrive l'errore in
 `data/meta.json` e l'app te lo mostra. Meglio dati vecchi dichiarati che dati vuoti a sorpresa.
