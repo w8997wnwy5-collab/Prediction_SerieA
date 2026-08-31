@@ -107,6 +107,28 @@ def test_understat():
     prova('una pagina cambiata non esplode: restituisce nulla',
           B._json_da_understat('<html>niente di utile</html>', 'datesData') is None)
 
+    # tre forme viste in giro: pretenderne una sola è il modo di perdere una
+    # fonte che funziona ancora
+    corto = json.dumps([{'isResult': False}])
+    sfug = ''.join('\\x%02x' % ord(c) for c in corto)
+    for etichetta, forma in (
+            ('senza punto e virgola', "var datesData = JSON.parse('%s')\n" % sfug),
+            ('senza var', "datesData = JSON.parse('%s');" % sfug),
+            ('con apici doppi', 'datesData = JSON.parse("%s");' % sfug)):
+        prova('legge anche la forma %s' % etichetta,
+              B._json_da_understat(forma, 'datesData') is not None)
+
+    # la diagnosi deve distinguere i casi, altrimenti si tira a indovinare
+    sfida = 'Just a moment...' + 'x' * 3000 + 'cf-browser-verification'
+    prova('riconosce la verifica di Cloudflare',
+          'Cloudflare' in B._perche_understat_non_va(sfida, 'datesData'),
+          B._perche_understat_non_va(sfida, 'datesData'))
+    prova('riconosce una pagina troppo corta',
+          'byte' in B._perche_understat_non_va('vuoto', 'datesData'))
+    prova('riconosce il formato cambiato',
+          'formato' in B._perche_understat_non_va('x' * 3000 + ' datesData = qualcosa', 'datesData'),
+          B._perche_understat_non_va('x' * 3000 + ' datesData = qualcosa', 'datesData'))
+
 
 # ── ESPN ────────────────────────────────────────────────────────────────────
 
@@ -184,6 +206,23 @@ def test_calendario():
     spostata = B.unisci_calendario(base, [{'d': '2026-09-08', 'c': 'Inter', 'v': 'Milan', 'o': '20:45'}])
     prova('un anticipo spostato di due giorni resta una partita sola', len(spostata) == 1,
           str(spostata))
+
+    # La regressione da non rifare: football-data.co.uk conosce solo la settimana
+    # in arrivo, openfootball tutta la stagione. Tenere il primo perché ha
+    # risposto vuol dire passare da 370 partite a 10.
+    squadre = ['Sq%02d' % i for i in range(20)]
+    stagionale = []
+    for g in range(37):
+        for k in range(0, 20, 2):
+            stagionale.append({'d': '2026-%02d-%02d' % (9 + g // 4, 1 + (g % 4) * 7),
+                               'c': squadre[k], 'v': squadre[(k + 1 + g) % 20]})
+    ravvicinato = [dict(p, o='20:45', q=[2.0, 3.3, 3.8]) for p in stagionale[:10]]
+    fuso = B.unisci_calendario(stagionale, ravvicinato)
+    prova('il calendario di stagione non si accorcia quando arriva quello ravvicinato',
+          len(fuso) == len(stagionale), '%d invece di %d' % (len(fuso), len(stagionale)))
+    prova('e le quote della settimana in arrivo ci sono lo stesso',
+          len([p for p in fuso if p.get('q')]) == 10,
+          str(len([p for p in fuso if p.get('q')])))
 
 
 def main():

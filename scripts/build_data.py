@@ -342,7 +342,10 @@ def arricchisci(indice, stagioni, esiti):
         esiti['API-Football'] = 'saltata: nessuna chiave APIFOOTBALL_KEY'
         return 0, 0
     conteggio, agg_arb, agg_stat = [0], 0, 0
-    for codice, etichetta in stagioni[:3]:
+    # Il piano gratuito copre una finestra di stagioni che si sposta ogni anno e
+    # che non è documentata: si prova con tutte e si tiene quello che risponde.
+    # Costa una richiesta a vuoto per stagione, su una quota di settanta.
+    for codice, etichetta in stagioni:
         anno = int(etichetta[:4])
         try:
             d = api_football('fixtures', {'league': LEGA_APIFOOTBALL, 'season': anno},
@@ -435,12 +438,51 @@ URL_UNDERSTAT = 'https://understat.com/league/Serie_A/%d'
 
 def _json_da_understat(testo, variabile):
     """Understat non ha API: i dati stanno dentro la pagina, dentro una stringa
-    JavaScript in cui ogni carattere è scritto come \\xNN. Si srotola e diventa JSON."""
-    m = re.search(r"var\s+" + variabile + r"\s*=\s*JSON\.parse\('(.*?)'\)\s*;", testo, re.S)
-    if not m:
-        return None
-    grezzo = re.sub(r'\\x([0-9A-Fa-f]{2})', lambda g: chr(int(g.group(1), 16)), m.group(1))
-    return json.loads(grezzo)
+    JavaScript in cui ogni carattere è scritto come \\xNN. Si srotola e diventa JSON.
+
+    Le tre forme sono tutte state viste in giro — con e senza `var`, con e senza
+    punto e virgola, apici singoli o doppi — e costano tre righe invece di una.
+    Pretenderne una sola e chiamarlo "formato cambiato" quando non combacia è il
+    modo più veloce di perdere una fonte che funziona ancora."""
+    forme = [
+        r"var\s+%s\s*=\s*JSON\.parse\('(.*?)'\)",
+        r"%s\s*=\s*JSON\.parse\('(.*?)'\)",
+        r'%s\s*=\s*JSON\.parse\("(.*?)"\)',
+    ]
+    for forma in forme:
+        m = re.search(forma % re.escape(variabile), testo, re.S)
+        if not m:
+            continue
+        grezzo = re.sub(r'\\x([0-9A-Fa-f]{2})', lambda g: chr(int(g.group(1), 16)), m.group(1))
+        try:
+            return json.loads(grezzo)
+        except ValueError:
+            continue
+    return None
+
+
+def _perche_understat_non_va(testo, variabile):
+    """Quando una pagina non dà quello che deve, la differenza fra "hanno
+    cambiato il formato" e "ci hanno chiuso la porta" cambia completamente cosa
+    conviene fare. Costa cinque righe saperlo, e senza si tira a indovinare per
+    settimane."""
+    basso = testo.lower()
+    if len(testo) < 2000:
+        return 'la pagina è di soli %d byte: non è la pagina della lega' % len(testo)
+    for spia, spiegazione in (
+            ('cf-browser-verification', 'Cloudflare chiede una verifica del browser'),
+            ('challenge-platform', 'Cloudflare chiede una verifica del browser'),
+            ('just a moment', 'Cloudflare chiede una verifica del browser'),
+            ('captcha', 'la pagina chiede un captcha'),
+            ('access denied', 'accesso negato'),
+            ('enable javascript', 'la pagina pretende JavaScript')):
+        if spia in basso:
+            return '%s (pagina di %d byte)' % (spiegazione, len(testo))
+    if variabile.lower() in basso:
+        return ('la variabile %s c\'è ma non nella forma attesa (pagina di %d byte): '
+                'è cambiato il formato' % (variabile, len(testo)))
+    return ('nella pagina non compare mai %s (%d byte): o è cambiato il nome, o quella '
+            'servita non è la pagina della lega' % (variabile, len(testo)))
 
 
 def prendi_understat(stagioni, esiti):
@@ -456,10 +498,15 @@ def prendi_understat(stagioni, esiti):
             time.sleep(2)
         log('· understat %s' % etichetta)
         try:
-            testo = scarica(URL_UNDERSTAT % anno, tentativi=2, attesa=5).decode('utf-8', 'replace')
+            testo = scarica(URL_UNDERSTAT % anno, tentativi=2, attesa=5, intestazioni={
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Accept-Language': 'en-GB,en;q=0.9,it;q=0.8',
+                'Referer': 'https://understat.com/',
+                'Upgrade-Insecure-Requests': '1',
+            }).decode('utf-8', 'replace')
             righe = _json_da_understat(testo, 'datesData')
             if righe is None:
-                raise RuntimeError('la pagina non contiene datesData: forse è cambiato il formato')
+                raise RuntimeError(_perche_understat_non_va(testo, 'datesData'))
             n = 0
             for m in righe:
                 if not m.get('isResult'):
@@ -514,7 +561,9 @@ def _quote_espn(comp):
 
 def espn_scoreboard(da, a, conteggio):
     url = '%s/scoreboard?dates=%s-%s&limit=300' % (BASE_ESPN, da.replace('-', ''), a.replace('-', ''))
-    grezzo = scarica(url, tentativi=2, attesa=4)
+    grezzo = scarica(url, tentativi=2, attesa=4,
+                     intestazioni={'Accept': 'application/json',
+                                   'Referer': 'https://www.espn.com/soccer/scoreboard'})
     conteggio[0] += 1
     return json.loads(grezzo.decode('utf-8'))
 
@@ -528,10 +577,15 @@ def prendi_espn(stagioni, esiti, conteggio):
     finestre = [((oggi - timedelta(days=10)).isoformat(), (oggi + timedelta(days=45)).isoformat())]
     partite, futuro = [], []
     for da, a in finestre:
+        log('· ESPN %s → %s' % (da, a))
         try:
             d = espn_scoreboard(da, a, conteggio)
         except Exception as e:          # noqa: BLE001
-            esiti['ESPN calendario'] = 'fallito: %s' % e
+            # ESPN blocca spesso gli indirizzi dei datacenter, e le Action girano
+            # su Azure. Non è un guasto: è una fonte in più che oggi non c'è, e
+            # tutto quello che dava lo danno anche le altre.
+            log('  non disponibile: %s' % e)
+            esiti['ESPN calendario'] = 'non disponibile: %s' % e
             return partite, futuro
         for ev in (d.get('events') or []):
             comp = ((ev.get('competitions') or [None])[0]) or {}
@@ -572,11 +626,19 @@ def arbitri_da_espn(indice, esiti, conteggio):
     testa. Sono troppe per prenderle tutte in un colpo, quindi se ne fa un pezzo
     al giorno partendo dalle più recenti. Fra una decina di giorni l'archivio è
     pieno, e da lì in avanti bastano le partite nuove."""
-    mancanti = [p for p in indice.values()
-                if p.get('gc') is not None and not p.get('arb') and p.get('espn')]
+    senza_arbitro = [p for p in indice.values()
+                     if p.get('gc') is not None and not p.get('arb')]
+    mancanti = [p for p in senza_arbitro if p.get('espn')]
     mancanti.sort(key=lambda p: p['d'], reverse=True)
     if not mancanti:
-        esiti['ESPN arbitri'] = 'niente da fare: tutte le partite note hanno già un arbitro'
+        # Distinguere i due casi conta: "non c'è niente da fare" e "non so da
+        # dove cominciare" si somigliano solo se non si guarda il numero.
+        if senza_arbitro:
+            esiti['ESPN arbitri'] = ('%d partite sono senza arbitro, ma nessuna è stata agganciata '
+                                     'a ESPN: senza il suo identificativo non posso chiederne il '
+                                     'dettaglio' % len(senza_arbitro))
+        else:
+            esiti['ESPN arbitri'] = 'niente da fare: tutte le partite giocate hanno già un arbitro'
         return 0
     aggiunti = 0
     for p in mancanti[:MAX_ESPN_DETTAGLI]:
@@ -880,17 +942,24 @@ def main():
         except Exception as e:        # noqa: BLE001
             esiti['riserva %s' % etichetta] = 'fallita: %s' % e
 
-    calendario = prendi_calendario(stagioni, esiti)
-    if calendario_riserva:
-        visti = {chiave(p) for p in calendario}
-        calendario.extend([p for p in calendario_riserva if chiave(p) not in visti])
-    if not calendario:
+    # Due calendari, e servono tutti e due. openfootball sa QUALI partite si
+    # giocano fino a maggio; football-data.co.uk sa a che ora e a quanto le
+    # danno, ma solo per la settimana in arrivo. Prendere solo il secondo perché
+    # ha risposto — che è quello che succedeva finché il primo era l'unico a
+    # funzionare — vuol dire passare da trecentosettanta partite a dieci.
+    ravvicinato = prendi_calendario(stagioni, esiti)
+    stagionale = list(calendario_riserva)
+    if not stagionale:
         try:
             _, future = prendi_openfootball(stagioni[0][1])
-            calendario = future
+            stagionale = future
             esiti['calendario stagione'] = 'ok da openfootball: %d partite' % len(future)
         except Exception as e:        # noqa: BLE001
             esiti['calendario stagione'] = 'fallito: %s' % e
+    # base = la stagione intera, sopra = orari e quote di chi ce li ha
+    calendario = unisci_calendario(stagionale, ravvicinato)
+    esiti['calendario'] = '%d partite in tutto, %d con le quote' % (
+        len(calendario), len([p for p in calendario if p.get('q')]))
 
     vecchio = carica_esistente()
     prima = len((vecchio or {}).get('partite') or [])
