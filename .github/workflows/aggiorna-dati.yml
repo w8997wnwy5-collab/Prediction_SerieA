@@ -2,9 +2,13 @@ name: Aggiorna dati Serie A
 
 on:
   schedule:
-    # ogni giorno alle 05:17 UTC (07:17 in Svizzera d'estate).
+    # Il giro completo una volta al giorno, alle 05:17 UTC (07:17 in Svizzera
+    # d'estate): archivio, xG, arbitri, tutto.
     # I minuti dispari non sono un vezzo: alle :00 la coda di GitHub è intasata.
     - cron: '17 5 * * *'
+    # I giri leggeri servono a una cosa sola: le quote delle partite in arrivo,
+    # che si muovono durante il giorno e a cui adesso il modello si ancora.
+    - cron: '17 11,17,23 * * *'
   workflow_dispatch:          # bottone "Run workflow" nella scheda Actions
   push:
     branches: [main]
@@ -34,6 +38,10 @@ jobs:
         continue-on-error: true      # anche se la fonte è giù, vogliamo scrivere lo stato
         env:
           FOOTBALL_DATA_TOKEN: ${{ secrets.FOOTBALL_DATA_TOKEN }}
+          APIFOOTBALL_KEY: ${{ secrets.APIFOOTBALL_KEY }}
+          # solo il giro delle 05:17 rilegge tutto l'archivio; gli altri
+          # aggiornano calendario, quote e arbitri e basta
+          MODO: ${{ (github.event.schedule == '17 11,17,23 * * *') && 'leggero' || 'completo' }}
         run: python scripts/build_data.py
 
       - name: Committa se qualcosa è cambiato

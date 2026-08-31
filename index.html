@@ -211,6 +211,14 @@ svg.chart{display:block;width:100%;overflow:visible;}
 .matrice td.z{color:var(--mute);opacity:.55;}
 .matrice td.hi{outline:2px solid var(--ink);outline-offset:-2px;font-weight:700;}
 
+.mtx{overflow-x:auto;margin:0 -4px;}
+.mtx table{border-collapse:separate;border-spacing:2px;font-family:var(--mono);font-size:11px;
+  margin:0 auto;width:100%;}
+.mtx td,.mtx th{height:28px;text-align:center;border-radius:5px;font-weight:500;background:var(--card2);}
+.mtx th{color:var(--mute);font-weight:600;font-size:10px;background:none;white-space:nowrap;}
+.mtx td{color:var(--ink);}
+.mtx td.hot{background:var(--accent-soft);color:var(--accent);font-weight:700;}
+
 /* ── sheet ── */
 .scrim{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:40;display:flex;align-items:flex-end;
   justify-content:center;animation:fade .18s ease;}
@@ -235,6 +243,33 @@ svg.chart{display:block;width:100%;overflow:visible;}
 .sl b{font-family:var(--mono);font-size:14px;color:var(--ink);}
 select{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:11px;background:var(--card2);outline:none;}
 .hidden{display:none !important;}
+/* ── vista Valore ── */
+.h3{font-size:11.5px;font-weight:600;letter-spacing:.9px;text-transform:uppercase;color:var(--mute);
+  margin:16px 0 8px;display:flex;align-items:center;gap:8px;}
+.h3 .r{margin-left:auto;font-family:var(--mono);font-size:11px;letter-spacing:.2px;text-transform:none;}
+.riga-cassa{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+.riga-cassa label{font-size:13.5px;font-weight:500;}
+.riga-cassa input{width:96px;padding:8px 10px;border:1px solid var(--line);border-radius:9px;
+  background:var(--bg);color:var(--ink);font-family:var(--mono);font-size:14px;}
+.riga-cassa span{flex:1;min-width:180px;font-size:11.5px;color:var(--mute);line-height:1.5;}
+.vrow{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line2);}
+.vrow:last-child{border-bottom:0;}
+.vrow[data-p="1"]{background:var(--ok-soft);margin:0 -14px;padding-left:14px;padding-right:14px;
+  border-radius:8px;border-bottom-color:transparent;}
+.vinfo{flex:1;min-width:0;}
+.vsq{font-family:var(--mono);font-size:10.5px;color:var(--mute);letter-spacing:.3px;}
+.vmn{font-size:13.5px;font-weight:500;margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.vnum{flex:none;display:flex;gap:10px;}
+.vst{font-family:var(--mono);font-size:13px;font-weight:600;text-align:right;min-width:46px;}
+.vst span{display:block;font-size:9px;color:var(--mute);font-weight:400;}
+.vin{flex:none;width:96px;text-align:right;}
+.vq{width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);
+  color:var(--ink);font-family:var(--mono);font-size:13px;text-align:right;}
+.vesito{font-size:10px;margin-top:3px;line-height:1.35;}
+.vesito.pos{color:var(--ok);font-weight:600;}
+.vesito.neg{color:var(--mute);}
+.vesito.mute{color:var(--mute);}
+.vesito span{display:block;font-family:var(--mono);font-weight:500;}
 @media (min-width:720px){
   .top{padding-left:calc((100% - 680px)/2 + 16px);padding-right:calc((100% - 680px)/2 + 16px);}
   .tabs{padding-left:calc((100% - 680px)/2);padding-right:calc((100% - 680px)/2);}
@@ -258,13 +293,18 @@ var S = {
   stato: 'carico', errore: null, avanzamento: 0, fase: 'Carico i dati',
   aggiustamenti: {}, arbitroScelto: {}, aggiornando: false, tempoCalcolo: 0
 };
-var VERSIONE = '2.2';
+var VERSIONE = '3.0';
 /* Un consiglio su una scommessa che il tuo operatore non accetta è un consiglio
    inutile. Questo è l'insieme standard che si trova su Sporttip; il resto resta
    disponibile ma spento, e si accende dalla sezione Dati. */
-var MERCATI_PRESET = ['1','X','2','1X','X2','12','O15','U15','O25','U25','O35','U35','GG','NG'];
-var CHIAVE_MERCATI = 'seriea_mercati_v1';           // si vede nella sezione Dati: serve a sapere cosa si sta guardando
-var CHIAVE_CACHE = 'seriea_modello_v2';
+var MERCATI_PRESET = ['1','X','2','1X','X2','12',
+  'O15','U15','O25','U25','O35','U35','MG13','MG24',
+  'GG','NG','SC','SV',
+  'TC05','TV05','CSECCA','VSECCA','H1C','H1V',
+  '1O25','1U25','2O25','2U25','1XO25','X2O25','GGO25','NGU25','1GG',
+  'PT1','PTX','PT2','PT1X','PTX2','PTO05','PTGG','STO05','GENT'];
+var CHIAVE_MERCATI = 'seriea_mercati_v2';           // si vede nella sezione Dati: serve a sapere cosa si sta guardando
+var CHIAVE_CACHE = 'seriea_modello_v3';
 
 /* ══════════════════════════════════════════════════════════════
    UTILI
@@ -426,14 +466,22 @@ function calcolaQui(fatto, fallito){
     var res = M.campionaBacktest(dati, {da:opz.daBacktest, refitOgniGiorni:4, iterazioni:80});
     var back = res.campioni.length > 50 ? M.valutaBacktest(res) : null;
     var peso = back ? back.pesoMigliore : 0.6;
-    var mod = M.costruisci(S.doc.partite, {dati:dati, iterazioni:400, pesoTiri:peso});
+    var stiro = back && back.stiroMigliore != null ? back.stiroMigliore : 1;
+    var ancora = back && back.ancoraMigliore != null ? back.ancoraMigliore : 0;
+    var mod = M.costruisci(S.doc.partite, {dati:dati, iterazioni:400, pesoTiri:peso,
+                                           stiro:stiro, ancoraggio:ancora});
     var repliche = M.bootstrap(dati, {iterazioni:120}, 24, mod.gol);
     var se = M.sintesiBootstrap(repliche, mod.squadre.length);
     fatto({
       squadre: mod.squadre,
       gol: semplificaPar(mod.gol), tiri: semplificaPar(mod.tiri),
-      pesoTiri: peso, calibrazioneTiri: mod.calibrazioneTiri,
-      arbitri: M.statisticheArbitri(S.doc.partite, {k:12}), backtest: back,
+      primoTempo: semplificaPar(mod.primoTempo),
+      pesoTiri: peso, stiro: stiro, ancoraggio: ancora,
+      calibrazioneTiri: mod.calibrazioneTiri,
+      xgVeri: dati.xgVeri||0, xgDaTiri: dati.xgDaTiri||0, allineamentoXg: dati.allineamentoXg||null,
+      arbitri: M.statisticheArbitri(S.doc.partite, {k:12}),
+      corner: M.statisticheCorner(S.doc.partite, {k:10}),
+      vantaggioCorner: M.vantaggioCornerCasa(S.doc.partite), backtest: back,
       repliche: repliche, se: se, effettoRosso: M.effettoRosso(S.doc.partite, mod),
       partiteUsate: dati.righe.length, ultimaData: dati.ultimaData
     });
@@ -447,11 +495,14 @@ function semplificaPar(p){
 }
 function applicaRisultato(ris, daCache){
   S.risultato = ris;
-  S.back = ris.backtest; S.arb = ris.arbitri;
+  S.back = ris.backtest; S.arb = ris.arbitri; S.corner = ris.corner || null;
   var indice = {};
   ris.squadre.forEach(function(s,i){ indice[s] = i; });
   S.mod = { squadre: ris.squadre, indice: indice, gol: ris.gol, tiri: ris.tiri,
-            pesoTiri: ris.pesoTiri, calibrazioneTiri: ris.calibrazioneTiri,
+            primoTempo: ris.primoTempo || null,
+            pesoTiri: ris.pesoTiri, stiro: ris.stiro == null ? 1 : ris.stiro,
+            ancoraggio: ris.ancoraggio == null ? 0 : ris.ancoraggio,
+            calibrazioneTiri: ris.calibrazioneTiri,
             repliche: ris.repliche || null, se: ris.se || null,
             effettoRosso: ris.effettoRosso || null };
   S.simCache = {};
@@ -522,8 +573,14 @@ function aggiustamentiDi(p){
   if(a.via)  agg.attV = Math.log(Math.max(0.4, 1 - a.via/100));
   return agg;
 }
+/* Le quote della partita, quando la fonte le ha portate: sono l'ingrediente che
+   fa scattare l'ancoraggio al mercato. Senza, il modello resta da solo. */
+function quoteDi(p){
+  return {q: p.q || null, qou: p.qou || null};
+}
 function previsione(p){
-  return M.prevedi(S.mod, p.c, p.v, {agg: aggiustamentiDi(p)});
+  var qq = quoteDi(p);
+  return M.prevedi(S.mod, p.c, p.v, {agg: aggiustamentiDi(p), q: qq.q, qou: qq.qou});
 }
 /* La simulazione costa: si tiene in memoria finché non cambia qualcosa. */
 function simulazione(p, N, conCampioni){
@@ -535,41 +592,42 @@ function simulazione(p, N, conCampioni){
     var st = S.arb.indiceSquadre || {};
     pRosso = (S.mod.effettoRosso && S.mod.effettoRosso.prob) || 0.05;
   }
+  var qq = quoteDi(p);
   var sim = M.simula(S.mod, p.c, p.v, {
     N: N || 1200, agg: aggiustamentiDi(p),
+    q: qq.q, qou: qq.qou,
     pRossoCasa: pRosso, pRossoVia: pRosso,
     campioni: conCampioni ? 140 : 0
   });
   if(sim) S.simCache[k] = sim;
   return sim;
 }
-/* I mercati con la loro fascia, la quota equa e la correzione storica. */
+/* I mercati con la loro fascia, la quota equa e la correzione storica.
+
+   Ogni voce dell'elenco dichiara da quale campo della simulazione viene e se va
+   letta al contrario. Prima qui c'era una tabella di corrispondenze scritta a
+   mano, e ogni mercato nuovo voleva una riga in più: il primo che ci si
+   dimenticava restava senza fascia, in silenzio. Adesso l'aggancio è automatico
+   e i mercati sono diventati sessanta senza che questa funzione cresca. */
 function mercatiDi(p, N, conCampioni){
   var sim = simulazione(p, N, conCampioni);
   if(!sim) return null;
-  var f = sim.fasce;
+  var f = sim.fasce, k;
+  var medie = {};
+  for(k in f) medie[k] = f[k].p;
   var bins = S.back && S.back.modello ? S.back.modello.calibrazione : null;
-  var voci = M.elencoMercati({
-    casa:f.casa.p, pari:f.pari.p, via:f.via.p, gol:f.gol.p,
-    o05:f.o05.p, o15:f.o15.p, o25:f.o25.p, o35:f.o35.p, o45:f.o45.p,
-    c1x:f.c1x.p, cx2:f.cx2.p, c12:f.c12.p,
-    mg13:f.mg13.p, mg24:f.mg24.p, mg15:f.mg15.p,
-    segnaC:f.segnaC.p, segnaV:f.segnaV.p, cnp:f.cnp.p, vnp:f.vnp.p
-  }, [p.c, p.v]);
-  var mappa = {'1':'casa','X':'pari','2':'via','O05':'o05','O15':'o15','O25':'o25',
-               'O35':'o35','MG13':'mg13','MG24':'mg24','GG':'gol','SC':'segnaC','SV':'segnaV',
-               '1X':'c1x','X2':'cx2','12':'c12'};
+  var voci = M.elencoMercati(medie, [p.c, p.v]).concat(M.elencoTempi(medie, [p.c, p.v]));
   voci.forEach(function(m){
-    var campo = mappa[m.id];
-    if(campo && f[campo]){ m.p05 = f[campo].p05; m.p95 = f[campo].p95; }
-    else if(m.id==='U25'){ m.p05 = 1 - f.o25.p95; m.p95 = 1 - f.o25.p05; }
-    else if(m.id==='U35'){ m.p05 = 1 - f.o35.p95; m.p95 = 1 - f.o35.p05; }
-    else if(m.id==='NG'){ m.p05 = 1 - f.gol.p95; m.p95 = 1 - f.gol.p05; }
-    if(campo && f[campo] && f[campo].campioni) m.campioni = f[campo].campioni;
-    else if(m.id==='U25' && f.o25.campioni) m.campioni = f.o25.campioni.map(function(x){ return 1-x; });
-    else if(m.id==='U35' && f.o35.campioni) m.campioni = f.o35.campioni.map(function(x){ return 1-x; });
-    else if(m.id==='U15' && f.o15.campioni) m.campioni = f.o15.campioni.map(function(x){ return 1-x; });
-    else if(m.id==='NG' && f.gol.campioni) m.campioni = f.gol.campioni.map(function(x){ return 1-x; });
+    var b = f[m.campo];
+    if(b){
+      m.p05 = m.inverso ? 1 - b.p95 : b.p05;
+      m.p95 = m.inverso ? 1 - b.p05 : b.p95;
+      if(b.campioni){
+        m.campioni = m.inverso
+          ? b.campioni.map(function(x){ return 1 - x; })
+          : b.campioni.slice();
+      }
+    }
     m.p05 = Math.max(0, Math.min(m.p, m.p05 == null ? m.p : m.p05));
     m.p95 = Math.min(1, Math.max(m.p, m.p95 == null ? m.p : m.p95));
     m.quota = m.p > 0.001 ? 1/m.p : null;
@@ -806,7 +864,7 @@ function schedaPartita(p, indice){
       '<b>'+esc(cons.conQuota.nome)+'</b>'+
       '<span class="cq">'+pc(cons.conQuota.p)+' · min '+pc(cons.conQuota.p05)+' · quota '+nu(cons.conQuota.quota,2)+'</span></div>' : '')+
     (mercato ? '<div class="note" style="margin-top:10px">Il mercato dice '+pc(mercato[0])+' · '+
-      pc(mercato[1])+' · '+pc(mercato[2])+'. '+scartoTesto(pr, mercato)+'</div>' : '')+
+      pc(mercato[1])+' · '+pc(mercato[2])+'. '+scartoTesto(pr.puro||pr, mercato)+'</div>' : '')+
   '</div>';
 }
 function barraProb(pr){
@@ -816,12 +874,14 @@ function barraProb(pr){
   }).join('')+'</div><div class="probl"><span>1 '+pc(v[0])+'</span><span>X '+pc(v[1])+
     '</span><span>2 '+pc(v[2])+'</span></div>';
 }
+/* Il confronto va fatto col modello PURO: quello ancorato ha già letto le quote,
+   e confrontarlo col mercato vorrebbe dire confrontarlo con sé stesso. */
 function scartoTesto(pr, mercato){
   var mie = [pr.casa, pr.pari, pr.via], nomi = ['la vittoria in casa','il pareggio','la vittoria fuori'];
   var iMax = 0, dMax = 0;
   for(var i=0;i<3;i++){ var d = mie[i]-mercato[i]; if(Math.abs(d) > Math.abs(dMax)){ dMax = d; iMax = i; } }
-  if(Math.abs(dMax) < 0.03) return 'Il modello la vede praticamente uguale.';
-  return 'Il modello dà ' + (dMax>0?'più':'meno') + ' peso a ' + nomi[iMax] +
+  if(Math.abs(dMax) < 0.03) return 'Il modello, da solo, la vedrebbe praticamente uguale.';
+  return 'Il modello da solo darebbe ' + (dMax>0?'più':'meno') + ' peso a ' + nomi[iMax] +
     ' (' + (dMax>0?'+':'−') + pc(Math.abs(dMax)) + ').';
 }
 function tabGiornata(){
@@ -850,6 +910,238 @@ function tabGiornata(){
           '<div class="v">'+gr.partite.length+'</div></div>';
       }).join('')+'</div>';
   }
+  return h;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   VISTA: VALORE
+
+   Qui bisogna essere precisi su che cosa vuol dire "valore", perché è la parola
+   con cui si vendono più illusioni.
+
+   Il backtest dice, stagione dopo stagione, che sulle partite quotate il
+   mercato è più preciso di questo modello. Quindi cercare valore confrontando
+   il modello con la quota media di mercato è, in media, un modo elegante di
+   perdere: se il modello dice 55% e il mercato dice 50%, la storia dice che ha
+   ragione il mercato.
+
+   C'è però un confronto che ha senso, ed è un altro: quello fra la MIGLIOR
+   STIMA DISPONIBILE — il modello ancorato al mercato, che nel backtest sta alla
+   pari col mercato — e la quota che offre il TUO operatore. Se il tuo operatore
+   paga 2.10 dove la stima dice 1.95, quel margine è reale e non dipende dal
+   fatto di aver battuto qualcuno: dipende dal fatto che quel banco, su quella
+   riga, è più generoso degli altri. È l'unica forma di vantaggio che una
+   persona sola può davvero cercare, e si trova guardando i prezzi, non
+   indovinando i risultati.
+
+   Perciò questa sezione chiede le quote che hai davanti. Senza quelle mostra
+   solo dove il modello dissente dal mercato, dicendo chiaramente che il
+   dissenso, da solo, non è un'occasione.
+   ══════════════════════════════════════════════════════════════ */
+
+var CHIAVE_CASSA = 'seriea_cassa_v1';
+var CHIAVE_QUOTE = 'seriea_quote_v1';
+
+function cassa(){
+  if(S.cassa != null) return S.cassa;
+  try{ S.cassa = parseFloat(localStorage.getItem(CHIAVE_CASSA)) || 0; }
+  catch(e){ S.cassa = 0; }
+  return S.cassa;
+}
+function impostaCassa(v){
+  var n = parseFloat(String(v||'').replace(',','.'));
+  S.cassa = isFinite(n) && n > 0 ? n : 0;
+  try{ localStorage.setItem(CHIAVE_CASSA, String(S.cassa)); }catch(e){}
+  var el = document.getElementById('valElenco');
+  if(el) el.innerHTML = elencoValore();
+}
+function quoteReali(){
+  if(S.quoteReali) return S.quoteReali;
+  try{ S.quoteReali = JSON.parse(localStorage.getItem(CHIAVE_QUOTE) || '{}'); }
+  catch(e){ S.quoteReali = {}; }
+  return S.quoteReali;
+}
+function impostaQuotaReale(k, v){
+  var q = quoteReali();
+  var n = parseFloat(String(v||'').replace(',','.'));
+  if(isFinite(n) && n > 1) q[k] = n; else delete q[k];
+  S.quoteReali = q;
+  try{ localStorage.setItem(CHIAVE_QUOTE, JSON.stringify(q)); }catch(e){}
+  var el = document.getElementById('valElenco');
+  if(el) el.innerHTML = elencoValore();
+}
+function svuotaQuote(){
+  S.quoteReali = {};
+  try{ localStorage.removeItem(CHIAVE_QUOTE); }catch(e){}
+  render();
+}
+
+/* Tutte le selezioni giocabili della prossima giornata, con la quota che hai
+   scritto tu se c'è. Si limita alle partite del primo gruppo: le giornate più
+   avanti hanno quote che cambieranno comunque. */
+function candidatiValore(){
+  var prossime = prossimePartite();
+  if(!prossime.length) return [];
+  var gruppi = raggruppaGiornate(prossime);
+  var partite = gruppi[0].partite;
+  var qr = quoteReali(), fuori = [];
+  partite.forEach(function(p){
+    var mk = mercatiDi(p, 1200);
+    if(!mk) return;
+    var kp = chiavePartita(p);
+    mk.voci.forEach(function(m){
+      if(!mercatoAttivo(m.id)) return;
+      if(m.p < 0.04 || m.p > 0.97) return;      /* né lotterie né constatazioni */
+      var k = kp + '#' + m.id;
+      fuori.push({partita: p, chiave: k, mercato: m, quota: qr[k] || null,
+                  indice: prossime.indexOf(p)});
+    });
+  });
+  return fuori;
+}
+
+function rigaValore(c){
+  var v = c.quota ? M.valore(c.mercato, c.quota, {cassa: cassa(), frazione: 0.25}) : null;
+  var p = c.partita;
+  var testa = '<div class="vsq">'+esc(sigla(p.c))+'–'+esc(sigla(p.v))+'</div>'+
+    '<div class="vmn">'+esc(c.mercato.nome)+'</div>';
+  var stima = '<div class="vst">'+pc(c.mercato.p,1)+'<span>min '+pc(c.mercato.p05,1)+'</span></div>'+
+    '<div class="vst">'+nu(c.mercato.quota,2)+'<span>equa</span></div>';
+  var campo = '<input type="number" inputmode="decimal" step="0.01" min="1.01" '+
+    'value="'+(c.quota||'')+'" placeholder="quota" class="vq" '+
+    'oninput="impostaQuotaReale(\''+c.chiave.replace(/'/g,"\\'")+'\', this.value)">';
+  var esito;
+  if(!v){
+    esito = '<div class="vesito mute">scrivi la quota</div>';
+  } else if(!v.conviene){
+    esito = '<div class="vesito neg">'+(v.reso >= 0
+      ? 'sopra l\'equa ma dentro l\'errore'
+      : nu(v.reso*100,0)+'% atteso')+'</div>';
+  } else {
+    esito = '<div class="vesito pos">+'+nu(v.resoPrudente*100,0)+'%'+
+      (v.puntata ? '<span>punta '+nu(v.puntata,2)+'</span>' : '<span>Kelly ¼ '+pc(v.kellyPrudente*0.25,1)+'</span>')+
+      '</div>';
+  }
+  return '<div class="vrow" data-p="'+(v && v.conviene ? '1' : '0')+'">'+
+    '<div class="vinfo">'+testa+'</div><div class="vnum">'+stima+'</div>'+
+    '<div class="vin">'+campo+esito+'</div></div>';
+}
+
+function elencoValore(){
+  var c = candidatiValore();
+  if(!c.length) return '<div class="empty"><b>Nessuna partita in calendario</b>'+
+    'Quando il calendario si riempie, qui compaiono tutte le selezioni giocabili.</div>';
+  var conQuota = c.filter(function(x){ return x.quota; });
+  var senza = c.filter(function(x){ return !x.quota; });
+  conQuota.forEach(function(x){
+    var v = M.valore(x.mercato, x.quota, {cassa: cassa()});
+    x.reso = v ? v.resoPrudente : -9;
+  });
+  conQuota.sort(function(a,b){ return b.reso - a.reso; });
+  /* senza quota inserita si ordina per solidità: sono quelle da guardare per prime */
+  senza.sort(function(a,b){ return b.mercato.p05 - a.mercato.p05; });
+  var h = '';
+  if(conQuota.length){
+    var buone = conQuota.filter(function(x){ return x.reso > 0; });
+    h += '<div class="h3">Le quote che hai inserito<span class="r">'+conQuota.length+'</span></div>';
+    if(buone.length){
+      h += '<p class="lede">'+buone.length+' su '+conQuota.length+' reggono anche partendo dal '+
+        'pavimento della fascia. Sono quelle in verde.</p>';
+    } else {
+      h += '<p class="lede">Nessuna regge partendo dal pavimento della fascia: è il caso normale, '+
+        'ed è il motivo per cui i banchi stanno in piedi.</p>';
+    }
+    h += conQuota.map(rigaValore).join('');
+  }
+  /* Ordinare tutto in un elenco unico sembrava giusto e non lo è: in cima
+     finisce sempre lo stesso mercato ripetuto dieci volte, perché se un tipo di
+     giocata è solido lo è in quasi tutte le partite. Meglio partita per partita,
+     con le poche selezioni che contano per ciascuna: è anche il modo in cui una
+     schedina si compila davvero. */
+  var perPartita = {}, ordine = [];
+  senza.forEach(function(x){
+    var k = chiavePartita(x.partita);
+    if(!perPartita[k]){ perPartita[k] = []; ordine.push({k:k, p:x.partita}); }
+    perPartita[k].push(x);
+  });
+  ordine.sort(function(a,b){ return a.p.d < b.p.d ? -1 : (a.p.d > b.p.d ? 1 : 0); });
+  h += '<div class="h3" style="margin-top:18px">Da controllare<span class="r">'+ordine.length+' partite</span></div>';
+  h += '<p class="lede">Per ogni partita le cinque selezioni più solide fra quelle che hai '+
+    'segnato come disponibili. Scrivi accanto la quota del tuo operatore e ti dico se quel prezzo '+
+    'vale la pena.</p>';
+  ordine.forEach(function(o){
+    var lista = perPartita[o.k].slice(0, 5);
+    h += '<div class="card"><div style="font-family:var(--mono);font-size:9.5px;letter-spacing:.8px;'+
+      'text-transform:uppercase;color:var(--mute);margin-bottom:2px">'+esc(dataBreve(o.p.d))+
+      (o.p.o?' · '+esc(o.p.o):'')+' — '+esc(o.p.c)+' vs '+esc(o.p.v)+'</div>'+
+      lista.map(rigaValore).join('')+'</div>';
+  });
+  return h;
+}
+
+/* Dove il modello e il mercato non sono d'accordo. Utile per capire, non per
+   giocare: sotto c'è scritto perché. */
+function dissensi(){
+  var prossime = prossimePartite();
+  if(!prossime.length) return '';
+  var gruppi = raggruppaGiornate(prossime);
+  var righe = [];
+  gruppi[0].partite.forEach(function(p){
+    if(!p.q) return;
+    var pr = previsione(p);
+    if(!pr || !pr.puro) return;
+    var mercato = M.daQuote(p.q);
+    if(!mercato) return;
+    var nomi = ['1', 'X', '2'];
+    var mie = [pr.puro.casa, pr.puro.pari, pr.puro.via];
+    for(var i=0;i<3;i++){
+      righe.push({p:p, esito:nomi[i], mio:mie[i], loro:mercato[i], d:mie[i]-mercato[i]});
+    }
+  });
+  if(!righe.length) return '';
+  righe.sort(function(a,b){ return Math.abs(b.d) - Math.abs(a.d); });
+  var h = '<div class="h3" style="margin-top:22px">Dove il modello dissente</div>'+
+    '<p class="lede">Il modello <b>puro</b>, quello che non ha guardato le quote, contro la quota '+
+    'media di mercato. Serve a vedere dove le due letture divergono.</p><div class="card">';
+  h += righe.slice(0,8).map(function(r){
+    return '<div class="row"><div class="n">'+esc(sigla(r.p.c))+'–'+esc(sigla(r.p.v))+' · '+r.esito+
+      '<em>modello '+pc(r.mio)+' · mercato '+pc(r.loro)+'</em></div>'+
+      '<div class="v" style="color:'+(r.d>0?'var(--ok)':'var(--amber)')+'">'+
+      (r.d>0?'+':'−')+pc(Math.abs(r.d))+'</div></div>';
+  }).join('');
+  h += '</div><div class="note warn">Nel backtest, sulle partite quotate, il mercato è più preciso '+
+    'del modello puro. Un dissenso grosso è quindi molto più spesso un limite del modello che '+
+    'un errore del banco: guardalo come una domanda, non come una risposta.</div>';
+  return h;
+}
+
+function tabValore(){
+  var back = S.back;
+  var h = '<div class="h2">Quanto vale davvero</div>';
+  h += '<p class="lede">La probabilità qui è quella <b>ancorata al mercato</b>: nel backtest '+
+    'sta alla pari con le quote di chiusura. Confrontarla con il prezzo che trovi tu è l\'unico '+
+    'confronto che può darti un vantaggio vero.</p>';
+  h += '<div class="card"><div class="riga-cassa">'+
+    '<label for="cassaIn">Cassa</label>'+
+    '<input id="cassaIn" type="number" inputmode="decimal" step="1" min="0" '+
+      'value="'+(cassa()||'')+'" placeholder="es. 200" oninput="impostaCassa(this.value)">'+
+    '<span>La puntata proposta è <b>un quarto di Kelly</b> calcolato sul pavimento della fascia.</span>'+
+    '</div></div>';
+  if(back && back.confronto){
+    var c = back.confronto;
+    h += '<div class="note">Su '+c.n+' partite passate: modello ancorato <b>'+nu(c.ancorato.rps,4)+
+      '</b>, mercato <b>'+nu(c.mercato.rps,4)+'</b>, modello puro '+nu(c.modello.rps,4)+
+      ' (RPS, più basso è meglio).</div>';
+  }
+  h += '<div id="valElenco">'+elencoValore()+'</div>';
+  h += dissensi();
+  if(Object.keys(quoteReali()).length){
+    h += '<button class="btn" style="margin-top:14px" onclick="svuotaQuote()">Cancella le quote inserite</button>';
+  }
+  h += '<div class="note warn" style="margin-top:16px">Kelly presuppone di conoscere la probabilità '+
+    'vera. Qui la si conosce a meno di un errore che il modello stesso ha misurato, ed è per questo '+
+    'che la puntata proposta parte dal pavimento della fascia e poi si divide ancora per quattro. '+
+    'Anche così, una serie di risultati sfortunati è normale e non significa che qualcosa si sia rotto.</div>';
   return h;
 }
 
@@ -1088,7 +1380,10 @@ function tabSquadre(){
 function tabArbitri(){
   if(!S.arb || !S.arb.arbitri.length){
     return '<div class="card"><div class="empty"><b>Nessun dato sugli arbitri</b>'+
-      'La fonte di riserva non li contiene. Quando torna quella principale, questa sezione si riempie da sola.</div></div>'+
+      'La fonte principale ha smesso di pubblicare la colonna dell\'arbitro. Adesso li prende ESPN, '+
+      'ma una richiesta per partita: l\'archivio si riempie una sessantina di partite per giro, '+
+      'quindi ci vogliono alcuni giorni. Con un token gratuito di football-data.org, invece, '+
+      'arrivano tutti in un colpo — c\'è scritto come nel README.</div></div>'+
       cardStatoDati();
   }
   var a = S.arb;
@@ -1142,31 +1437,47 @@ function tabAffidabilita(){
     '<div class="s">Errore medio (RPS) su <b>'+b.partite+' partite</b> mai viste dal modello quando le ha previste, '+
     'dal '+esc(dataLunga(b.da))+' a oggi. Più basso è, meglio è.</div></div>';
   if(c){
-    var vsBase = (1 - c.modello.rps/c.baseline.rps)*100;
-    var vsMerc = (1 - c.modello.rps/c.mercato.rps)*100;
+    var usato = c.ancorato || c.modello;         /* quella che l'app mostra davvero */
+    var vsBase = (1 - usato.rps/c.baseline.rps)*100;
+    var vsMerc = (1 - usato.rps/c.mercato.rps)*100;
+    var guadagno = c.ancorato ? (1 - c.ancorato.rps/c.modello.rps)*100 : 0;
     h += '<div class="kpi">'+
       '<div><div class="l">Meglio del caso</div><div class="v pos">+'+nu(vsBase,1)+'%</div>'+
         '<div class="s">contro chi tira a indovinare con le frequenze storiche</div></div>'+
-      '<div><div class="l">Contro il mercato</div><div class="v '+(vsMerc>=0?'pos':'neg')+'">'+
+      '<div><div class="l">Contro il mercato</div><div class="v '+(vsMerc>=-0.5?'pos':'neg')+'">'+
         (vsMerc>=0?'+':'')+nu(vsMerc,1)+'%</div><div class="s">contro le quote di chiusura</div></div>'+
-      '<div><div class="l">Azzeccate</div><div class="v">'+pc(c.modello.accuratezza)+'</div>'+
+      '<div><div class="l">Azzeccate</div><div class="v">'+pc(usato.accuratezza)+'</div>'+
         '<div class="s">esito più probabile</div></div>'+
     '</div>';
     h += '<div class="h2">Confronto diretto<span class="r">'+c.n+' partite</span></div><div class="card">'+
       barreOriz([
-        {l:'Modello', v:c.modello.rps, testo:nu(c.modello.rps,4), colore:'var(--c1)'},
+        {l:'Modello + mercato', v:usato.rps, testo:nu(usato.rps,4), colore:'var(--c1)'},
         {l:'Mercato', v:c.mercato.rps, testo:nu(c.mercato.rps,4), colore:'var(--c9)'},
+        {l:'Modello da solo', v:c.modello.rps, testo:nu(c.modello.rps,4), colore:'var(--c9)'},
         {l:'Caso', v:c.baseline.rps, testo:nu(c.baseline.rps,4), colore:'var(--c9)'}
       ])+
-      '<div class="note'+(vsMerc >= 0 ? ' amber' : '')+'">'+
-      (vsMerc >= 0
-        ? '<p>Il modello risulta più preciso delle quote di chiusura. Prendilo con le molle: '+
-          'su poche centinaia di partite un vantaggio del genere può essere solo fortuna, e le quote '+
-          'incorporano infortuni e formazioni che qui non ci sono.</p>'
-        : '<p>Il modello sta <b>'+nu(-vsMerc,1)+'% dietro alle quote di chiusura</b>. È il risultato normale e onesto: '+
-          'quelle quote contengono soldi veri, formazioni ufficiali e infortuni dell\'ultimo minuto. '+
-          'Batterle stabilmente non riesce quasi a nessuno.</p>')+
-      '<p>Quello che conta è l\'altro numero: contro chi indovina a caso il modello guadagna <b>'+nu(vsBase,1)+'%</b>.</p></div></div>';
+      '<div class="note">'+
+      '<p>Il modello <b>da solo</b> sta '+nu(Math.abs((1 - c.modello.rps/c.mercato.rps)*100),1)+
+      '% dietro alle quote di chiusura. È il risultato normale e onesto: quelle quote contengono soldi '+
+      'veri, formazioni ufficiali e infortuni dell\'ultimo minuto. Batterle stabilmente non riesce '+
+      'quasi a nessuno, e un modello che dicesse di farlo starebbe quasi certamente sbagliando i conti.</p>'+
+      (c.ancorato ? '<p>Per questo il modello, quando le quote ci sono, <b>le usa</b> invece di limitarsi '+
+        'a esserne battuto: ancorando i gol attesi a quello che dice il mercato guadagna <b>'+
+        nu(guadagno,1)+'%</b> e arriva '+(vsMerc>=0 ? 'a superarlo di un soffio' : 'a '+nu(-vsMerc,1)+
+        '% dal mercato')+'. Il guadagno non riguarda solo l\'1X2: sposta i gol attesi, e da lì '+
+        'tutti gli altri sessanta mercati.</p>' : '')+
+      '<p>Contro chi indovina a caso il guadagno è <b>'+nu(vsBase,1)+'%</b>.</p></div></div>';
+    if(b.perAncora && b.perAncora.length){
+      h += '<div class="h2">Quanto dare retta al mercato</div><div class="card">'+
+        barreOriz(b.perAncora.map(function(x){
+          return {l: x.ancoraggio===0?'per niente':pc(x.ancoraggio),
+                  v: 1/x.rps, testo:nu(x.rps,4),
+                  colore: x.ancoraggio===b.ancoraMigliore ? 'var(--c1)' : 'var(--c9)'};
+        }))+
+        '<div class="note">Nemmeno questo l\'ho scelto io: è il peso che ha reso il backtest più preciso. '+
+        'Si ferma prima del 100% di proposito — a quel punto il modello non direbbe più niente di suo, e '+
+        'la sua probabilità non si potrebbe più confrontare con la quota per cercare valore.</div></div>';
+    }
   }
   h += '<div class="h2">Calibrazione</div><div class="card">'+curvaCalibrazione(b.modello.calibrazione)+
     '<div class="note">Un modello può azzeccare tanti risultati ed essere comunque bugiardo, se dice 80% quando '+
@@ -1181,6 +1492,18 @@ function tabAffidabilita(){
         '<div class="v">'+pc(x.osservato,1)+'<span>detto '+pc(x.previsto,1)+' · '+(d>=0?'+':'−')+
         nu(Math.abs(d)*100,1)+'</span></div></div>';
     }).join('')+'</div>';
+  if(b.perStiro && b.perStiro.length > 1){
+    h += '<div class="h2">Il difetto che si corregge da solo</div><div class="card">'+
+      barreOriz(b.perStiro.map(function(x){
+        return {l: x.stiro===1?'nessuna correzione':'×'+nu(x.stiro,2),
+                v: 1/x.rps, testo:nu(x.rps,4),
+                colore: x.stiro===b.stiroMigliore ? 'var(--c1)' : 'var(--c9)'};
+      }))+
+      '<div class="note">Il backtest trova sempre lo stesso difetto: il modello tiene le partite un po\' '+
+      'più in bilico di come finiscono. Allargare lo squilibrio di <b>×'+nu(b.stiroMigliore,2)+'</b> — senza '+
+      'toccare il totale dei gol — lo corregge. Vale solo quando non ci sono quote: quando ci sono, '+
+      'a rimettere le cose a posto ci pensa l\'ancoraggio.</div></div>';
+  }
   h += '<div class="h2">Quanto pesano i tiri</div><div class="card">'+
     '<p class="lede">Il modello ne tiene due: uno stimato sui gol, uno sui tiri in porta. '+
     'Il peso non l\'ho scelto io, l\'ha scelto il backtest provando tutte le combinazioni.</p>'+
@@ -1205,14 +1528,15 @@ function tabAffidabilita(){
 /* ══════════════════════════════════════════════════════════════
    VISTA: DATI
    ══════════════════════════════════════════════════════════════ */
+var ORE_ROBOT = [5, 11, 17, 23];      /* UTC, ai minuti :17 — vedi il workflow */
 function prossimoGiro(){
-  /* il robot parte ai minuti :17 di ogni terza ora UTC */
   var ora = new Date();
   var d = new Date(Date.UTC(ora.getUTCFullYear(), ora.getUTCMonth(), ora.getUTCDate(),
                             ora.getUTCHours(), 17, 0));
-  while(d <= ora || d.getUTCHours() % 3 !== 0) d = new Date(d.getTime() + 3600000);
+  while(d <= ora || ORE_ROBOT.indexOf(d.getUTCHours()) < 0) d = new Date(d.getTime() + 3600000);
   var min = Math.round((d - ora)/60000);
-  return {quando: d, fra: min < 60 ? min + ' minuti' : Math.round(min/60) + ' ore',
+  return {quando: d, completo: d.getUTCHours() === 5,
+          fra: min < 60 ? min + ' minuti' : Math.round(min/60) + ' ore',
           ora: String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')};
 }
 function cardStatoDati(){
@@ -1224,7 +1548,11 @@ function cardStatoDati(){
     '<div class="row"><div class="n">Partite in archivio</div><div class="v">'+(m.partite_giocate||(S.doc?S.doc.partite.length:0))+'</div></div>'+
     '<div class="row"><div class="n">Partite in calendario</div><div class="v">'+(m.partite_in_arrivo!=null?m.partite_in_arrivo:(S.doc&&S.doc.calendario?S.doc.calendario.length:0))+'</div></div>'+
     (m.con_arbitro!=null?'<div class="row"><div class="n">Con arbitro<em>servono per la sezione arbitri</em></div><div class="v">'+m.con_arbitro+'</div></div>':'')+
-    (m.con_tiri!=null?'<div class="row"><div class="n">Con i tiri<em>il modello che pesa di più</em></div><div class="v">'+m.con_tiri+'</div></div>':'')+
+    (m.con_tiri!=null?'<div class="row"><div class="n">Con i tiri<em>il secondo modello</em></div><div class="v">'+m.con_tiri+'</div></div>':'')+
+    (m.con_xg!=null?'<div class="row"><div class="n">Con xG veri<em>da Understat: valgono più dei tiri</em></div>'+
+      '<div class="v'+(m.con_xg?'':' ')+'">'+m.con_xg+'</div></div>':'')+
+    (m.in_arrivo_con_quote!=null?'<div class="row"><div class="n">In arrivo con quote<em>servono per l\'ancoraggio al mercato</em></div>'+
+      '<div class="v">'+m.in_arrivo_con_quote+'</div></div>':'')+
     (m.ultima_partita?'<div class="row"><div class="n">Ultima partita in archivio</div>'+
       '<div class="v" style="font-size:12.5px">'+esc(dataLunga(m.ultima_partita))+'</div></div>':'')+
     '<button class="btn acc" style="margin-top:12px" onclick="aggiorna()"'+(S.aggiornando?' disabled':'')+'>'+
@@ -1232,8 +1560,10 @@ function cardStatoDati(){
     (S.esitoAggiornamento?'<div class="note '+(S.esitoAggiornamento.nuovo?'ok':'')+'">'+
       esc(S.esitoAggiornamento.testo)+'</div>':'')+
     '<div class="note"><p>Questo tasto <b>rilegge</b> il file dei dati e rifà tutti i conti. Non scarica '+
-    'niente da internet: a scaricare è il robot su GitHub, che passa <b>ogni 3 ore</b>.</p>'+
-    '<p>Prossimo giro previsto verso le <b>'+pg.ora+'</b>, cioè fra '+pg.fra+'. '+
+    'niente da internet: a scaricare è il robot su GitHub. Passa <b>quattro volte al giorno</b>: '+
+    'una volta rilegge tutto l\'archivio, le altre tre aggiornano solo calendario, quote e arbitri — '+
+    'perché le quote si muovono durante la giornata e l\'archivio no.</p>'+
+    '<p>Prossimo giro verso le <b>'+pg.ora+'</b> ('+(pg.completo?'completo':'leggero')+'), cioè fra '+pg.fra+'. '+
     'Se non vuoi aspettare: scheda <b>Actions</b> del repository → "Aggiorna dati Serie A" → Run workflow.</p>'+
     '<p>Fra una giornata e l\'altra è normale che non cambi niente: i dati nuovi arrivano quando si gioca.</p>'+
     '</div></div>';
@@ -1349,6 +1679,30 @@ function renderPartita(){
       '<div class="s">nogol '+pc(pr.nogol)+'</div></div>'+
   '</div>';
 
+  var anc = pr.ancoraggio || {};
+  if(anc.usato){
+    h += '<div class="h2">Da dove viene questo numero</div><div class="card">'+
+      '<div class="row"><div class="n">Modello da solo<em>forze, xG, vantaggio del campo</em></div>'+
+        '<div class="v" style="font-size:12.5px">'+pc(pr.puro.casa)+' · '+pc(pr.puro.pari)+' · '+pc(pr.puro.via)+
+        '<span>over '+pc(pr.puro.over25)+'</span></div></div>'+
+      (anc.mercato1x2 ? '<div class="row"><div class="n">Quote di chiusura<em>quello che dice il banco</em></div>'+
+        '<div class="v" style="font-size:12.5px">'+pc(anc.mercato1x2[0])+' · '+pc(anc.mercato1x2[1])+' · '+
+        pc(anc.mercato1x2[2])+(anc.mercatoOver!=null?'<span>over '+pc(anc.mercatoOver)+'</span>':'')+
+        '</div></div>' : '')+
+      '<div class="row"><div class="n"><b>Stima usata</b><em>le due lette insieme, peso al mercato '+
+        pc(anc.pesoUsato)+'</em></div>'+
+        '<div class="v" style="font-size:12.5px;color:var(--accent)">'+pc(pr.casa)+' · '+pc(pr.pari)+' · '+
+        pc(pr.via)+'<span>over '+pc(pr.over25)+'</span></div></div>'+
+      '<div class="note">Il peso non è una scelta di gusto: è il numero che ha reso il backtest più '+
+      'preciso, ed è alto perché le quote di chiusura contengono formazioni e infortuni che a un modello '+
+      'statistico mancano. L\'ancoraggio non tocca solo l\'1X2: sposta i <b>gol attesi</b>, e da lì '+
+      'ricadono tutti gli altri mercati, anche quelli che il banco non quota.</div></div>';
+  } else if(!p.q){
+    h += '<div class="note warn" style="margin-top:12px">Per questa partita non ci sono ancora quote nei '+
+      'dati, quindi vedi il modello da solo. Quando arriveranno, la stima verrà ancorata al mercato e '+
+      'diventerà più precisa.</div>';
+  }
+
   var mk = mercatiDi(p, 4000);
   var cons = mk ? consiglio(mk.voci) : null;
   var sim = mk ? mk.sim : null;
@@ -1433,6 +1787,31 @@ function renderPartita(){
     '<div class="note">Righe: gol di '+esc(p.c)+'. Colonne: gol di '+esc(p.v)+
     '. I numeri sono probabilità in percentuale.</div></div>';
 
+  if(pr.primoFinale){
+    var g = pr.primoFinale, eti = ['1','X','2'];
+    h += '<div class="h2">Primo tempo / finale</div><div class="card">'+
+      '<div class="kpi" style="margin-bottom:10px">'+
+      '<div><div class="l">Gol nel 1º tempo</div><div class="v">'+pc(pr.tempi.ptO05)+'</div>'+
+        '<div class="s">nel 2º: '+pc(pr.tempi.stO05)+'</div></div>'+
+      '<div><div class="l">In entrambi</div><div class="v">'+pc(pr.tempi.golEntrambi)+'</div>'+
+        '<div class="s">un gol per tempo</div></div>'+
+      '<div><div class="l">Avanti a metà</div><div class="v">'+pc(pr.tempi.pt1)+'</div>'+
+        '<div class="s">pari '+pc(pr.tempi.ptX)+'</div></div>'+
+      '</div><div class="mtx"><table><tr><th></th>'+
+      eti.map(function(e){ return '<th>'+e+' finale</th>'; }).join('')+'</tr>'+
+      eti.map(function(e,i){
+        return '<tr><th>'+e+' a metà</th>'+eti.map(function(_,j){
+          var v = g[i][j];
+          return '<td'+(i===j&&v>0.12?' class="hot"':'')+'>'+(v*100).toFixed(1)+'</td>';
+        }).join('')+'</tr>';
+      }).join('')+'</table></div>'+
+      '<div class="note">Il punteggio all\'intervallo è nell\'archivio di ogni partita da sempre. '+
+      'Il modello del primo tempo non decide quanti gol si fanno — quello resta il modello finale, '+
+      'ancorato al mercato — decide soltanto <b>come si dividono fra i due tempi</b>: '+
+      pc(pr.quotePrimoTempo[0],0)+' e '+pc(pr.quotePrimoTempo[1],0)+' delle reti attese qui. '+
+      'Così le due letture non possono contraddirsi.</div></div>';
+  }
+
   /* arbitro */
   if(S.arb && S.arb.arbitri.length){
     var car = M.cartelliniAttesi(S.arb, arbSel || null, p.c, p.v);
@@ -1456,6 +1835,28 @@ function renderPartita(){
           pc(Math.abs(car.severita-1),0)+' '+(car.severita>1?'in più':'in meno')+' rispetto alla media.'
         : 'Le designazioni escono due o tre giorni prima della partita. Scegli un arbitro qui sopra per vedere come cambia.')+
       '</div></div>';
+  }
+
+  /* corner */
+  if(S.corner){
+    var co = M.cornerAttesi(S.corner, p.c, p.v, S.risultato ? S.risultato.vantaggioCorner : null);
+    if(co){
+      h += '<div class="h2">Corner</div><div class="card">'+
+        '<div class="kpi">'+
+        '<div><div class="l">Attesi</div><div class="v">'+nu(co.totali,1)+'</div>'+
+          '<div class="s">'+nu(co.casa,1)+' + '+nu(co.via,1)+'</div></div>'+
+        '<div><div class="l">Oltre 8.5</div><div class="v">'+pc(co.oltre85)+'</div>'+
+          '<div class="s">oltre 9.5: '+pc(co.oltre95)+'</div></div>'+
+        '<div><div class="l">Oltre 10.5</div><div class="v">'+pc(co.oltre105)+'</div>'+
+          '<div class="s">oltre 11.5: '+pc(co.oltre115)+'</div></div>'+
+        '</div>'+
+        '<div class="note">Chi ne batte tanti contro chi ne concede tanti, riportato sulla media della '+
+        'lega ('+nu(S.corner.mediaPartita,1)+' a partita) e corretto per il vantaggio del campo, che sui '+
+        'corner è più marcato che sui gol. Niente di più: i corner sono numerosi ma dicono poco, e un '+
+        'modello elaborato su un segnale debole è solo un modo più convincente di sbagliare.'+
+        (co.noto ? '' : ' Una delle due squadre ha poche partite in archivio: qui vale la media della lega.')+
+        '</div></div>';
+    }
   }
 
   /* assenze */
@@ -1585,7 +1986,7 @@ function ricalcola(){
   calcola();
 }
 function vai(t){
-  if(t === 'schedine' && !(S._prossime||[]).length) S._prossime = prossimePartite();
+  if((t === 'schedine' || t === 'valore') && !(S._prossime||[]).length) S._prossime = prossimePartite();
   S.tab = t; render(); window.scrollTo(0,0);
 }
 
@@ -1594,18 +1995,20 @@ function vai(t){
    ══════════════════════════════════════════════════════════════ */
 var TABS = [
   {k:'giornata', n:'Giornata', p:'M4 6h16M4 12h16M4 18h10'},
+  {k:'valore', n:'Valore', p:'M12 2v20M17 6.5c0-2-2.2-3-5-3s-5 .9-5 2.8 2.4 2.6 5 3.2 5 1.3 5 3.2-2.2 2.8-5 2.8-5-1-5-3'},
   {k:'schedine', n:'Schedine', p:'M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6'},
   {k:'squadre', n:'Squadre', p:'M12 3l7 4v6c0 4-3 6.5-7 8-4-1.5-7-4-7-8V7z'},
   {k:'arbitri', n:'Arbitri', p:'M6 4h9l3 4v12H6zM9 9h6M9 13h6'},
   {k:'affid', n:'Precisione', p:'M4 18L9 12l4 3 7-9M4 20h16'},
   {k:'dati', n:'Dati', p:'M4 7c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3zM4 7v10c0 1.7 3.6 3 8 3s8-1.3 8-3V7'}
 ];
-var TITOLI = {giornata:'Giornata', schedine:'Schedine', squadre:'Squadre', arbitri:'Arbitri',
-              affid:'Affidabilità', dati:'Dati'};
+var TITOLI = {giornata:'Giornata', valore:'Valore', schedine:'Schedine', squadre:'Squadre',
+              arbitri:'Arbitri', affid:'Affidabilità', dati:'Dati'};
 
 function sottotitolo(){
   if(S.stato !== 'pronto') return 'MODELLO SERIE A';
   if(S.tab === 'schedine') return 'COMBINAZIONI E QUOTE EQUE';
+  if(S.tab === 'valore') return 'PROBABILITÀ CONTRO PREZZO';
   var q = S.back ? ('RPS ' + nu(S.back.modello.rps,4)) : '';
   var n = S.risultato ? S.risultato.partiteUsate : 0;
   return (n + ' PARTITE' + (q ? ' · ' + q.toUpperCase() : '')) +
@@ -1641,6 +2044,7 @@ function render(){
     return;
   }
   var corpo =
+    S.tab==='valore' ? tabValore() :
     S.tab==='schedine' ? tabSchedine() :
     S.tab==='squadre' ? tabSquadre() :
     S.tab==='arbitri' ? tabArbitri() :

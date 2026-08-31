@@ -38,9 +38,14 @@ self.onmessage = function (ev) {
 
     stato('stima', 0.76, 'Stimo le forze di oggi');
     var peso = back && back.pesoMigliore != null ? back.pesoMigliore : 0.6;
+    /* i due numeri che il backtest ha appena scelto: di quanto allargare lo
+       squilibrio quando non ci sono quote, e quanto dare retta al mercato
+       quando invece ci sono */
+    var stiro = back && back.stiroMigliore != null ? back.stiroMigliore : 1;
+    var ancora = back && back.ancoraMigliore != null ? back.ancoraMigliore : 0;
     var mod = M.costruisci(partite, {
       xi: opz.xi, xiTiri: opz.xiTiri, ridge: opz.ridge, dati: dati,
-      iterazioni: 400, pesoTiri: peso
+      iterazioni: 400, pesoTiri: peso, stiro: stiro, ancoraggio: ancora
     });
 
     stato('incertezza', 0.86, 'Rigioco il campionato per misurare quanto posso sbagliarmi');
@@ -48,16 +53,22 @@ self.onmessage = function (ev) {
                                opz.repliche || 40, mod.gol);
     var se = M.sintesiBootstrap(repliche, mod.squadre.length);
 
-    stato('arbitri', 0.94, 'Conto i cartellini di ogni arbitro');
+    stato('arbitri', 0.94, 'Conto cartellini e corner di ogni squadra');
     var arb = M.statisticheArbitri(partite, { da: opz.daArbitri || null, k: 12 });
+    var corner = M.statisticheCorner(partite, { da: opz.daCorner || null, k: 10 });
+    var vantaggioCorner = M.vantaggioCornerCasa(partite);
     var rosso = M.effettoRosso(partite, mod);
 
     self.postMessage({
       tipo: 'pronto',
       risultato: {
         squadre: mod.squadre, gol: semplifica(mod.gol), tiri: semplifica(mod.tiri),
-        pesoTiri: peso, calibrazioneTiri: mod.calibrazioneTiri,
-        arbitri: arb, backtest: back,
+        primoTempo: semplifica(mod.primoTempo),
+        pesoTiri: peso, stiro: stiro, ancoraggio: ancora,
+        calibrazioneTiri: mod.calibrazioneTiri,
+        xgVeri: dati.xgVeri || 0, xgDaTiri: dati.xgDaTiri || 0,
+        allineamentoXg: dati.allineamentoXg || null,
+        arbitri: arb, corner: corner, vantaggioCorner: vantaggioCorner, backtest: back,
         repliche: repliche, se: se ? {
           att: Array.prototype.slice.call(se.att), dif: Array.prototype.slice.call(se.dif),
           gamma: se.gamma, mu0: se.mu0, repliche: se.repliche,

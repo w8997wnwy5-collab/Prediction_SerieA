@@ -2,7 +2,7 @@
    rete SALTANDO la cache del browser: GitHub Pages dice ai browser di tenersi
    index.html per dieci minuti, e senza questo si finisce a guardare la versione
    di ieri chiedendosi perché non è cambiato niente. */
-var CACHE = 'seriea-v2';
+var CACHE = 'seriea-v3';
 var ASSETS = ['./', './index.html', './modello.js', './worker.js', './manifest.webmanifest'];
 
 self.addEventListener('install', function(e){
