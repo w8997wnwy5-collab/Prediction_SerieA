@@ -1,5 +1,5 @@
 {
- "aggiornato": "2026-09-01T08:29:51+00:00",
+ "aggiornato": "2026-09-01T08:38:47+00:00",
  "esito": "ok",
  "ultima_partita": "2026-08-31",
  "partite_totali": 1920,
@@ -14,7 +14,7 @@
  "in_arrivo_con_orario": 10,
  "marcatori": 0,
  "giocatori": 43,
- "rose": 3,
+ "rose": 20,
  "stagioni": [
   "2021-22",
   "2022-23",
@@ -47,15 +47,16 @@
   "API-Football 2022-23": "ok: 381 partite, 0 arbitri aggiunti",
   "API-Football 2021-22": "non disponibile: API-Football dice: {\"plan\": \"Free plans do not have access to this season, try from 2022 to 2024.\"}",
   "API-Football richieste": "6 usate su 70 disponibili",
+  "giocatori rifatti": "raccolti con la versione 1, li riprendo da capo",
   "giocatori 2026": "non disponibile: API-Football dice: {\"plan\": \"Free plans do not have access to this season, try from 2022 to 2024.\"}",
   "giocatori 2025": "non disponibile: API-Football dice: {\"plan\": \"Free plans do not have access to this season, try from 2022 to 2024.\"}",
   "giocatori 2024": "ok: 43 giocatori con almeno 200 minuti",
   "rose 2026": "elenco squadre non disponibile: API-Football dice: {\"plan\": \"Free plans do not have access to this season, try from 2022 to 2024.\"}",
   "rose 2025": "elenco squadre non disponibile: API-Football dice: {\"plan\": \"Free plans do not have access to this season, try from 2022 to 2024.\"}",
   "rose": "elenco squadre dalla stagione 2024: 20 squadre",
-  "rose caricate": "3 squadre, 106 giocatori",
-  "giocatori richieste": "25 usate su 70",
-  "giocatori": "scritti: 43 giocatori (stagione 2024), 3 rose attuali",
+  "rose caricate": "20 squadre su 20, 647 giocatori",
+  "giocatori richieste": "29 usate su 70",
+  "giocatori": "scritti: 43 giocatori (stagione 2024), 20 rose attuali",
   "marcatori": "saltati: nessuna chiave FOOTBALL_DATA_TOKEN"
  }
 }
