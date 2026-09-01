@@ -103,6 +103,70 @@ prova('la doppia chance è la somma dei due esiti', Math.abs(P('1X') - (P('1') +
 prova('ogni mercato è una probabilità', voci.every(function (v) { return v.p >= -1e-12 && v.p <= 1 + 1e-12; }));
 prova('ogni mercato dichiara da dove viene', voci.every(function (v) { return s[v.campo] != null; }));
 
+/* Il campo 'pari' era il pareggio, e chiamare così anche "numero di reti pari"
+   ha fatto sommare due probabilità diverse nella stessa casella. La somma
+   1+X+2 ha smesso di fare 1 e la prova qui sopra è diventata rossa. Questa
+   controlla la causa invece del sintomo. */
+var visti = {}, doppioni = [];
+voci.forEach(function (v) {
+  if (visti[v.campo] && visti[v.campo] !== (v.inverso ? 'i' : 'd')) return;
+  if (visti[v.campo] === (v.inverso ? 'i' : 'd')) doppioni.push(v.campo + ' (' + v.id + ')');
+  visti[v.campo] = v.inverso ? 'i' : 'd';
+});
+prova('nessun campo viene usato da due mercati diversi nello stesso verso',
+      doppioni.length === 0, doppioni.join(', '));
+var somme = M.mercatiDaMatrice(m);
+prova('la somma di TUTTE le probabilità della matrice fa 1',
+      Math.abs(somme.casa + somme.pari + somme.via - 1) < 1e-9 &&
+      Math.abs(somme.retiDispari + somme.retiPari - 1) < 1e-9,
+      'esiti ' + (somme.casa+somme.pari+somme.via).toFixed(9) +
+      ' · dispari/pari ' + (somme.retiDispari+somme.retiPari).toFixed(9));
+
+/* ── chi ha vinto: la regola dev'essere la stessa del prezzo ────────────── */
+
+/* Ogni caso è scritto a mano da chi legge la schedina, non ricavato dal codice:
+   se la regola di pagamento fosse sbagliata sarebbe sbagliato anche il
+   controllo, e sarebbero d'accordo nell'errore. */
+var casi = [
+  [2, 0, '1', true],   [2, 0, 'X', false],  [2, 0, '2', false],
+  [2, 0, 'U35', true], [2, 0, 'O15', true], [2, 0, 'O25', false],
+  [2, 0, 'GG', false], [2, 0, 'NG', true],  [2, 0, 'CSECCA', true],
+  [2, 0, 'PARI', true],[2, 0, 'DISP', false],
+  [0, 0, 'U35', true], [0, 0, 'O05', false],[0, 0, 'PARI', true], [0, 0, 'G0', true],
+  [2, 3, 'DISP', true],[2, 3, 'O45', true], [2, 3, 'U45', false], [2, 3, 'GG', true],
+  [1, 2, 'DISP', true],[1, 2, '2', true],   [1, 2, 'X2', true],   [1, 2, '1X', false],
+  [1, 0, 'DISP', true],[1, 0, 'MG13', true],[1, 0, 'H1C', false],
+  [0, 4, 'O15', true], [0, 4, 'H2V', true], [0, 4, 'VSECCA', true], [0, 4, 'PARI', true],
+  [3, 3, 'PARI', true],[3, 3, 'X', true],   [3, 3, 'O45', true],
+  [1, 1, 'PARI', true],[1, 1, 'U15', false],[1, 1, 'GG', true]
+];
+var storti = [];
+casi.forEach(function (t) {
+  var v = M.haVinto(t[2], t[0], t[1]);
+  if (v !== t[3]) storti.push(t[0] + '-' + t[1] + ' ' + t[2] + ': dice ' + v + ' invece di ' + t[3]);
+});
+prova('il registro paga le giocate come le paga la schedina (' + casi.length + ' casi)',
+      storti.length === 0, storti.slice(0, 4).join(' | '));
+
+/* Nessuna regola scritta due volte: chi ha vinto esce dalla stessa funzione che
+   calcola il prezzo, quindi ogni mercato deve valere esattamente 0 o 1. */
+var nonBinari = [];
+[[0,0],[1,0],[2,1],[3,3],[0,4],[2,3]].forEach(function (r) {
+  var reali = M.esitiReali(r[0], r[1]);
+  M.elencoMercati(reali, null).forEach(function (v) {
+    if (Math.abs(v.p - Math.round(v.p)) > 1e-9) nonBinari.push(r[0]+'-'+r[1]+' '+v.id+'='+v.p);
+  });
+});
+prova('su una partita finita ogni mercato vale 0 o 1, mai una via di mezzo',
+      nonBinari.length === 0, nonBinari.slice(0, 3).join(' | '));
+
+prova('i mercati sul primo tempo restano indecisi senza il punteggio dell\'intervallo',
+      M.haVinto('PTO05', 2, 1) === null && M.haVinto('PTO05', 2, 1, 1, 0) === true);
+prova('un primo tempo impossibile viene ignorato invece di produrre numeri finti',
+      M.haVinto('PTO05', 1, 0, 3, 0) === null);
+prova('un mercato che non esiste non viene dato per vinto', M.haVinto('BOH', 2, 0) === null);
+prova('senza risultato non si decide niente', M.esitiReali(null, null) === null);
+
 /* ── la scorciatoia dell'ancoraggio è esatta ────────────────────────────── */
 var peggio = 0;
 for (var t = 0; t < 2000; t++) {
