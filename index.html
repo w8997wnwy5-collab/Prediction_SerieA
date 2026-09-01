@@ -297,6 +297,17 @@ select{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:1
 .dump{width:100%;height:70px;border:1px solid var(--line);border-radius:9px;background:var(--card2);
   color:var(--mute);font-family:var(--mono);font-size:10px;padding:8px;resize:vertical;}
 
+.legenda{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:10.5px;color:var(--mute);
+  margin:10px 0 2px;}
+.legenda .pall{width:8px;height:8px;border-radius:50%;display:inline-block;margin-left:10px;}
+.legenda .pall:first-child{margin-left:0;}
+.pall.visto{background:var(--accent);}
+.pall.probabile{background:var(--amber);}
+.pall.raro{background:var(--line);}
+.chips button.sc-visto{border-left:3px solid var(--accent);}
+.chips button.sc-probabile{border-left:3px solid var(--amber);}
+.chips button.sc-raro{border-left:3px solid var(--line);}
+
 @media (min-width:720px){
   .top{padding-left:calc((100% - 680px)/2 + 16px);padding-right:calc((100% - 680px)/2 + 16px);}
   .tabs{padding-left:calc((100% - 680px)/2);padding-right:calc((100% - 680px)/2);}
@@ -320,7 +331,7 @@ var S = {
   stato: 'carico', errore: null, avanzamento: 0, fase: 'Carico i dati',
   aggiustamenti: {}, arbitroScelto: {}, aggiornando: false, tempoCalcolo: 0
 };
-var VERSIONE = '3.1';
+var VERSIONE = '3.2';
 /* Un consiglio su una scommessa che il tuo operatore non accetta è un consiglio
    inutile. Questo è l'insieme standard che si trova su Sporttip; il resto resta
    disponibile ma spento, e si accende dalla sezione Dati. */
@@ -334,16 +345,38 @@ var VERSIONE = '3.1';
 
    Gli altri restano tutti accesi dalla sezione Dati, uno per uno. Se il tuo
    operatore ne ha di più, accendili: nessuno qui sa cosa offre il tuo. */
-var MERCATI_PRESET = [
-  '1','X','2','1X','X2','12',
-  'O05','O15','U15','O25','U25','O35','U35','O45','U45',
-  'DISP','PARI',
-  'GG','NG','SC','SV',
-  'MG13','MG24','MG25',
-  'TC05','TV05',
-  'H1C','H1V','CSECCA','VSECCA'
+/* Quali mercati esistono davvero dove giochi tu.
+
+   Questa lista l'ho sbagliata due volte tirando a indovinare: prima consigliava
+   "Gol nel primo tempo", poi il Multigol, e nessuno dei due esiste su Sporttip.
+   Un consiglio ingiocabile non è neutro — prende il posto della giocata buona,
+   che finisce seconda in classifica e non la vedi.
+
+   Quindi adesso i mercati stanno in tre scaffali dichiarati, e solo il primo
+   parte acceso:
+
+   · VISTI      me li ha confermati qualcuno guardando la schedina vera.
+   · PROBABILI  mercati standard che quasi tutti gli operatori hanno. Li
+                accendi in un tocco, ma non do per scontato che ci siano.
+   · IL RESTO   il modello li sa calcolare, il tuo operatore quasi certamente
+                no. Restano lì per chi gioca altrove.
+
+   Se ne trovi uno nello scaffale sbagliato, spostalo: la lista è tua, non mia. */
+var MERCATI_VISTI = [
+  '1', 'X', '2',                                  // Risultato finale
+  'O05', 'O15', 'U15', 'O25', 'U25', 'O35', 'U35', 'O45', 'U45',   // Over/Under
+  'DISP', 'PARI'                                  // Numero di reti dispari/pari
 ];
-var CHIAVE_MERCATI = 'seriea_mercati_v3';           // si vede nella sezione Dati: serve a sapere cosa si sta guardando
+var MERCATI_PROBABILI = [
+  '1X', 'X2', '12',                               // doppia possibilità
+  'GG', 'NG',                                     // entrambe segnano
+  'SC', 'SV'                                      // una squadra segna
+];
+var MERCATI_PRESET = MERCATI_VISTI.slice();
+var MERCATI_NON_VISTI = ['MG13', 'MG24', 'MG25', 'MG12', 'MG14', 'MG23', 'MG34', 'MG15',
+                         'PTO05', 'PTO15', 'PT1', 'PTX', 'PT2', 'PT1X', 'PTX2', 'PTGG',
+                         'STO05', 'STO15', 'GENT', 'PIU2T'];
+var CHIAVE_MERCATI = 'seriea_mercati_v4';           // si vede nella sezione Dati: serve a sapere cosa si sta guardando
 var CHIAVE_CACHE = 'seriea_modello_v3';
 
 /* ══════════════════════════════════════════════════════════════
@@ -370,6 +403,18 @@ function ripristinaMercati(){
   S.mercatiAttivi = MERCATI_PRESET.slice();
   try{ localStorage.setItem(CHIAVE_MERCATI, JSON.stringify(S.mercatiAttivi)); }catch(e){}
   render();
+}
+function accendiProbabili(){
+  var a = mercatiAttivi().slice();
+  MERCATI_PROBABILI.forEach(function(id){ if(a.indexOf(id) < 0) a.push(id); });
+  S.mercatiAttivi = a;
+  try{ localStorage.setItem(CHIAVE_MERCATI, JSON.stringify(a)); }catch(e){}
+  render();
+}
+function scaffale(id){
+  if(MERCATI_VISTI.indexOf(id) >= 0) return 'visto';
+  if(MERCATI_PROBABILI.indexOf(id) >= 0) return 'probabile';
+  return 'raro';
 }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){
   return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
@@ -2060,26 +2105,39 @@ function tabDati(){
     if(!perGruppo[m.gruppo]){ perGruppo[m.gruppo] = []; ordineGruppi.push(m.gruppo); }
     perGruppo[m.gruppo].push(m);
   });
+  var nVisti = tutti.filter(function(m){ return scaffale(m.id)==='visto'; }).length;
+  var probabiliSpenti = MERCATI_PROBABILI.filter(function(id){ return !mercatoAttivo(id); }).length;
   h += '<div class="h2">Mercati<span class="r">'+mercatiAttivi().length+' di '+tutti.length+'</span></div>'+
     '<div class="card">'+
-    '<p class="lede">Un consiglio su una giocata che il tuo operatore non accetta non serve a niente: '+
-    'toglie il posto a quella buona. Qui scegli quali esistono davvero dove giochi — '+
-    '<b>la scelta più solida e la sezione Valore pescano solo fra questi</b>.</p>'+
-    '<p class="lede">Partono accesi i trenta che si trovano su Sporttip. Gli altri il modello li sa '+
-    'calcolare lo stesso, ma nessuno qui sa cosa offre il tuo operatore: se li trovi, accendili.</p>';
+    '<p class="lede">Un consiglio su una giocata che il tuo operatore non accetta non è neutro: '+
+    '<b>prende il posto di quella buona</b>, che finisce seconda in classifica e non la vedi. '+
+    'La scelta più solida, le schedine e la sezione Valore pescano solo fra i mercati accesi qui.</p>'+
+    '<p class="lede">Questa lista l\'ho sbagliata due volte tirando a indovinare cosa offre Sporttip. '+
+    'Adesso partono accesi solo i <b>'+nVisti+' che qualcuno ha confermato guardando la schedina vera</b>. '+
+    'Gli altri sono nello scaffale giusto secondo me, che non è detto sia il tuo: spostali.</p>'+
+    (probabiliSpenti
+      ? '<button class="btn acc sm" style="margin:4px 0 6px" onclick="accendiProbabili()">'+
+        'Accendi anche i '+probabiliSpenti+' standard (doppia possibilità, Gol/NoGol)</button>'
+      : '')+
+    '<div class="legenda"><span class="pall visto"></span>visti sulla schedina'+
+      '<span class="pall probabile"></span>standard, quasi ovunque'+
+      '<span class="pall raro"></span>rari, controlla</div>';
   ordineGruppi.forEach(function(g){
     h += '<div style="font-family:var(--mono);font-size:9.5px;letter-spacing:.8px;text-transform:uppercase;'+
       'color:var(--mute);margin:14px 0 6px">'+esc(g)+'</div><div class="chips">'+
       perGruppo[g].map(function(m){
-        return '<button class="'+(mercatoAttivo(m.id)?'on':'')+'" onclick="commutaMercato(\''+m.id+'\')">'+
+        return '<button class="'+(mercatoAttivo(m.id)?'on':'')+' sc-'+scaffale(m.id)+
+          '" onclick="commutaMercato(\''+m.id+'\')">'+
           (mercatoAttivo(m.id)?'✓ ':'')+esc(m.nome)+'</button>';
       }).join('')+'</div>';
   });
   h += '<button class="btn ghost sm" style="margin-top:14px" onclick="ripristinaMercati()">'+
-    'Rimetti i trenta di Sporttip</button>'+
-    '<div class="note">Se su Sporttip trovi qualcosa che qui non c\'è, dimmelo e lo aggiungo: '+
-    'ogni mercato è solo una somma di caselle della matrice dei risultati, e viene dalla stessa '+
-    'matrice di tutti gli altri — per questo non possono contraddirsi fra loro.</div></div>';
+    'Rimetti solo i '+nVisti+' confermati</button>'+
+    '<div class="note"><p>Se trovi su Sporttip un mercato che qui manca, dimmelo e lo aggiungo: '+
+    'ognuno è solo una somma di caselle della matrice dei risultati, e viene dalla stessa matrice '+
+    'di tutti gli altri — per questo non possono contraddirsi fra loro.</p>'+
+    '<p>E se qui ce n\'è uno che <b>su Sporttip non esiste</b>, spegnilo e dimmelo: lo tolgo dallo '+
+    'scaffale sbagliato, così non ricompare al prossimo aggiornamento.</p></div></div>';
 
   h += '<div class="h2">Come funziona</div><div class="card"><div class="note">'+
     '<p><b>1. Le forze.</b> Ogni squadra ha due numeri: quanto segna e quanto concede. Si stimano tutti insieme '+
