@@ -280,6 +280,25 @@ def test_giocatori():
         c3 = [0]
         lista3, _ = B.prendi_statistiche_giocatori('k', {}, c3, 2024, [(1, 'Inter')], [])
         prova('chi ha giocato quaranta minuti viene lasciato fuori', len(lista3) == 0, str(lista3))
+        # una squadra che fallisce NON deve risultare fatta: domani verrebbe saltata
+        def rotta(url, **kw):
+            raise RuntimeError('boom')
+        B.scarica = rotta
+        c4 = [0]
+        l4, f4 = B.prendi_statistiche_giocatori('k', {}, c4, 2024, [(1, 'Inter')], [])
+        prova('una squadra che fallisce non viene segnata come fatta',
+              f4 == [] and l4 == [], str(f4))
+
+        # quota giornaliera finita: si ferma subito invece di bussare venti volte
+        def quota(url, **kw):
+            raise RuntimeError('API-Football dice: {"requests": "You have reached the request limit for the day"}')
+        B.scarica = quota
+        esiti5, c5 = {}, [0]
+        l5, f5 = B.prendi_statistiche_giocatori('k', esiti5, c5, 2024, squadre, [])
+        prova('con la quota giornaliera finita smette di bussare',
+              c5[0] <= 1 and bool(esiti5.get('giocatori quota giornaliera')),
+              'richieste=%d esiti=%s' % (c5[0], list(esiti5)))
+        prova('e non segna nessuna squadra come fatta', f5 == [], str(f5))
     finally:
         B.scarica, B.PAUSA_API_FOOTBALL, B.MAX_RICHIESTE_API = vero_scarica, vera_pausa, vera_quota
 

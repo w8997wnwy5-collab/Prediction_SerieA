@@ -817,7 +817,7 @@ def unisci_calendario(base, extra):
 FILE_GIOCATORI = os.path.join(DATA, 'giocatori.json')
 MAX_PAGINE_GIOCATORI = 34      # una lega intera sta in una trentina di pagine
 GIORNI_FRESCHEZZA = 6          # le statistiche dei giocatori non cambiano ogni ora
-VERSIONE_GIOCATORI = 3         # cambiala quando il modo di raccoglierli cambia:
+VERSIONE_GIOCATORI = 4         # cambiala quando il modo di raccoglierli cambia:
                                # un archivio raccolto male non deve sopravvivere
                                # alla correzione solo perché è recente
 
@@ -901,21 +901,31 @@ def prendi_statistiche_giocatori(chiave_api, esiti, conteggio, anno, squadre, gi
     dove ci si era fermati. Nel frattempo l'archivio è parziale ma vero, che è
     meglio di completo e finto."""
     lista, fatte = [], list(gia_fatte or [])
-    fermato = None
+    fermato, esaurita = None, False
     for tid, nome_sq in squadre:
         if nome_sq in fatte:
             continue
-        if conteggio[0] >= MAX_RICHIESTE_API - 2:
+        if conteggio[0] >= MAX_RICHIESTE_API - 2 or esaurita:
             fermato = nome_sq
             break
-        pagina, totale = 1, None
+        pagina, totale, presi = 1, None, 0
         while pagina <= 6:
             try:
                 d = api_football('players', {'team': tid, 'season': anno, 'page': pagina},
                                  chiave_api, conteggio)
             except Exception as e:        # noqa: BLE001
-                esiti['giocatori %s' % nome_sq] = 'fallita: %s' % str(e)[:70]
+                # La quota giornaliera finita non è un intoppo di quella squadra:
+                # è finita per tutte, e continuare a bussare venti volte serve
+                # solo a riempire il riepilogo di righe rosse identiche.
+                if 'request limit' in str(e).lower() or 'requests' in str(e).lower():
+                    esaurita = True
+                    esiti['giocatori quota giornaliera'] = (
+                        'esaurita dopo %d richieste: la fonte ne dà cento al giorno e si '
+                        'azzerano a mezzanotte. Riprende domani da %s.' % (conteggio[0], nome_sq))
+                else:
+                    esiti['giocatori %s' % nome_sq] = 'fallita: %s' % str(e)[:70]
                 break
+            presi += 1
             for r in (d.get('response') or []):
                 p = r.get('player') or {}
                 for st in (r.get('statistics') or []):
@@ -938,8 +948,16 @@ def prendi_statistiche_giocatori(chiave_api, esiti, conteggio, anno, squadre, gi
             if pagina >= totale or conteggio[0] >= MAX_RICHIESTE_API - 1:
                 break
             pagina += 1
-        fatte.append(nome_sq)
-    if fermato:
+        # Una squadra si segna come fatta SOLO se qualcosa è tornato davvero.
+        # Segnarla comunque è il modo di trasformare un errore di oggi in un buco
+        # permanente: domani il codice la salta, convinto di averla già presa.
+        if presi:
+            fatte.append(nome_sq)
+        elif not esaurita:
+            fermato = fermato or nome_sq
+    if esaurita:
+        pass
+    elif fermato:
         esiti['giocatori quota'] = ('fermato a %d richieste su %s: mancano %d squadre, '
                                     'le prende al prossimo giro'
                                     % (conteggio[0], fermato, len(squadre) - len(fatte)))
