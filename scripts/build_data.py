@@ -817,7 +817,7 @@ def unisci_calendario(base, extra):
 FILE_GIOCATORI = os.path.join(DATA, 'giocatori.json')
 MAX_PAGINE_GIOCATORI = 34      # una lega intera sta in una trentina di pagine
 GIORNI_FRESCHEZZA = 6          # le statistiche dei giocatori non cambiano ogni ora
-VERSIONE_GIOCATORI = 2         # cambiala quando il modo di raccoglierli cambia:
+VERSIONE_GIOCATORI = 3         # cambiala quando il modo di raccoglierli cambia:
                                # un archivio raccolto male non deve sopravvivere
                                # alla correzione solo perché è recente
 
@@ -859,7 +859,7 @@ def prendi_rose(chiave_api, esiti, conteggio, anni):
             break
     if not squadre:
         esiti['rose'] = 'nessun elenco squadre raggiungibile'
-        return {}
+        return [], {}
 
     rose, falliti = {}, []
     for tid, nome_sq in squadre:
@@ -884,33 +884,39 @@ def prendi_rose(chiave_api, esiti, conteggio, anni):
     if falliti:
         esiti['rose fallite'] = '; '.join(falliti[:3]) + (' e altre %d' % (len(falliti)-3)
                                                          if len(falliti) > 3 else '')
-    return rose
+    return squadre, rose
 
 
-def prendi_statistiche_giocatori(chiave_api, esiti, conteggio, anni):
-    """Presenze, minuti e cartellini di ogni giocatore. Il piano gratuito copre
-    una finestra di stagioni che si sposta ogni anno: si prova dalla più recente
-    e ci si ferma alla prima che risponde."""
-    for anno in anni:
-        lista, pagina, totale = [], 1, None
-        while pagina <= MAX_PAGINE_GIOCATORI:
-            if conteggio[0] >= MAX_RICHIESTE_API:
-                esiti['giocatori quota'] = ('fermato a %d richieste dopo %d pagine su %s: '
-                                            'riprende domani' % (conteggio[0], pagina - 1, totale))
-                break
+def prendi_statistiche_giocatori(chiave_api, esiti, conteggio, anno, squadre, gia_fatte):
+    """Presenze, minuti e cartellini, UNA SQUADRA ALLA VOLTA.
+
+    Chiedendoli per lega — players?league=135 — ne tornano quarantatré e la
+    paginazione dichiara di essere finita. Non è il limite di velocità: lo
+    stesso numero usciva anche prima di mettere il freno. L'endpoint per lega,
+    sul piano gratuito, restituisce una fetta e basta, senza dirlo.
+
+    Per squadra invece tornano tutti. Costa venti giri invece di uno, che è più
+    di quanto la quota giornaliera regga insieme alle rose: perciò si tiene il
+    conto di quali squadre sono già state prese e la volta dopo si riparte da
+    dove ci si era fermati. Nel frattempo l'archivio è parziale ma vero, che è
+    meglio di completo e finto."""
+    lista, fatte = [], list(gia_fatte or [])
+    fermato = None
+    for tid, nome_sq in squadre:
+        if nome_sq in fatte:
+            continue
+        if conteggio[0] >= MAX_RICHIESTE_API - 2:
+            fermato = nome_sq
+            break
+        pagina, totale = 1, None
+        while pagina <= 6:
             try:
-                d = api_football('players', {'league': LEGA_APIFOOTBALL, 'season': anno,
-                                             'page': pagina}, chiave_api, conteggio)
-            except Exception as e:    # noqa: BLE001
-                if pagina == 1:
-                    esiti['giocatori %d' % anno] = 'non disponibile: %s' % e
+                d = api_football('players', {'team': tid, 'season': anno, 'page': pagina},
+                                 chiave_api, conteggio)
+            except Exception as e:        # noqa: BLE001
+                esiti['giocatori %s' % nome_sq] = 'fallita: %s' % str(e)[:70]
                 break
-            risposte = d.get('response') or []
-            if pagina == 1 and not risposte:
-                esiti['giocatori %d' % anno] = 'stagione non compresa nel piano'
-                break
-            totale = ((d.get('paging') or {}).get('total')) or 1
-            for r in risposte:
+            for r in (d.get('response') or []):
                 p = r.get('player') or {}
                 for st in (r.get('statistics') or []):
                     if ((st.get('league') or {}).get('id')) != LEGA_APIFOOTBALL:
@@ -918,23 +924,26 @@ def prendi_statistiche_giocatori(chiave_api, esiti, conteggio, anni):
                     g = st.get('games') or {}
                     c = st.get('cards') or {}
                     minuti = intero(g.get('minutes')) or 0
-                    if minuti < 200:          # sotto le duecento minuti è rumore
+                    if minuti < 200:          # sotto i duecento minuti è rumore
                         continue
                     lista.append({
                         'n': p.get('name'), 'id': p.get('id'),
-                        's': nome((st.get('team') or {}).get('name')),
+                        's': nome((st.get('team') or {}).get('name')) or nome_sq,
                         'r': (g.get('position') or '')[:1] or None,
                         'p': intero(g.get('appearences')) or 0,
                         'm': minuti,
                         'g': (intero(c.get('yellow')) or 0) + (intero(c.get('yellowred')) or 0),
                         'x': intero(c.get('red')) or 0})
-            if pagina >= (totale or 1):
+            totale = ((d.get('paging') or {}).get('total')) or 1
+            if pagina >= totale or conteggio[0] >= MAX_RICHIESTE_API - 1:
                 break
             pagina += 1
-        if lista:
-            esiti['giocatori %d' % anno] = 'ok: %d giocatori con almeno 200 minuti' % len(lista)
-            return anno, lista
-    return None, []
+        fatte.append(nome_sq)
+    if fermato:
+        esiti['giocatori quota'] = ('fermato a %d richieste su %s: mancano %d squadre, '
+                                    'le prende al prossimo giro'
+                                    % (conteggio[0], fermato, len(squadre) - len(fatte)))
+    return lista, fatte
 
 
 def aggiorna_giocatori(esiti, stagioni):
@@ -956,12 +965,39 @@ def aggiorna_giocatori(esiti, stagioni):
 
     conteggio = [0]
     anni = [int(e[:4]) for _, e in stagioni]        # dalla più recente all'indietro
-    anno, lista = prendi_statistiche_giocatori(chiave_api, esiti, conteggio, anni)
-    rose = prendi_rose(chiave_api, esiti, conteggio, anni)
+
+    # Prima le rose: servono gli identificativi delle squadre per chiedere i
+    # giocatori uno stadio alla volta, e servono comunque per sapere chi gioca
+    # dove adesso. Se ce le abbiamo già, non si rifanno.
+    rose = (vecchio or {}).get('rose') or {}
+    squadre = (vecchio or {}).get('squadre') or []
+    if not rose or not squadre or not aggiornato:
+        squadre, rose = prendi_rose(chiave_api, esiti, conteggio, anni)
+    else:
+        esiti['rose'] = 'già in archivio: %d squadre, non le rifaccio' % len(rose)
+
+    anno = (vecchio or {}).get('stagione')
+    if anno is None:
+        for a in anni:
+            anno = a
+            break
+    fatte = (vecchio or {}).get('fatte') or []
+    if not aggiornato:
+        fatte = []                              # versione nuova: si ricomincia
+    lista_vecchia = [] if not aggiornato else ((vecchio or {}).get('lista') or [])
+
+    lista_nuova, fatte = ([], fatte) if not squadre else prendi_statistiche_giocatori(
+        chiave_api, esiti, conteggio, anno, squadre, fatte)
     esiti['giocatori richieste'] = '%d usate su %d' % (conteggio[0], MAX_RICHIESTE_API)
 
+    # si somma a quello che c'era: le squadre già prese non si ributtano via
+    per_nome = {}
+    for x in lista_vecchia + lista_nuova:
+        if x.get('n'):
+            per_nome[x['n'] + '|' + str(x.get('s'))] = x
+    lista = list(per_nome.values())
+
     if not lista and not rose:
-        # non si butta via quello che c'era
         if vecchio:
             esiti['giocatori'] = 'niente di nuovo: tengo quelli di %s' % vecchio.get('aggiornato', '')[:10]
         return vecchio
@@ -971,13 +1007,15 @@ def aggiorna_giocatori(esiti, stagioni):
         'versione': VERSIONE_GIOCATORI,
         'fonte': 'API-Football',
         'stagione': anno,
-        'lista': lista or (vecchio or {}).get('lista') or [],
-        'rose': rose or (vecchio or {}).get('rose') or {},
+        'lista': lista,
+        'rose': rose,
+        'squadre': squadre,
+        'fatte': fatte,
     }
     with open(FILE_GIOCATORI, 'w', encoding='utf-8') as f:
         json.dump(doc, f, ensure_ascii=False, separators=(',', ':'))
-    esiti['giocatori'] = 'scritti: %d giocatori (stagione %s), %d rose attuali' % (
-        len(doc['lista']), doc['stagione'], len(doc['rose']))
+    esiti['giocatori'] = 'scritti: %d giocatori (stagione %s), %d rose, %d squadre su %d complete' % (
+        len(doc['lista']), doc['stagione'], len(doc['rose']), len(fatte), len(squadre) or 20)
     return doc
 
 

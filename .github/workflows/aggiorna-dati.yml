@@ -51,11 +51,25 @@ jobs:
           git add data/
           if git diff --staged --quiet; then
             echo "Niente di nuovo: nessun commit."
-          else
-            git commit -m "dati: aggiornamento automatico $(date -u '+%Y-%m-%d %H:%M UTC')"
-            git push
-            echo "Dati aggiornati e pubblicati."
+            exit 0
           fi
+          git commit -m "dati: aggiornamento automatico $(date -u '+%Y-%m-%d %H:%M UTC')"
+          # Quattro giri al giorno più chi lavora sul repository: prima o poi due
+          # push si incrociano e quello che arriva secondo viene rifiutato. Senza
+          # questo, un giro che ha scaricato tutto correttamente finisce in rosso
+          # e i dati di quel ciclo si buttano. Si riprova rimettendo i propri
+          # commit sopra a quelli arrivati nel frattempo.
+          for tentativo in 1 2 3 4 5; do
+            if git push; then
+              echo "Dati aggiornati e pubblicati."
+              exit 0
+            fi
+            echo "Push rifiutato (tentativo $tentativo): qualcuno ha pubblicato prima. Riprovo."
+            sleep $((tentativo * 4))
+            git pull --rebase --autostash origin "${GITHUB_REF_NAME}" || exit 1
+          done
+          echo "Cinque tentativi di push falliti: mi fermo."
+          exit 1
 
       - name: Fallisci se i dati sono stati rifiutati
         if: steps.costruisci.outcome == 'failure'

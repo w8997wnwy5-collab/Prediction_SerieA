@@ -270,6 +270,17 @@ select{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:1
 .specr i.giu{color:var(--amber);background:var(--amber-soft);}
 
 /* ── ammoniti ── */
+.ammtesta{padding-bottom:9px;margin-bottom:4px;border-bottom:1px solid var(--line2);cursor:pointer;}
+.ammtesta b{display:block;font-size:15px;font-weight:700;letter-spacing:-.2px;}
+.ammtesta em{font-style:normal;display:block;font-size:11px;color:var(--mute);margin-top:2px;}
+.gioc{display:flex;align-items:center;gap:9px;padding:8px 0;border-bottom:1px solid var(--line2);}
+.gioc:last-child{border-bottom:0;}
+.lato{flex:none;font-family:var(--mono);font-size:9px;font-weight:700;padding:3px 5px;
+  border-radius:5px;background:var(--card2);color:var(--mute);min-width:34px;text-align:center;}
+.lato.casa{background:var(--accent-soft);color:var(--accent);}
+.giocn{flex:1;min-width:0;font-size:13.5px;font-weight:600;}
+.giocn em{font-style:normal;display:block;font-size:10.5px;color:var(--mute);font-weight:400;margin-top:2px;}
+.giocp{flex:none;font-family:var(--mono);font-size:15px;font-weight:700;}
 .amm{display:flex;align-items:center;gap:8px;padding:11px 10px;border-radius:10px;
   border-bottom:1px solid var(--line2);cursor:pointer;margin:0 -4px;}
 .amm:last-child{border-bottom:0;}
@@ -516,6 +527,11 @@ function carica(forza){
     return prendi('data/meta.json', forza).catch(function(){ return null; });
   }).then(function(meta){
     S.meta = meta;
+    /* i giocatori stanno in un file a parte e possono benissimo non esserci:
+       l'app funziona lo stesso, con una sezione in meno */
+    return prendi('data/giocatori.json', forza).catch(function(){ return null; });
+  }).then(function(gio){
+    S.gio = gio;
     var cache = leggiCache();
     if(cache && !forza){
       applicaRisultato(cache, true);
@@ -1227,73 +1243,153 @@ function tabGiornata(){
 }
 
 /* ══════════════════════════════════════════════════════════════
-   VISTA: AMMONITI
+   VISTA: AMMONITI — chi rischia il cartellino
 
-   L'archivio ha l'arbitro di 1140 partite, quanti falli fischia ciascuno e
-   quanto se le vanno a cercare le venti squadre. Da quei tre numeri escono i
-   cartellini attesi, e sono l'unica cosa in tutta l'app che non dipende da chi
-   segna: dipende da chi fischia.
+   Il conto è tre numeri moltiplicati:
 
-   Il modello è volutamente semplice: quanto è severo l'arbitro, per quanto sono
-   fallose le due squadre, sulla media della lega. Le medie di un arbitro con
-   nove gare non valgono quanto quelle di uno con novanta, quindi vengono tirate
-   verso la media generale in proporzione a quanto poco ha arbitrato.
+     quanti gialli prende quel giocatore ogni 90 minuti
+        × quanti minuti ci si aspetta che giochi
+        × quanto è severo l'arbitro rispetto alla media
+
+   Non moltiplico anche per quanto è fallosa la squadra, e non è una svista: i
+   cartellini di quel giocatore se li è già presi giocando in un certo modo, in
+   una certa squadra. Contarli due volte gonfierebbe i difensori delle squadre
+   che fanno tanti falli e basta.
+
+   Il limite grosso è dichiarato in cima alla sezione: il piano gratuito di
+   API-Football si ferma alla stagione 2024, quindi i tassi sono di allora. Per
+   un giocatore la propensione al cartellino è un tratto abbastanza stabile —
+   chi entra duro entra duro anche l'anno dopo — ma la maglia no. Per quello
+   servono le rose attuali, che vengono prese a parte.
    ══════════════════════════════════════════════════════════════ */
+
+/* Indice: nome squadra di oggi → giocatori con i loro tassi. */
+var _rischio = null;
+function rischioCartellino(){
+  if(_rischio) return _rischio;
+  var g = S.gio;
+  if(!g || !g.lista || !g.lista.length) return null;
+  /* dove gioca ADESSO: se le rose attuali ci sono comandano loro, altrimenti
+     resta la squadra della stagione da cui vengono le statistiche */
+  var oggiPer = {};
+  var rose = g.rose || {};
+  Object.keys(rose).forEach(function(sq){
+    (rose[sq] || []).forEach(function(x){ if(x.n) oggiPer[x.n] = sq; });
+  });
+  var perSquadra = {};
+  g.lista.forEach(function(x){
+    if(!x.n || !(x.m > 0)) return;
+    var sq = oggiPer[x.n] || x.s;
+    if(!sq) return;
+    var per90 = x.g / x.m * 90;
+    var minutiTipici = Math.min(90, x.p > 0 ? x.m / x.p : 60);
+    (perSquadra[sq] = perSquadra[sq] || []).push({
+      nome: x.n, ruolo: x.r, per90: per90, minuti: minutiTipici,
+      gialli: x.g, presenze: x.p, rosaNota: !!oggiPer[x.n]
+    });
+  });
+  Object.keys(perSquadra).forEach(function(sq){
+    perSquadra[sq].sort(function(a, b){ return b.per90 * b.minuti - a.per90 * a.minuti; });
+  });
+  _rischio = {perSquadra: perSquadra, stagione: g.stagione,
+              conRose: Object.keys(rose).length, aggiornato: g.aggiornato};
+  return _rischio;
+}
+
+/* La probabilità che UNO specifico giocatore prenda il giallo, se gioca. */
+function rischioDi(gioc, severita){
+  var lam = gioc.per90 * (gioc.minuti / 90) * (severita || 1);
+  return 1 - Math.exp(-Math.max(0, lam));
+}
+
+function candidatiAmmoniti(p, quanti){
+  var r = rischioCartellino();
+  if(!r) return null;
+  var car = M.cartelliniAttesi(S.arb, S.arbitroScelto[chiavePartita(p)] || null, p.c, p.v);
+  var sev = car ? car.severita : 1;
+  var fuori = [];
+  [[p.c, 'casa'], [p.v, 'via']].forEach(function(t){
+    (r.perSquadra[t[0]] || []).slice(0, 14).forEach(function(g){
+      fuori.push({g: g, squadra: t[0], lato: t[1], p: rischioDi(g, sev)});
+    });
+  });
+  fuori.sort(function(a, b){ return b.p - a.p; });
+  return {lista: fuori.slice(0, quanti || 8), severita: sev,
+          arbitro: car ? car.arbitro : null, noto: car ? car.noto : false};
+}
+
 function tabAmmoniti(){
+  var r = rischioCartellino();
   if(!S.arb || !S.arb.arbitri.length){
     return '<div class="card"><div class="empty"><b>Non ho ancora dati sugli arbitri</b>'+
-      'Servono per questa sezione. Arrivano da API-Football con la chiave gratuita: '+
-      'guarda lo stato in <b>Dati</b>.</div></div>';
+      'Servono per questa sezione. Guarda lo stato in <b>Dati</b>.</div></div>';
   }
   var prossime = prossimePartite();
   if(!prossime.length) return '<div class="card"><div class="empty"><b>Nessuna partita in calendario</b>'+
-    'I cartellini attesi si calcolano sulle partite in arrivo.</div></div>';
+    'I cartellini si calcolano sulle partite in arrivo.</div></div>';
   S._prossime = prossime;
   var g = raggruppaGiornate(prossime)[0];
   var a = S.arb;
 
-  var h = '<div class="h2">Ammoniti attesi</div>';
-  h += '<p class="lede">Quanto è severo l\'arbitro × quanto se le vanno a cercare le due squadre, '+
-    'sulla media della lega di <b>'+nu(a.mediaGialli,2)+' gialli a partita</b>. '+
-    'Le designazioni escono due o tre giorni prima: finché non si sanno, qui c\'è la media.</p>';
-
-  var righe = g.partite.map(function(p){
-    var car = M.cartelliniAttesi(a, S.arbitroScelto[chiavePartita(p)] || null, p.c, p.v);
-    return {p: p, car: car};
-  }).sort(function(x, y){ return y.car.gialliTotali - x.car.gialliTotali; });
-
-  var conArbitro = righe.filter(function(r){ return r.car.noto; }).length;
-  h += '<div class="card">' + righe.map(function(r){
-    var c = r.car;
-    var caldo = c.gialliTotali > a.mediaGialli * 1.10;
-    var freddo = c.gialliTotali < a.mediaGialli * 0.90;
-    return '<div class="amm'+(caldo?' caldo':(freddo?' freddo':''))+'" onclick="apriPartita('+
-      prossime.indexOf(r.p)+')">'+
-      '<div class="ammn"><b>'+esc(r.p.c)+' – '+esc(r.p.v)+'</b>'+
-      '<em>'+esc(dataBreve(r.p.d))+(r.p.o?' · '+esc(r.p.o):'')+
-      (c.noto ? ' · '+esc(c.arbitro) : '')+'</em></div>'+
-      '<div class="ammv grande">'+nu(c.gialliTotali,1)+'<span>gialli attesi</span></div>'+
-      '<div class="ammv">'+pc(c.oltre35)+'<span>oltre 3.5</span></div>'+
-    '</div>';
-  }).join('') + '</div>';
-
-  h += '<div class="note">Verde: più tranquilla della media. Rosso: più nervosa. '+
-    'Tocca una riga per aprire la partita, vedere anche la soglia 4.5 e scegliere l\'arbitro '+
-    'designato.</div>';
-  if(conArbitro < righe.length){
-    h += '<div class="note amber"><b>Nessun arbitro ancora designato per '+
-      (righe.length - conArbitro)+' di queste partite.</b> Senza il nome, qui c\'è solo quanto se le '+
-      'vanno a cercare le due squadre, e infatti i numeri si somigliano tutti: stanno fra '+
-      nu(Math.min.apply(null, righe.map(function(r){return r.car.gialliTotali;})),1)+' e '+
-      nu(Math.max.apply(null, righe.map(function(r){return r.car.gialliTotali;})),1)+'. '+
-      'Con l\'arbitro la forbice si apre parecchio: fra il più severo e il più permissivo del '+
-      'campionato ballano '+
-      nu(a.arbitri.filter(function(x){return x.n>=8;})[0].gialliCorretti -
-         a.arbitri.filter(function(x){return x.n>=8;}).slice(-1)[0].gialliCorretti, 1)+
-      ' gialli a partita. Le designazioni escono il giovedì o il venerdì: torna qui allora, '+
-      'oppure impostale a mano dentro la partita.</div>';
+  var h = '<div class="h2">Chi rischia il cartellino</div>';
+  if(!r){
+    h += '<div class="card"><div class="empty"><b>Non ho ancora i giocatori</b>'+
+      'Le statistiche dei singoli arrivano da API-Football e vengono raccolte una volta a '+
+      'settimana. Se la chiave c\'è, compaiono al prossimo giro completo del robot — '+
+      'guarda lo stato in <b>Dati</b>.</div></div>';
+    h += cartelliniPerPartita(g, a, prossime);
+    return h;
   }
+  h += '<p class="lede">Quanti gialli prende quel giocatore ogni 90 minuti × quanto gioca × '+
+    'quanto è severo l\'arbitro. Tocca una partita per aprirla e scegliere l\'arbitro designato: '+
+    'cambia parecchio.</p>';
+  h += '<div class="note amber"><b>Da leggere prima di fidarsi.</b> Il piano gratuito della fonte '+
+    'si ferma alla stagione <b>'+r.stagione+'-'+String(r.stagione+1).slice(2)+'</b>, quindi i tassi '+
+    'sono di allora. Per un giocatore la propensione al cartellino è un tratto piuttosto stabile — '+
+    'chi entra duro entra duro anche l\'anno dopo — ma la maglia no'+
+    (r.conRose ? ': le rose attuali ce le ho per <b>'+r.conRose+' squadre</b> e per quelle il '+
+      'giocatore è attribuito alla squadra di oggi.' : ', e le rose aggiornate non sono ancora '+
+      'arrivate: qui ognuno è attribuito alla squadra di allora.')+
+    ' E soprattutto: <b>non so chi gioca titolare</b>.</div>';
 
+  g.partite.forEach(function(p){
+    var c = candidatiAmmoniti(p, 6);
+    if(!c || !c.lista.length) return;
+    h += '<div class="card"><div class="ammtesta" onclick="apriPartita('+prossime.indexOf(p)+')">'+
+      '<b>'+esc(p.c)+' – '+esc(p.v)+'</b>'+
+      '<em>'+esc(dataBreve(p.d))+(p.o?' · '+esc(p.o):'')+
+      (c.noto ? ' · '+esc(c.arbitro)+' ('+(c.severita>1?'+':'−')+
+        pc(Math.abs(c.severita-1),0)+' di severità)' : ' · arbitro non designato')+'</em></div>'+
+      c.lista.map(function(x){
+        return '<div class="gioc"><span class="lato '+x.lato+'">'+esc(sigla(x.squadra))+'</span>'+
+          '<div class="giocn">'+esc(x.g.nome)+
+            '<em>'+(x.g.ruolo?esc(x.g.ruolo)+' · ':'')+x.g.gialli+' gialli in '+x.g.presenze+
+            ' presenze'+(x.g.rosaNota?'':' · rosa non confermata')+'</em></div>'+
+          '<div class="giocp">'+pc(x.p)+'</div></div>';
+      }).join('')+'</div>';
+  });
+  h += cartelliniPerPartita(g, a, prossime);
+  return h;
+}
+
+/* Il totale della partita resta, in fondo: serve per le soglie. */
+function cartelliniPerPartita(g, a, prossime){
+  var righe = g.partite.map(function(p){
+    return {p: p, car: M.cartelliniAttesi(a, S.arbitroScelto[chiavePartita(p)] || null, p.c, p.v)};
+  }).sort(function(x, y){ return y.car.gialliTotali - x.car.gialliTotali; });
+  var h = '<div class="h2">Cartellini totali attesi</div><div class="card">' +
+    righe.map(function(r){
+      var c = r.car;
+      var caldo = c.gialliTotali > a.mediaGialli * 1.10;
+      var freddo = c.gialliTotali < a.mediaGialli * 0.90;
+      return '<div class="amm'+(caldo?' caldo':(freddo?' freddo':''))+'" onclick="apriPartita('+
+        prossime.indexOf(r.p)+')">'+
+        '<div class="ammn"><b>'+esc(r.p.c)+' – '+esc(r.p.v)+'</b>'+
+        '<em>'+esc(dataBreve(r.p.d))+(c.noto ? ' · '+esc(c.arbitro) : '')+'</em></div>'+
+        '<div class="ammv grande">'+nu(c.gialliTotali,1)+'<span>gialli attesi</span></div>'+
+        '<div class="ammv">'+pc(c.oltre35)+'<span>oltre 3.5</span></div>'+
+      '</div>';
+    }).join('') + '</div>';
   h += '<div class="h2">Chi fischia più stretto<span class="r">'+
     a.arbitri.filter(function(x){ return x.n>=8; }).length+'</span></div><div class="card">'+
     barreOriz(a.arbitri.filter(function(x){ return x.n>=8; }).slice(0,12).map(function(x){
@@ -1301,17 +1397,7 @@ function tabAmmoniti(){
               colore: x.gialliCorretti > a.mediaGialli ? 'var(--warn)' : 'var(--c1)'};
     }))+
     '<div class="note">Gialli a partita, già corretti per quante gare ha diretto: le medie di chi '+
-    'ne ha arbitrate poche vengono tirate verso la media della lega, altrimenti in cima ci finisce '+
-    'sempre qualcuno con tre partite e una espulsione.</div></div>';
-
-  h += '<div class="h2">Chi se le va a cercare</div><div class="card">'+
-    barreOriz(a.squadre.filter(function(x){ return squadreAttive().indexOf(x.squadra)>=0; })
-      .slice(0,10).map(function(x){
-        return {l: x.squadra, v: x.gialliPartita, testo: nu(x.gialliPartita,2),
-                colore: x.propensione > 1.05 ? 'var(--warn)' : 'var(--c1)'};
-      }))+
-    '<div class="note">Gialli presi a partita. Chi commette più falli ne prende di più, ma non in '+
-    'proporzione: conta anche dove li commette e come protesta.</div></div>';
+    'ne ha arbitrate poche vengono tirate verso la media della lega.</div></div>';
   return h;
 }
 
