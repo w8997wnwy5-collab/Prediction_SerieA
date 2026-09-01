@@ -251,6 +251,13 @@ select{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:1
 .row .v span.su,.row .v span.giu{display:inline-block;font-family:var(--mono);font-size:10px;
   padding:1px 5px;border-radius:5px;margin-top:3px;font-weight:600;}
 
+.solida{margin-top:12px;padding:11px 12px;border-radius:11px;background:var(--accent-soft);}
+.solt{font-family:var(--mono);font-size:9px;letter-spacing:1px;text-transform:uppercase;
+  color:var(--accent);margin-bottom:5px;}
+.solr{display:flex;align-items:baseline;gap:10px;}
+.solr b{flex:1;font-size:16px;font-weight:700;min-width:0;letter-spacing:-.2px;}
+.solr span{font-family:var(--mono);font-size:19px;font-weight:700;color:var(--accent);}
+.solq{font-size:10.5px;color:var(--mute);margin-top:4px;line-height:1.4;}
 .spec{margin-top:12px;padding-top:11px;border-top:1px solid var(--line2);}
 .spect{font-family:var(--mono);font-size:9px;letter-spacing:1px;text-transform:uppercase;
   color:var(--mute);margin-bottom:7px;}
@@ -864,11 +871,20 @@ function sceltePartita(p, quante){
     perScarto.push(m);
   });
   var perSolidita = voci.slice().sort(function(a, b){ return b.p05 - a.p05; });
+  /* LA PIÙ SOLIDA, quella che va in copertina.
+
+     Non è il primo della classifica per probabilità: quello è sempre "Almeno
+     un gol" al 93%, in ogni partita di ogni giornata, e a quota 1.08 non è una
+     giocata, è una constatazione. Si prende la più solida FRA QUELLE CHE
+     PAGANO QUALCOSA — sotto il 78% di probabilità, cioè sopra 1.28 di quota
+     equa. Sono le stesse da cui è uscita la schedina da dieci su dieci. */
+  var pagante = perSolidita.filter(function(m){ return m.p <= 0.78; });
   return {
     tutte: voci, sim: mk.sim,
     speciali: perScarto.slice(0, quante || 3),
     solide: perSolidita.slice(0, quante || 3),
-    ancora: perSolidita[0] || null            /* la selezione da usare in schedina */
+    piuSolida: pagante[0] || perSolidita[0] || null,
+    ancora: pagante[0] || perSolidita[0] || null     /* la selezione da usare in schedina */
   };
 }
 
@@ -1153,9 +1169,7 @@ function schedaPartita(p, indice){
   var mercato = p.q ? M.daQuote(p.q) : null;
   var sc = sceltePartita(p, 3);
   var car = cartelliniDi(p);
-  /* sotto i cinque punti di scarto non è una differenza, è rumore: meglio una
-     riga in meno che una riga che non dice niente */
-  var speciali = sc ? sc.speciali.filter(function(m){ return Math.abs(m.scarto) >= 0.05; }).slice(0, 2) : [];
+  var sol = sc ? sc.piuSolida : null;
   return '<div class="match" onclick="apriPartita('+indice+')">'+
     '<div class="quando"><span>'+esc(dataBreve(p.d))+(p.o?' · '+esc(p.o):'')+'</span>'+
       (S.aggiustamenti[k]?'<span class="gg" style="color:var(--amber)">assenze</span>':'')+
@@ -1169,17 +1183,13 @@ function schedaPartita(p, indice){
       '<div><div class="l">Gol/Gol</div><div class="v">'+pc(pr.gol)+'</div></div>'+
       '<div><div class="l">Ammoniti</div><div class="v">'+(car?nu(car.gialliTotali,1):'—')+'</div></div>'+
     '</div>'+
-    (speciali.length
-      ? '<div class="spec"><div class="spect">Cosa ha di diverso</div>'+
-        speciali.map(function(m){
-          return '<div class="specr"><b>'+esc(m.nome)+'</b>'+
-            '<span>'+pc(m.p)+'</span>'+
-            '<i class="'+(m.scarto>0?'su':'giu')+'">'+(m.scarto>0?'+':'−')+
-            nu(Math.abs(m.scarto)*100,0)+' pt</i></div>';
-        }).join('')+'</div>'
-      : '<div class="spec"><div class="spect">Cosa ha di diverso</div>'+
-        '<div class="specr" style="color:var(--mute);font-size:12.5px">'+
-        'Niente di particolare: somiglia alle altre partite della giornata.</div></div>')+
+    (sol
+      ? '<div class="solida"><div class="solt">La più solida</div>'+
+        '<div class="solr"><b>'+esc(sol.nome)+'</b>'+
+        '<span>'+pc(sol.p)+'</span></div>'+
+        '<div class="solq">quota equa '+nu(sol.quota,2)+' · non scende sotto il '+pc(sol.p05)+
+        ' nemmeno nello scenario sfavorevole</div></div>'
+      : '')+
     (mercato ? '<div class="note" style="margin-top:10px">Il mercato dice '+pc(mercato[0])+' · '+
       pc(mercato[1])+' · '+pc(mercato[2])+'. '+scartoTesto(pr.puro||pr, mercato)+'</div>' : '')+
   '</div>';
@@ -1201,8 +1211,8 @@ function tabGiornata(){
   segnaPronostici();
   h += '<div class="h2">Prossime partite<span class="r">'+g.partite.length+'</span></div>';
   h += '<p class="lede">Dal '+esc(dataLunga(g.inizio))+(g.fine!==g.inizio?' al '+esc(dataLunga(g.fine)):'')+
-    '. <b>Cosa ha di diverso</b> è la parte che conta: dice di quanto questa partita si scosta dalle '+
-    'altre della giornata, non quanto una cosa è probabile in assoluto. Tocca per l\'analisi completa.</p>';
+    '. Su ogni partita trovi <b>la più solida</b>: la giocata più sicura fra quelle che pagano '+
+    'qualcosa. Tocca la partita per tutte le altre.</p>';
   h += g.partite.map(function(p){ return schedaPartita(p, prossime.indexOf(p)); }).join('');
   if(gruppi.length > 1){
     var dopo = gruppi.slice(1, 4);

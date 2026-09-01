@@ -408,7 +408,7 @@ def arricchisci(indice, stagioni, esiti):
     return agg_arb, agg_stat
 
 
-def prendi_giocatori(esiti):
+def prendi_marcatori(esiti):
     token = os.environ.get('FOOTBALL_DATA_TOKEN', '').strip()
     if not token:
         esiti['marcatori'] = 'saltati: nessuna chiave FOOTBALL_DATA_TOKEN'
@@ -797,6 +797,165 @@ def unisci_calendario(base, extra):
     return fuori
 
 
+# ────────────────────────────── giocatori: chi prende i cartellini ──────────────────────────────
+
+FILE_GIOCATORI = os.path.join(DATA, 'giocatori.json')
+MAX_PAGINE_GIOCATORI = 34      # una lega intera sta in una trentina di pagine
+GIORNI_FRESCHEZZA = 6          # le statistiche dei giocatori non cambiano ogni ora
+
+
+def carica_giocatori():
+    try:
+        with open(FILE_GIOCATORI, encoding='utf-8') as f:
+            return json.load(f)
+    except Exception:                 # noqa: BLE001
+        return None
+
+
+def _eta_in_giorni(iso):
+    try:
+        d = datetime.fromisoformat(iso.replace('Z', '+00:00'))
+        return (datetime.now(timezone.utc) - d).total_seconds() / 86400
+    except Exception:                 # noqa: BLE001
+        return 999
+
+
+def prendi_rose(chiave_api, esiti, conteggio, anni):
+    """Chi gioca DOVE ADESSO. Le statistiche disciplinari di un giocatore
+    cambiano poco da un anno all'altro; la maglia che indossa cambia parecchio,
+    e senza la rosa aggiornata si finisce per far ammonire un difensore in una
+    partita che gioca dall'altra parte d'Europa."""
+    squadre = None
+    for anno in anni:
+        try:
+            d = api_football('teams', {'league': LEGA_APIFOOTBALL, 'season': anno},
+                             chiave_api, conteggio)
+        except Exception as e:        # noqa: BLE001
+            esiti['rose %d' % anno] = 'elenco squadre non disponibile: %s' % e
+            continue
+        risposte = d.get('response') or []
+        if risposte:
+            squadre = [(x['team']['id'], nome(x['team'].get('name'))) for x in risposte
+                       if (x.get('team') or {}).get('id')]
+            esiti['rose'] = 'elenco squadre dalla stagione %d: %d squadre' % (anno, len(squadre))
+            break
+    if not squadre:
+        esiti['rose'] = 'nessun elenco squadre raggiungibile'
+        return {}
+
+    rose = {}
+    for tid, nome_sq in squadre:
+        if conteggio[0] >= MAX_RICHIESTE_API:
+            esiti['rose quota'] = 'fermato a %d richieste: mancano %d rose' % (
+                conteggio[0], len(squadre) - len(rose))
+            break
+        try:
+            d = api_football('players/squads', {'team': tid}, chiave_api, conteggio)
+        except Exception:             # noqa: BLE001
+            continue
+        for blocco in (d.get('response') or []):
+            for g in (blocco.get('players') or []):
+                if g.get('name'):
+                    rose.setdefault(nome_sq, []).append({
+                        'n': g['name'],
+                        'r': (g.get('position') or '')[:1] or None,
+                        'id': g.get('id')})
+        time.sleep(0.4)
+    esiti['rose caricate'] = '%d squadre, %d giocatori' % (
+        len(rose), sum(len(v) for v in rose.values()))
+    return rose
+
+
+def prendi_statistiche_giocatori(chiave_api, esiti, conteggio, anni):
+    """Presenze, minuti e cartellini di ogni giocatore. Il piano gratuito copre
+    una finestra di stagioni che si sposta ogni anno: si prova dalla più recente
+    e ci si ferma alla prima che risponde."""
+    for anno in anni:
+        lista, pagina, totale = [], 1, None
+        while pagina <= MAX_PAGINE_GIOCATORI:
+            if conteggio[0] >= MAX_RICHIESTE_API:
+                esiti['giocatori quota'] = ('fermato a %d richieste dopo %d pagine su %s: '
+                                            'riprende domani' % (conteggio[0], pagina - 1, totale))
+                break
+            try:
+                d = api_football('players', {'league': LEGA_APIFOOTBALL, 'season': anno,
+                                             'page': pagina}, chiave_api, conteggio)
+            except Exception as e:    # noqa: BLE001
+                if pagina == 1:
+                    esiti['giocatori %d' % anno] = 'non disponibile: %s' % e
+                break
+            risposte = d.get('response') or []
+            if pagina == 1 and not risposte:
+                esiti['giocatori %d' % anno] = 'stagione non compresa nel piano'
+                break
+            totale = ((d.get('paging') or {}).get('total')) or 1
+            for r in risposte:
+                p = r.get('player') or {}
+                for st in (r.get('statistics') or []):
+                    if ((st.get('league') or {}).get('id')) != LEGA_APIFOOTBALL:
+                        continue
+                    g = st.get('games') or {}
+                    c = st.get('cards') or {}
+                    minuti = intero(g.get('minutes')) or 0
+                    if minuti < 200:          # sotto le duecento minuti è rumore
+                        continue
+                    lista.append({
+                        'n': p.get('name'), 'id': p.get('id'),
+                        's': nome((st.get('team') or {}).get('name')),
+                        'r': (g.get('position') or '')[:1] or None,
+                        'p': intero(g.get('appearences')) or 0,
+                        'm': minuti,
+                        'g': (intero(c.get('yellow')) or 0) + (intero(c.get('yellowred')) or 0),
+                        'x': intero(c.get('red')) or 0})
+            if pagina >= (totale or 1):
+                break
+            pagina += 1
+            time.sleep(0.4)
+        if lista:
+            esiti['giocatori %d' % anno] = 'ok: %d giocatori con almeno 200 minuti' % len(lista)
+            return anno, lista
+    return None, []
+
+
+def aggiorna_giocatori(esiti, stagioni):
+    """Un file a parte: le statistiche dei giocatori sono grosse e cambiano con
+    un ritmo diverso da quello delle partite."""
+    chiave_api = os.environ.get('APIFOOTBALL_KEY', '').strip()
+    if not chiave_api:
+        esiti['giocatori'] = 'saltati: nessuna chiave APIFOOTBALL_KEY'
+        return None
+    vecchio = carica_giocatori()
+    if vecchio and _eta_in_giorni(vecchio.get('aggiornato', '')) < GIORNI_FRESCHEZZA:
+        esiti['giocatori'] = 'già freschi (%.1f giorni): non li ricarico' % _eta_in_giorni(
+            vecchio.get('aggiornato', ''))
+        return vecchio
+
+    conteggio = [0]
+    anni = [int(e[:4]) for _, e in stagioni]        # dalla più recente all'indietro
+    anno, lista = prendi_statistiche_giocatori(chiave_api, esiti, conteggio, anni)
+    rose = prendi_rose(chiave_api, esiti, conteggio, anni)
+    esiti['giocatori richieste'] = '%d usate su %d' % (conteggio[0], MAX_RICHIESTE_API)
+
+    if not lista and not rose:
+        # non si butta via quello che c'era
+        if vecchio:
+            esiti['giocatori'] = 'niente di nuovo: tengo quelli di %s' % vecchio.get('aggiornato', '')[:10]
+        return vecchio
+
+    doc = {
+        'aggiornato': datetime.now(timezone.utc).isoformat(timespec='seconds'),
+        'fonte': 'API-Football',
+        'stagione': anno,
+        'lista': lista or (vecchio or {}).get('lista') or [],
+        'rose': rose or (vecchio or {}).get('rose') or {},
+    }
+    with open(FILE_GIOCATORI, 'w', encoding='utf-8') as f:
+        json.dump(doc, f, ensure_ascii=False, separators=(',', ':'))
+    esiti['giocatori'] = 'scritti: %d giocatori (stagione %s), %d rose attuali' % (
+        len(doc['lista']), doc['stagione'], len(doc['rose']))
+    return doc
+
+
 # ────────────────────────────── unione e controlli ──────────────────────────────
 
 def carica_esistente():
@@ -878,7 +1037,8 @@ ETICHETTE = {'aggiornato': 'Aggiornato', 'esito': 'Esito', 'ultima_partita': 'Ul
              'partite_in_arrivo': 'Partite in arrivo', 'con_arbitro': 'Con arbitro',
              'con_tiri': 'Con tiri', 'con_xg': 'Con xG veri', 'con_quote': 'Con quote',
              'in_arrivo_con_quote': 'In arrivo con quote',
-             'in_arrivo_con_orario': 'In arrivo con orario', 'giocatori': 'Marcatori',
+             'in_arrivo_con_orario': 'In arrivo con orario', 'marcatori': 'Marcatori',
+             'giocatori': 'Giocatori con cartellini', 'rose': 'Rose attuali',
              'stagioni': 'Stagioni', 'dettaglio': 'Dettaglio per fonte', 'problemi': 'Problemi',
              'nota': 'Nota', 'nuove_oggi': 'Partite nuove oggi'}
 
@@ -1004,6 +1164,8 @@ def main():
         log('· API-Football: %d arbitri e %d partite di statistiche aggiunti' % (agg_arb, agg_stat))
     agg_arb += agg_arb_fd + agg_arb_espn
 
+    giocatori = None if leggero else aggiorna_giocatori(esiti, stagioni)
+
     partite = sorted(indice.values(), key=lambda p: (p['d'], p.get('c', '')))
     problemi = controlla(partite)
     adesso = datetime.now(timezone.utc).isoformat(timespec='seconds')
@@ -1020,7 +1182,7 @@ def main():
         calendario = unisci_calendario(calendario, espn_future)
     calendario = sorted([p for p in calendario if p.get('c') and p.get('v')],
                         key=lambda p: (p['d'], p.get('c', '')))
-    giocatori = prendi_giocatori(esiti)
+    marcatori = prendi_marcatori(esiti)
 
     doc = {'lega': 'Serie A', 'aggiornato': adesso,
            'fonte': ' + '.join(['football-data.co.uk', 'openfootball']
@@ -1029,8 +1191,8 @@ def main():
                                + (['API-Football'] if agg_stat else [])),
            'stagioni': sorted({p['s'] for p in partite if p.get('s')}),
            'partite': partite, 'calendario': calendario}
-    if giocatori:
-        doc['giocatori'] = giocatori
+    if marcatori:
+        doc['marcatori'] = marcatori
     with open(FILE_DATI, 'w', encoding='utf-8') as f:
         json.dump(doc, f, ensure_ascii=False, separators=(',', ':'))
 
@@ -1046,7 +1208,9 @@ def main():
         'con_quote': len([p for p in giocate if p.get('q')]),
         'in_arrivo_con_quote': len([p for p in calendario if p.get('q')]),
         'in_arrivo_con_orario': len([p for p in calendario if p.get('o')]),
+        'marcatori': len((marcatori or {}).get('lista', [])),
         'giocatori': len((giocatori or {}).get('lista', [])),
+        'rose': len((giocatori or {}).get('rose', {})),
         'stagioni': doc['stagioni'], 'dettaglio': esiti,
     })
     log('Scritte %d partite (%d giocate, ultima il %s), %d in calendario, %.0f KB'
