@@ -13,13 +13,26 @@ I dati si aggiornano da soli quattro volte al giorno, con un robot che vive su G
 
 | Sezione | Cosa ci trovi |
 |---|---|
-| **Giornata** | Le partite in arrivo: 1X2, gol attesi, Over/Under, Gol/NoGol, risultato più probabile. Toccando una partita: da dove viene il numero, la matrice di tutti i punteggi, primo tempo/finale, corner, cartellini con l'arbitro che scegli, e i cursori per scontare le assenze. |
-| **Valore** | Il confronto che può darti un vantaggio: la probabilità migliore disponibile contro il prezzo che offre **il tuo** operatore. Con la puntata proposta secondo Kelly. |
-| **Schedine** | Combinazioni multiple a quota scelta, ordinate per quanto reggono nello scenario sfavorevole. |
-| **Squadre** | Attacco contro difesa di tutte e 20, forza complessiva, forma recente. |
-| **Arbitri** | Chi fischia stretto e chi lascia correre, corretto per il numero di gare arbitrate. |
-| **Precisione** | Il backtest: errore del modello contro il mercato e contro il caso, curva di calibrazione, e i tre parametri che il backtest sceglie da sé. |
-| **Dati** | Stato dell'ultimo aggiornamento, tasto per rifare tutto, e la spiegazione onesta di cosa il modello non sa. |
+| **Giornata** | Le partite in arrivo e, per ciascuna, **cosa ha di diverso dalle altre della stessa giornata**. Toccandola: la matrice di tutti i punteggi, primo tempo/finale, corner, cartellini con l'arbitro che scegli, e i cursori per scontare le assenze. |
+| **Ammoniti** | Cartellini attesi partita per partita, ordinati. Chi fischia stretto, chi se le va a cercare. |
+| **Schedine** | Un solo campo — quanto ci punti — e da lì quota, probabilità vera e vincita possibile, alla quota equa e con il ricarico del banco. |
+| **Squadre** | Attacco contro difesa di tutte e 20, forma recente, corner. |
+| **Precisione** | Se ci si può fidare, detto in italiano prima che in numeri. Più sotto: calibrazione, confronto col mercato, e i pronostici che l'app ha segnato da sola. |
+| **Dati** | Stato di ogni fonte, quali mercati esistono dove giochi, e la spiegazione onesta di cosa il modello non sa. |
+
+### Due scelte che vale la pena spiegare
+
+**"Cosa ha di diverso" invece di "la più probabile".** Per un po' l'app ordinava
+i mercati per probabilità e chiamava "più solida" il primo. Sembra ragionevole e non lo è: il
+primo è sempre *Almeno un gol* al 93%, in tutte le partite di tutte le giornate, quota 1.08.
+Non è un consiglio, è una constatazione — e occupava il posto della cosa interessante. Quello
+che informa non è quanto una cosa è probabile, ma di quanto **questa** partita si scosta dalle
+altre. Se l'Under 2.5 vale il 66% dove il resto della giornata sta al 52%, quello è un fatto.
+
+**Nessun dato da inserire a mano.** L'unica cosa che l'app chiede è quanto vuoi puntare. I
+pronostici da confrontare con la realtà se li segna da sola, a ogni giornata, e li chiude
+quando i risultati entrano in archivio — così si trova giudicata sulle previsioni che ha fatto
+davvero, non su quelle che uno si ricorda di aver segnato quando andavano bene.
 
 ## Il modello
 
@@ -196,7 +209,7 @@ node tools/test_backtest.js                         # batte la baseline? è cali
 | `worker.js` | fa girare il motore fuori dal thread dell'interfaccia, così lo schermo non si blocca |
 | `scripts/build_data.py` | scarica e normalizza i dati da sei fonti (solo libreria standard) |
 | `.github/workflows/aggiorna-dati.yml` | il robot: quattro giri al giorno |
-| `tools/` | generatore di dati sintetici e le tre prove |
+| `tools/` | generatore di dati sintetici e le tre prove (41 sulle fonti, 43 sul motore, 15 sul backtest) |
 | `data/` | riempita dalla Action: `serie-a.json` e `meta.json` |
 
 ## Una nota sul senso di tutto questo

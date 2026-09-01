@@ -269,9 +269,10 @@ select{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:1
 .amm.caldo{background:var(--warn-soft);}
 .amm.freddo{background:var(--ok-soft);}
 .ammn{flex:1;min-width:0;}
-.ammn b{display:block;font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.ammn b{display:block;font-size:13.5px;font-weight:600;line-height:1.3;}
 .ammn em{font-style:normal;display:block;font-size:11px;color:var(--mute);margin-top:2px;}
-.ammv{flex:none;width:52px;text-align:right;font-family:var(--mono);font-size:14px;font-weight:700;}
+.ammv{flex:none;width:60px;text-align:right;font-family:var(--mono);font-size:14px;font-weight:700;}
+.ammv.grande{font-size:19px;width:64px;}
 .ammv span{display:block;font-size:8.5px;color:var(--mute);font-weight:400;font-family:var(--sys);
   letter-spacing:.2px;}
 
@@ -291,7 +292,8 @@ select{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:1
 .garar:last-child{border-bottom:0;}
 .gn{flex:1;font-size:14px;font-weight:500;}
 .gv{font-family:var(--mono);font-size:15px;font-weight:700;}
-.gv.neg{color:var(--ok);} .gv.pari{color:var(--mute);font-size:13px;}
+.gv.buono{color:var(--ok);} .gv.sotto{color:var(--amber);}
+.gv.pari{color:var(--mute);font-size:13px;}
 
 /* ── schedine ── */
 .riga-punta{display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
@@ -330,6 +332,29 @@ select{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:1
 .chips button.sc-visto{border-left:3px solid var(--accent);}
 .chips button.sc-probabile{border-left:3px solid var(--amber);}
 .chips button.sc-raro{border-left:3px solid var(--line);}
+
+
+/* ── passata di grafica ──────────────────────────────────────────────────
+   Tre cose sole, ripetute ovunque: una gerarchia di dimensioni che si legge a
+   colpo d'occhio, schede che stanno su un piano leggermente sopra lo sfondo, e
+   spazi che respirano senza sprecare schermo. Il resto è già a posto. */
+body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;
+  letter-spacing:-.005em;}
+.card{border-radius:16px;box-shadow:0 1px 2px rgba(22,33,29,.05),0 1px 1px rgba(22,33,29,.03);}
+@media (prefers-color-scheme:dark){ .card{box-shadow:none;border:1px solid var(--line2);} }
+.top h1{letter-spacing:-1px;}
+.h2{margin-top:26px;}
+.h2:first-child{margin-top:4px;}
+.match{transition:transform .12s ease, box-shadow .12s ease;}
+.match:active{transform:scale(.988);}
+.amm:active{background:var(--card2);}
+.sfida .sq{font-size:17px;letter-spacing:-.3px;}
+.mini .v{font-variant-numeric:tabular-nums;}
+.kpi .v,.row .v,.mkt .mp,.ammv,.vincita .v{font-variant-numeric:tabular-nums;}
+.hero{border-radius:16px;}
+.tab{transition:color .12s ease;}
+.tab.on svg{transform:translateY(-1px);}
+.btn{border-radius:11px;}
 
 @media (min-width:720px){
   .top{padding-left:calc((100% - 680px)/2 + 16px);padding-right:calc((100% - 680px)/2 + 16px);}
@@ -1227,24 +1252,37 @@ function tabAmmoniti(){
     return {p: p, car: car};
   }).sort(function(x, y){ return y.car.gialliTotali - x.car.gialliTotali; });
 
-  h += '<div class="card">' + righe.map(function(r, i){
+  var conArbitro = righe.filter(function(r){ return r.car.noto; }).length;
+  h += '<div class="card">' + righe.map(function(r){
     var c = r.car;
-    var caldo = c.gialliTotali > a.mediaGialli * 1.12;
-    var freddo = c.gialliTotali < a.mediaGialli * 0.88;
+    var caldo = c.gialliTotali > a.mediaGialli * 1.10;
+    var freddo = c.gialliTotali < a.mediaGialli * 0.90;
     return '<div class="amm'+(caldo?' caldo':(freddo?' freddo':''))+'" onclick="apriPartita('+
       prossime.indexOf(r.p)+')">'+
       '<div class="ammn"><b>'+esc(r.p.c)+' – '+esc(r.p.v)+'</b>'+
       '<em>'+esc(dataBreve(r.p.d))+(r.p.o?' · '+esc(r.p.o):'')+
-      (c.noto ? ' · '+esc(c.arbitro) : ' · arbitro non designato')+'</em></div>'+
-      '<div class="ammv">'+nu(c.gialliTotali,1)+'<span>gialli</span></div>'+
+      (c.noto ? ' · '+esc(c.arbitro) : '')+'</em></div>'+
+      '<div class="ammv grande">'+nu(c.gialliTotali,1)+'<span>gialli attesi</span></div>'+
       '<div class="ammv">'+pc(c.oltre35)+'<span>oltre 3.5</span></div>'+
-      '<div class="ammv">'+pc(c.oltre45)+'<span>oltre 4.5</span></div>'+
     '</div>';
   }).join('') + '</div>';
 
-  h += '<div class="note">Verde: partita più tranquilla della media. Rosso: più nervosa. '+
-    'Tocca una riga per aprire la partita e scegliere l\'arbitro designato, se lo sai — '+
-    'i numeri cambiano parecchio.</div>';
+  h += '<div class="note">Verde: più tranquilla della media. Rosso: più nervosa. '+
+    'Tocca una riga per aprire la partita, vedere anche la soglia 4.5 e scegliere l\'arbitro '+
+    'designato.</div>';
+  if(conArbitro < righe.length){
+    h += '<div class="note amber"><b>Nessun arbitro ancora designato per '+
+      (righe.length - conArbitro)+' di queste partite.</b> Senza il nome, qui c\'è solo quanto se le '+
+      'vanno a cercare le due squadre, e infatti i numeri si somigliano tutti: stanno fra '+
+      nu(Math.min.apply(null, righe.map(function(r){return r.car.gialliTotali;})),1)+' e '+
+      nu(Math.max.apply(null, righe.map(function(r){return r.car.gialliTotali;})),1)+'. '+
+      'Con l\'arbitro la forbice si apre parecchio: fra il più severo e il più permissivo del '+
+      'campionato ballano '+
+      nu(a.arbitri.filter(function(x){return x.n>=8;})[0].gialliCorretti -
+         a.arbitri.filter(function(x){return x.n>=8;}).slice(-1)[0].gialliCorretti, 1)+
+      ' gialli a partita. Le designazioni escono il giovedì o il venerdì: torna qui allora, '+
+      'oppure impostale a mano dentro la partita.</div>';
+  }
 
   h += '<div class="h2">Chi fischia più stretto<span class="r">'+
     a.arbitri.filter(function(x){ return x.n>=8; }).length+'</span></div><div class="card">'+
@@ -1606,9 +1644,9 @@ function tabPrecisione(){
   h += '<div class="kpi">'+
     '<div><div class="l">Quanto sbaglio</div><div class="v">'+(errCal!=null?nu(errCal*100,1):'—')+
       '<span style="font-size:13px"> pt</span></div>'+
-      '<div class="s">di scarto medio fra quello che dico e quello che succede</div></div>'+
+      '<div class="s">di scarto medio</div></div>'+
     '<div><div class="l">Esito azzeccato</div><div class="v">'+pc(b.modello.accuratezza)+'</div>'+
-      '<div class="s">quando indico 1, X o 2 come più probabile</div></div>'+
+      '<div class="s">indicando 1, X o 2</div></div>'+
     '<div><div class="l">Partite provate</div><div class="v">'+b.partite+'</div>'+
       '<div class="s">dal '+esc(dataBreve(b.da))+'</div></div>'+
   '</div>';
@@ -1619,11 +1657,13 @@ function tabPrecisione(){
     var vsCaso = (1 - (c.ancorato||c.modello).rps/c.baseline.rps)*100;
     var soloModello = (1 - c.modello.rps/c.mercato.rps)*100;
     h += '<div class="h2">Contro chi mi misuro</div><div class="card">'+
-      '<div class="gara"><div class="garar"><span class="gn">Chi tira a indovinare</span>'+
-        '<span class="gv neg">−'+nu(vsCaso,0)+'%</span></div>'+
-      '<div class="garar"><span class="gn">Le quote di chiusura</span>'+
-        '<span class="gv '+(vsMerc>=-1?'pari':'neg')+'">'+
-        (Math.abs(vsMerc)<1 ? 'alla pari' : (vsMerc>0?'+':'−')+nu(Math.abs(vsMerc),1)+'%')+'</span></div>'+
+      '<div class="gara">'+
+      '<div class="garar"><span class="gn">Contro chi tira a indovinare</span>'+
+        '<span class="gv buono">'+nu(vsCaso,0)+'% meglio</span></div>'+
+      '<div class="garar"><span class="gn">Contro le quote di chiusura</span>'+
+        '<span class="gv '+(Math.abs(vsMerc)<1?'pari':(vsMerc>0?'buono':'sotto'))+'">'+
+        (Math.abs(vsMerc)<1 ? 'alla pari'
+          : nu(Math.abs(vsMerc),1)+'% '+(vsMerc>0?'meglio':'sotto'))+'</span></div>'+
       '</div>'+
       '<div class="note"><p>Contro chi indovina con le frequenze storiche sono <b>'+nu(vsCaso,0)+
       '% più preciso</b>. Contro le quote di chiusura sono <b>'+
