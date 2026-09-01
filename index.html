@@ -270,6 +270,33 @@ select{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:1
 .vesito.neg{color:var(--mute);}
 .vesito.mute{color:var(--mute);}
 .vesito span{display:block;font-family:var(--mono);font-weight:500;}
+/* ── registro ── */
+.seg{display:flex;gap:4px;background:var(--card2);padding:3px;border-radius:11px;margin-bottom:16px;}
+.seg button{flex:1;border:0;background:none;color:var(--mute);font-size:13px;font-weight:600;
+  padding:8px 6px;border-radius:9px;cursor:pointer;font-family:inherit;
+  display:flex;align-items:center;justify-content:center;gap:6px;}
+.seg button.on{background:var(--card);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.09);}
+.seg button i{font-style:normal;font-family:var(--mono);font-size:10px;background:var(--accent);
+  color:#fff;border-radius:8px;padding:1px 5px;}
+.vsalva{flex:none;}
+.piu{width:30px;height:30px;border-radius:9px;border:1px solid var(--line);background:var(--card);
+  color:var(--accent);font-size:17px;font-weight:600;line-height:1;cursor:pointer;font-family:inherit;}
+.piu.off{color:var(--line);cursor:default;}
+.esi{font-size:9.5px;font-weight:600;padding:2px 6px;border-radius:6px;white-space:nowrap;}
+.esi.ok{background:var(--ok-soft);color:var(--ok);}
+.esi.ko{background:var(--warn-soft);color:var(--warn);}
+.esi.ap{background:var(--amber-soft);color:var(--amber);}
+.xis{border:0;background:none;color:var(--mute);font-size:17px;line-height:1;cursor:pointer;
+  padding:2px 4px;font-family:inherit;}
+.formg{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.formg label{font-size:11px;color:var(--mute);font-weight:600;display:flex;flex-direction:column;gap:4px;}
+.formg label:first-child{grid-column:1 / -1;}
+.formg select,.formg input{padding:8px 10px;border:1px solid var(--line);border-radius:9px;
+  background:var(--bg);color:var(--ink);font-size:13.5px;font-family:inherit;width:100%;}
+.formg input{font-family:var(--mono);}
+.dump{width:100%;height:70px;border:1px solid var(--line);border-radius:9px;background:var(--card2);
+  color:var(--mute);font-family:var(--mono);font-size:10px;padding:8px;resize:vertical;}
+
 @media (min-width:720px){
   .top{padding-left:calc((100% - 680px)/2 + 16px);padding-right:calc((100% - 680px)/2 + 16px);}
   .tabs{padding-left:calc((100% - 680px)/2);padding-right:calc((100% - 680px)/2);}
@@ -293,17 +320,30 @@ var S = {
   stato: 'carico', errore: null, avanzamento: 0, fase: 'Carico i dati',
   aggiustamenti: {}, arbitroScelto: {}, aggiornando: false, tempoCalcolo: 0
 };
-var VERSIONE = '3.0';
+var VERSIONE = '3.1';
 /* Un consiglio su una scommessa che il tuo operatore non accetta è un consiglio
    inutile. Questo è l'insieme standard che si trova su Sporttip; il resto resta
    disponibile ma spento, e si accende dalla sezione Dati. */
-var MERCATI_PRESET = ['1','X','2','1X','X2','12',
-  'O15','U15','O25','U25','O35','U35','MG13','MG24',
+/* Quello che si trova davvero su Sporttip, e nient'altro.
+
+   Il criterio non è "quali mercati so calcolare": sono sessantacinque. È quali
+   puoi effettivamente giocare. Un modello che ti consiglia "Gol nel primo
+   tempo" come giocata più solida, quando sul tuo operatore quel mercato non
+   esiste, non ti ha dato un consiglio: ti ha fatto perdere tempo e ti ha tolto
+   di mezzo la giocata buona, che era seconda in classifica.
+
+   Gli altri restano tutti accesi dalla sezione Dati, uno per uno. Se il tuo
+   operatore ne ha di più, accendili: nessuno qui sa cosa offre il tuo. */
+var MERCATI_PRESET = [
+  '1','X','2','1X','X2','12',
+  'O05','O15','U15','O25','U25','O35','U35','O45','U45',
+  'DISP','PARI',
   'GG','NG','SC','SV',
-  'TC05','TV05','CSECCA','VSECCA','H1C','H1V',
-  '1O25','1U25','2O25','2U25','1XO25','X2O25','GGO25','NGU25','1GG',
-  'PT1','PTX','PT2','PT1X','PTX2','PTO05','PTGG','STO05','GENT'];
-var CHIAVE_MERCATI = 'seriea_mercati_v2';           // si vede nella sezione Dati: serve a sapere cosa si sta guardando
+  'MG13','MG24','MG25',
+  'TC05','TV05',
+  'H1C','H1V','CSECCA','VSECCA'
+];
+var CHIAVE_MERCATI = 'seriea_mercati_v3';           // si vede nella sezione Dati: serve a sapere cosa si sta guardando
 var CHIAVE_CACHE = 'seriea_modello_v3';
 
 /* ══════════════════════════════════════════════════════════════
@@ -508,6 +548,7 @@ function applicaRisultato(ris, daCache){
   S.simCache = {};
   S.daCache = !!daCache;
   S.stato = 'pronto';
+  chiudiGiocate();          /* le partite giocate chiudono da sole le giocate aperte */
   render();
 }
 
@@ -914,6 +955,173 @@ function tabGiornata(){
 }
 
 /* ══════════════════════════════════════════════════════════════
+   REGISTRO DELLE GIOCATE
+
+   Questa è la sezione che serve davvero, ed è anche l'unica che può dirti una
+   cosa spiacevole. Tutto il resto dell'app stima probabilità; qui si controlla
+   se quelle stime valgono qualcosa quando ci metti sopra dei soldi.
+
+   Il punto delicato è che una schedina vinta non dimostra niente. Dieci
+   pronostici al 70% presi otto volte su dieci sono esattamente quello che il
+   modello prometteva: non è una conferma, è la normalità. E una serie di
+   sconfitte non dimostra il contrario. L'unico modo di sapere se hai un
+   vantaggio è misurarlo su tante giocate, e confrontare le probabilità del
+   modello con quelle implicite nelle quote CHE HAI PRESO TU.
+
+   Due misure, perché una sola non basta:
+
+   · il GUADAGNO. È quello che ti interessa, ed è quello che converge più
+     lentamente di tutti: per distinguere un vantaggio del 5% dal rumore
+     servono più di mille giocate. Fino a lì il saldo dice poco.
+
+   · il CONFRONTO CON LA QUOTA. Su ogni giocata si guarda chi ha stimato meglio
+     fra il modello e il banco. Converge molto prima — un centinaio di giocate
+     comincia a parlare — perché usa l'intera probabilità e non solo il sì/no
+     del risultato.
+
+   Le giocate si chiudono da sole: quando la partita entra nell'archivio, l'app
+   legge il risultato e decide. La regola con cui decide è LA STESSA con cui il
+   mercato viene calcolato — vedi haVinto() dentro modello.js — perché una
+   regola scritta due volte è una regola che prima o poi si contraddice.
+   ══════════════════════════════════════════════════════════════ */
+
+var CHIAVE_REGISTRO = 'seriea_registro_v1';
+
+function registro(){
+  if(S.registro) return S.registro;
+  try{ S.registro = JSON.parse(localStorage.getItem(CHIAVE_REGISTRO) || '[]'); }
+  catch(e){ S.registro = []; }
+  if(!Array.isArray(S.registro)) S.registro = [];
+  return S.registro;
+}
+function salvaRegistro(){
+  try{ localStorage.setItem(CHIAVE_REGISTRO, JSON.stringify(S.registro || [])); }catch(e){}
+}
+function idGiocata(){
+  return 'g' + Date.now().toString(36) + Math.floor(Math.random()*1e4).toString(36);
+}
+
+/* Aggiunge una giocata partendo da una riga della sezione Valore: la
+   probabilità del modello viene congelata ADESSO, perché fra due giorni sarà
+   diversa e confrontarsi con una stima aggiornata a posteriori è il modo più
+   elegante di darsi ragione da soli. */
+function aggiungiGiocata(dati){
+  var r = registro();
+  r.push({
+    id: idGiocata(),
+    d: dati.d, c: dati.c, v: dati.v,
+    mercato: dati.mercato, nome: dati.nome,
+    quota: dati.quota, puntata: dati.puntata || null,
+    pModello: dati.pModello == null ? null : Math.round(dati.pModello*10000)/10000,
+    pMin: dati.pMin == null ? null : Math.round(dati.pMin*10000)/10000,
+    schedina: dati.schedina || null,
+    salvata: new Date().toISOString().slice(0,16),
+    esito: null
+  });
+  S.registro = r; salvaRegistro();
+  return r[r.length-1];
+}
+function togliGiocata(id){
+  S.registro = registro().filter(function(g){ return g.id !== id; });
+  salvaRegistro(); render();
+}
+function svuotaRegistro(){
+  if(!confirm('Cancello tutte le giocate registrate? Non si torna indietro.')) return;
+  S.registro = []; salvaRegistro(); render();
+}
+
+/* ── chiusura automatica ──────────────────────────────────────────────────
+   Cerca la partita nell'archivio e chiede al modello chi ha vinto. Le partite
+   si spostano di data fra una fonte e l'altra, quindi si accetta uno scarto di
+   qualche giorno, come fa lo script che unisce i dati. */
+function trovaPartita(g){
+  var ps = (S.doc && S.doc.partite) || [];
+  var meglio = null, minScarto = 99;
+  for(var i=0;i<ps.length;i++){
+    var p = ps[i];
+    if(p.c !== g.c || p.v !== g.v || p.gc == null) continue;
+    var scarto = Math.abs(M.giorni(p.d, g.d));
+    if(scarto <= 4 && scarto < minScarto){ meglio = p; minScarto = scarto; }
+  }
+  return meglio;
+}
+function chiudiGiocate(){
+  var r = registro(), cambiato = false;
+  for(var i=0;i<r.length;i++){
+    if(r[i].esito !== null && r[i].esito !== undefined) continue;
+    var p = trovaPartita(r[i]);
+    if(!p) continue;
+    var esito = M.haVinto(r[i].mercato, p.gc, p.gv, p.ptc, p.ptv);
+    if(esito === null) continue;
+    r[i].esito = esito;
+    r[i].risultato = p.gc + '-' + p.gv;
+    cambiato = true;
+  }
+  if(cambiato){ S.registro = r; salvaRegistro(); }
+  return cambiato;
+}
+
+/* ── i conti ─────────────────────────────────────────────────────────────── */
+function bilancio(){
+  var r = registro().filter(function(g){ return g.esito === true || g.esito === false; });
+  if(!r.length) return null;
+  var n = r.length, vinte = 0, attese = 0, puntato = 0, incassato = 0, conPuntata = 0;
+  var llModello = 0, llMercato = 0, nConfronto = 0, scartoTot = 0;
+  r.forEach(function(g){
+    if(g.esito) vinte++;
+    var pq = g.quota > 1 ? 1/g.quota : null;      // probabilità implicita, margine incluso
+    if(g.pModello != null){
+      attese += g.pModello;
+      if(pq != null){
+        var y = g.esito ? 1 : 0;
+        llModello += -(y ? Math.log(Math.max(1e-9,g.pModello)) : Math.log(Math.max(1e-9,1-g.pModello)));
+        llMercato += -(y ? Math.log(Math.max(1e-9,pq)) : Math.log(Math.max(1e-9,1-pq)));
+        scartoTot += g.pModello - pq;
+        nConfronto++;
+      }
+    }
+    if(g.puntata > 0){
+      conPuntata++;
+      puntato += g.puntata;
+      if(g.esito) incassato += g.puntata * g.quota;
+    }
+  });
+  var roi = puntato > 0 ? (incassato - puntato)/puntato : null;
+  /* Quanto rumore c'è ancora addosso al saldo: deviazione standard del
+     rendimento medio, con le quote davvero giocate. */
+  var varianza = 0;
+  r.forEach(function(g){
+    if(!(g.puntata > 0)) return;
+    var p = g.pModello != null ? g.pModello : (g.quota>1?1/g.quota:0.5);
+    var vinci = g.quota - 1, perdi = -1;
+    var media = p*vinci + (1-p)*perdi;
+    varianza += p*Math.pow(vinci-media,2) + (1-p)*Math.pow(perdi-media,2);
+  });
+  var seRoi = conPuntata ? Math.sqrt(varianza)/conPuntata : null;
+  return {
+    n: n, vinte: vinte, attese: attese,
+    tassoReale: vinte/n, tassoAtteso: attese ? attese/n : null,
+    puntato: puntato, incassato: incassato, saldo: incassato - puntato, roi: roi,
+    seRoi: seRoi, conPuntata: conPuntata,
+    llModello: nConfronto ? llModello/nConfronto : null,
+    llMercato: nConfronto ? llMercato/nConfronto : null,
+    scartoMedio: nConfronto ? scartoTot/nConfronto : null,
+    nConfronto: nConfronto,
+    aperte: registro().length - n
+  };
+}
+
+/* Quante giocate mancano prima che il saldo voglia dire qualcosa. È il numero
+   che nessuno ha voglia di guardare, ed è il più onesto della pagina. */
+function quanteServono(b, vantaggio){
+  vantaggio = vantaggio || 0.05;
+  if(!b || !b.seRoi || !b.conPuntata) return null;
+  var sdSingola = b.seRoi * b.conPuntata;             // deviazione di una giocata sola
+  var n = Math.pow(1.96 * sdSingola / vantaggio, 2);
+  return Math.ceil(n);
+}
+
+/* ══════════════════════════════════════════════════════════════
    VISTA: VALORE
 
    Qui bisogna essere precisi su che cosa vuol dire "valore", perché è la parola
@@ -1022,9 +1230,33 @@ function rigaValore(c){
       (v.puntata ? '<span>punta '+nu(v.puntata,2)+'</span>' : '<span>Kelly ¼ '+pc(v.kellyPrudente*0.25,1)+'</span>')+
       '</div>';
   }
+  var salva = c.quota
+    ? '<button class="piu" title="Segna nel registro" onclick="salvaDaValore(\''+
+        c.chiave.replace(/'/g,"\\'")+'\')">+</button>'
+    : '<button class="piu off" disabled title="Scrivi prima la quota">+</button>';
   return '<div class="vrow" data-p="'+(v && v.conviene ? '1' : '0')+'">'+
     '<div class="vinfo">'+testa+'</div><div class="vnum">'+stima+'</div>'+
-    '<div class="vin">'+campo+esito+'</div></div>';
+    '<div class="vin">'+campo+esito+'</div>'+
+    '<div class="vsalva">'+salva+'</div></div>';
+}
+
+/* Salva la selezione con la probabilità che il modello le dà ADESSO. */
+function salvaDaValore(chiave){
+  var c = candidatiValore().filter(function(x){ return x.chiave === chiave; })[0];
+  if(!c || !c.quota) return;
+  var doppia = registro().filter(function(g){
+    return g.d===c.partita.d && g.c===c.partita.c && g.v===c.partita.v && g.mercato===c.mercato.id;
+  }).length;
+  if(doppia && !confirm('Questa giocata è già nel registro. La segno lo stesso?')) return;
+  var st = prompt('Quanto ci punti? (lascia vuoto se è una gamba di multipla)', '');
+  var n = parseFloat(String(st||'').replace(',','.'));
+  aggiungiGiocata({
+    d: c.partita.d, c: c.partita.c, v: c.partita.v,
+    mercato: c.mercato.id, nome: c.mercato.nome, quota: c.quota,
+    puntata: isFinite(n) && n > 0 ? n : null,
+    pModello: c.mercato.p, pMin: c.mercato.p05
+  });
+  render();
 }
 
 function elencoValore(){
@@ -1115,7 +1347,23 @@ function dissensi(){
   return h;
 }
 
+function vistaValore(){ return S.vistaValore || 'quote'; }
+function cambiaVistaValore(v){ S.vistaValore = v; render(); window.scrollTo(0,0); }
+
+/* Otto linguette in fondo non ci stanno su un telefono, e queste due parlano
+   della stessa cosa — i tuoi soldi — quindi stanno insieme. */
 function tabValore(){
+  var v = vistaValore();
+  var b = bilancio();
+  var h = '<div class="seg">'+
+    '<button class="'+(v==='quote'?'on':'')+'" onclick="cambiaVistaValore(\'quote\')">Quote</button>'+
+    '<button class="'+(v==='registro'?'on':'')+'" onclick="cambiaVistaValore(\'registro\')">Registro'+
+      (b && b.n ? '<i>'+b.n+'</i>' : '')+'</button>'+
+    '</div>';
+  return h + (v === 'registro' ? tabRegistro() : vistaQuote());
+}
+
+function vistaQuote(){
   var back = S.back;
   var h = '<div class="h2">Quanto vale davvero</div>';
   h += '<p class="lede">La probabilità qui è quella <b>ancorata al mercato</b>: nel backtest '+
@@ -1143,6 +1391,223 @@ function tabValore(){
     'che la puntata proposta parte dal pavimento della fascia e poi si divide ancora per quattro. '+
     'Anche così, una serie di risultati sfortunati è normale e non significa che qualcosa si sia rotto.</div>';
   return h;
+}
+
+function schedaBilancio(b){
+  if(!b) return '';
+  var h = '<div class="kpi">'+
+    '<div><div class="l">Giocate chiuse</div><div class="v">'+b.n+'</div>'+
+      '<div class="s">'+b.vinte+' vinte'+(b.aperte?' · '+b.aperte+' aperte':'')+'</div></div>'+
+    '<div><div class="l">Prese</div><div class="v">'+pc(b.tassoReale)+'</div>'+
+      '<div class="s">'+(b.tassoAtteso!=null?'promesse '+pc(b.tassoAtteso):'—')+'</div></div>'+
+    '<div><div class="l">Saldo</div><div class="v '+(b.saldo>0?'pos':(b.saldo<0?'neg':''))+'">'+
+      (b.saldo>=0?'+':'−')+nu(Math.abs(b.saldo),2)+'</div>'+
+      '<div class="s">'+(b.roi!=null?(b.roi>=0?'+':'−')+pc(Math.abs(b.roi))+' sul puntato':'senza puntate')+'</div></div>'+
+  '</div>';
+  if(b.tassoAtteso != null){
+    var d = b.tassoReale - b.tassoAtteso;
+    h += '<div class="note'+(Math.abs(d)>0.12?' amber':'')+'"><p>Il modello prometteva <b>'+
+      pc(b.tassoAtteso)+'</b> di riuscita su queste giocate, ne sono arrivate <b>'+pc(b.tassoReale)+'</b>. '+
+      (Math.abs(d) < 0.08
+        ? 'È in linea: il modello dice quello che poi succede.'
+        : (d > 0 ? 'Sei sopra: su poche giocate è quasi sempre fortuna, non bravura.'
+                 : 'Sei sotto: su poche giocate è quasi sempre sfortuna, non un modello rotto.'))+
+      '</p></div>';
+  }
+  return h;
+}
+
+function schedaConfronto(b){
+  if(!b || b.nConfronto < 5) return '<div class="note">Il confronto con le quote comincia a dire '+
+    'qualcosa da una decina di giocate chiuse in su.</div>';
+  var meglio = b.llModello < b.llMercato;
+  var diff = (1 - b.llModello/b.llMercato) * 100;
+  return '<div class="card">'+
+    barreOriz([
+      {l:'Modello', v: 1/b.llModello, testo: nu(b.llModello,4), colore: meglio?'var(--c1)':'var(--c9)'},
+      {l:'La quota che hai preso', v: 1/b.llMercato, testo: nu(b.llMercato,4), colore: meglio?'var(--c9)':'var(--c1)'}
+    ])+
+    '<div class="note"><p>Su <b>'+b.nConfronto+' giocate</b>, chi ha stimato meglio fra il modello e il '+
+    'banco. Il numero è l\'errore medio: <b>più basso è, meglio è</b>.</p>'+
+    '<p>'+(meglio
+      ? 'Per ora il modello sta <b>'+nu(diff,1)+'% avanti</b> alle quote che hai preso. '+
+        'Se regge su qualche centinaio di giocate, è un vantaggio vero. Su '+b.nConfronto+' non lo è ancora.'
+      : 'Per ora il modello sta <b>'+nu(-diff,1)+'% dietro</b> alle quote che hai preso. '+
+        'È il risultato normale, ed è il motivo per cui l\'app ancora le sue stime al mercato.')+'</p>'+
+    (b.scartoMedio != null
+      ? '<p>In media il modello dà a queste giocate <b>'+(b.scartoMedio>=0?'+':'−')+
+        nu(Math.abs(b.scartoMedio)*100,1)+' punti percentuali</b> rispetto alla quota. '+
+        (b.scartoMedio > 0.02
+          ? 'Uno scarto positivo è la premessa del vantaggio, non la prova: va confermato dai risultati.'
+          : 'Uno scarto vicino a zero vuol dire che stai giocando le quote al loro giusto valore, '+
+            'e quindi che nel lungo periodo paghi il margine del banco.')+'</p>'
+      : '')+
+    '</div></div>';
+}
+
+function schedaRumore(b){
+  if(!b || !b.conPuntata) return '';
+  var n5 = quanteServono(b, 0.05), n10 = quanteServono(b, 0.10);
+  var banda = b.seRoi != null ? 1.96*b.seRoi : null;
+  return '<div class="card">'+
+    (b.roi != null && banda != null
+      ? '<div class="hero"><div class="l">Il tuo rendimento, con l\'incertezza vera</div>'+
+        '<div class="v" style="font-size:24px">'+(b.roi>=0?'+':'−')+pc(Math.abs(b.roi))+
+        ' <span style="font-size:15px;color:var(--mute)">± '+pc(banda)+'</span></div>'+
+        '<div class="s">Su '+b.conPuntata+' giocate con puntata. La fascia è larga così perché '+
+        'le scommesse sono rumorose: finché comprende lo zero, non puoi dire di essere in vantaggio.</div></div>'
+      : '')+
+    '<div class="row"><div class="n">Per distinguere un vantaggio del 5%<em>dal puro caso, con ragionevole sicurezza</em></div>'+
+      '<div class="v">'+(n5?n5.toLocaleString('it-CH'):'—')+'</div></div>'+
+    '<div class="row"><div class="n">Per distinguerne uno del 10%</div>'+
+      '<div class="v">'+(n10?n10.toLocaleString('it-CH'):'—')+'</div></div>'+
+    '<div class="note warn"><p>Questi numeri sono il motivo per cui quasi nessuno sa se sta '+
+    'guadagnando. Con le quote che giochi tu servono <b>'+(n5?n5.toLocaleString('it-CH'):'moltissime')+
+    ' giocate</b> perché il saldo distingua un vantaggio del 5% dalla fortuna. Ne hai fatte <b>'+
+    b.conPuntata+'</b>.</p><p>Ecco perché il confronto con le quote qui sopra conta di più: usa '+
+    'l\'intera probabilità invece del solo sì/no, e si stabilizza dieci volte prima.</p></div></div>';
+}
+
+/* "Aperta" da sola non dice niente quando la partita si è giocata tre giorni fa.
+   I due casi sono diversi e la differenza non è colpa tua: la fonte pubblica i
+   risultati con qualche giorno di ritardo, e finché non arrivano l'app non può
+   sapere com'è finita. Dirlo è meglio che lasciarti lì a chiederti perché. */
+function statoGiocata(g){
+  if(g.esito === true) return {classe:'ok', testo:'vinta'};
+  if(g.esito === false) return {classe:'ko', testo:'persa'};
+  var oggi = oggiISO();
+  if(g.d >= oggi) return {classe:'ap', testo:'da giocare'};
+  return {classe:'ap', testo:'attende i dati'};
+}
+function rigaRegistro(g){
+  var st = statoGiocata(g);
+  var stato = '<span class="esi '+st.classe+'">'+st.testo+'</span>';
+  var pq = g.quota > 1 ? 1/g.quota : null;
+  var scarto = (g.pModello != null && pq != null) ? g.pModello - pq : null;
+  return '<div class="row"><div class="n">'+esc(g.nome || g.mercato)+
+    '<em>'+esc(sigla(g.c))+'–'+esc(sigla(g.v))+' · '+esc(dataBreve(g.d))+
+    (g.risultato ? ' · '+esc(g.risultato) : '')+
+    (g.puntata ? ' · '+nu(g.puntata,2)+' chf' : '')+'</em></div>'+
+    '<div class="v" style="font-size:12.5px">'+nu(g.quota,2)+
+    '<span>'+(g.pModello!=null?pc(g.pModello):'—')+
+    (scarto!=null ? ' · '+(scarto>=0?'+':'−')+nu(Math.abs(scarto)*100,0)+'pt' : '')+'</span></div>'+
+    '<div style="flex:none;display:flex;align-items:center;gap:6px">'+stato+
+    '<button class="xis" onclick="togliGiocata(\''+g.id+'\')" aria-label="Togli">×</button></div></div>';
+}
+
+function tabRegistro(){
+  chiudiGiocate();
+  var r = registro(), b = bilancio();
+  var h = '<div class="h2">Registro delle giocate</div>';
+  if(!r.length){
+    h += '<div class="card"><div class="empty"><b>Ancora nessuna giocata</b>'+
+      'Dalla sezione <b>Valore</b>, scrivi la quota che ti danno accanto a una selezione e premi '+
+      '<b>+</b>: la giocata finisce qui, con la probabilità che il modello le dava in quel momento.<br><br>'+
+      'Quando la partita entra nell\'archivio, l\'app la chiude da sola.</div>'+
+      formAggiungi()+'</div>';
+    h += '<div class="note"><p>A cosa serve: una schedina vinta non dice se il modello è buono. '+
+      'Dieci pronostici al 70% presi otto volte è <b>esattamente quello che il modello prometteva</b> — '+
+      'la normalità, non una conferma. L\'unico modo di sapere se hai un vantaggio è segnare tutto e '+
+      'guardare i numeri dopo qualche centinaio di giocate.</p>'+
+      '<p>Qui la probabilità del modello viene <b>congelata al momento in cui salvi</b>. Confrontarsi '+
+      'con una stima aggiornata dopo la partita è il modo più elegante di darsi ragione da soli.</p></div>';
+    return h;
+  }
+  h += schedaBilancio(b);
+  if(b){
+    h += '<div class="h2">Modello contro la tua quota</div>' + schedaConfronto(b);
+    h += '<div class="h2">Quanto rumore c\'è ancora</div>' + schedaRumore(b);
+  }
+  var aperte = r.filter(function(g){ return g.esito !== true && g.esito !== false; });
+  var inAttesa = aperte.filter(function(g){ return g.d < oggiISO(); });
+  if(inAttesa.length){
+    var ultima = S.meta && S.meta.ultima_partita ? S.meta.ultima_partita : null;
+    h += '<div class="note amber"><b>'+inAttesa.length+' giocat'+(inAttesa.length===1?'a':'e')+
+      ' aspetta'+(inAttesa.length===1?'':'no')+' i dati.</b> '+
+      (ultima ? 'L\'archivio arriva al <b>'+esc(dataLunga(ultima))+'</b>: la fonte pubblica i '+
+                'risultati con qualche giorno di ritardo. ' : '')+
+      'Si chiudono da sole al primo aggiornamento utile — non devi fare niente.</div>';
+  }
+  var chiuse = r.filter(function(g){ return g.esito === true || g.esito === false; });
+  aperte.sort(function(a,b2){ return a.d < b2.d ? -1 : 1; });
+  chiuse.sort(function(a,b2){ return a.d > b2.d ? -1 : 1; });
+  if(aperte.length){
+    h += '<div class="h2">In corso<span class="r">'+aperte.length+'</span></div><div class="card">'+
+      aperte.map(rigaRegistro).join('')+'</div>';
+  }
+  if(chiuse.length){
+    h += '<div class="h2">Chiuse<span class="r">'+chiuse.length+'</span></div><div class="card">'+
+      chiuse.slice(0,60).map(rigaRegistro).join('')+
+      (chiuse.length>60?'<div class="note">Mostrate le 60 più recenti di '+chiuse.length+'.</div>':'')+
+      '</div>';
+  }
+  h += '<div class="h2">Aggiungi a mano</div><div class="card">'+formAggiungi()+'</div>';
+  h += '<div class="h2">Copia di sicurezza</div><div class="card">'+
+    '<p class="lede">Il registro vive nel browser di questo telefono. Se cancelli i dati del sito, '+
+    'sparisce. Copia questo testo da qualche parte ogni tanto.</p>'+
+    '<textarea class="dump" readonly onclick="this.select()">'+esc(JSON.stringify(r))+'</textarea>'+
+    '<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">'+
+    '<button class="btn" onclick="importaRegistro()">Ripristina da un testo copiato</button>'+
+    '<button class="btn" onclick="svuotaRegistro()">Cancella tutto</button></div></div>';
+  return h;
+}
+
+function formAggiungi(){
+  var prossime = prossimePartite();
+  var archivio = ((S.doc && S.doc.partite) || []).slice(-60).reverse();
+  var opzioni = prossime.slice(0,20).concat(archivio).map(function(p){
+    return '<option value="'+esc(chiavePartita(p))+'">'+esc(dataBreve(p.d))+' · '+
+      esc(p.c)+' – '+esc(p.v)+(p.gc!=null?' ('+p.gc+'-'+p.gv+')':'')+'</option>';
+  }).join('');
+  var mercati = M.elencoMercati(M.mercatiDaMatrice(M.matriceRisultati(1.4,1.2,0,11)), ['Casa','Ospite'])
+    .concat(M.elencoTempi(M.mercatiTempi(2.6,0,0,[0.44,0.44]), ['Casa','Ospite']));
+  var voci = mercati.map(function(m){
+    return '<option value="'+esc(m.id)+'">'+esc(m.nome)+'</option>';
+  }).join('');
+  return '<div class="formg">'+
+    '<label>Partita<select id="regPartita">'+opzioni+'</select></label>'+
+    '<label>Mercato<select id="regMercato">'+voci+'</select></label>'+
+    '<label>Quota<input id="regQuota" type="number" inputmode="decimal" step="0.01" placeholder="1.85"></label>'+
+    '<label>Puntata<input id="regPuntata" type="number" inputmode="decimal" step="0.5" placeholder="facoltativa"></label>'+
+    '</div><button class="btn acc" style="margin-top:10px" onclick="aggiungiDaForm()">Aggiungi al registro</button>'+
+    '<div class="note">Per una partita già giocata la giocata si chiude subito. La probabilità del '+
+    'modello resta vuota: oggi il modello sa com\'è finita, e una stima fatta col senno di poi non '+
+    'vale niente.</div>';
+}
+
+function aggiungiDaForm(){
+  var k = document.getElementById('regPartita').value;
+  var idM = document.getElementById('regMercato').value;
+  var q = parseFloat(String(document.getElementById('regQuota').value||'').replace(',','.'));
+  var st = parseFloat(String(document.getElementById('regPuntata').value||'').replace(',','.'));
+  if(!(q > 1)){ alert('Serve una quota maggiore di 1.'); return; }
+  var parti = k.split('|');
+  var d = parti[0], c = parti[1], v = parti[2];
+  var futura = prossimePartite().filter(function(p){ return chiavePartita(p)===k; })[0];
+  var pMod = null, pMin = null, nome = idM;
+  if(futura){
+    var mk = mercatiDi(futura, 1200);
+    var voce = mk ? mk.voci.filter(function(m){ return m.id===idM; })[0] : null;
+    if(voce){ pMod = voce.p; pMin = voce.p05; nome = voce.nome; }
+  } else {
+    var finte = M.elencoMercati(M.mercatiDaMatrice(M.matriceRisultati(1.4,1.2,0,11)), [c, v])
+      .concat(M.elencoTempi(M.mercatiTempi(2.6,0,0,[0.44,0.44]), [c, v]));
+    var vv = finte.filter(function(m){ return m.id===idM; })[0];
+    if(vv) nome = vv.nome;
+  }
+  aggiungiGiocata({d:d, c:c, v:v, mercato:idM, nome:nome, quota:q,
+                   puntata: isFinite(st)&&st>0 ? st : null, pModello:pMod, pMin:pMin});
+  render();
+}
+
+function importaRegistro(){
+  var t = prompt('Incolla qui il testo del registro salvato:');
+  if(!t) return;
+  try{
+    var v = JSON.parse(t);
+    if(!Array.isArray(v)) throw new Error('non è un elenco');
+    S.registro = v; salvaRegistro(); render();
+  }catch(e){ alert('Non riesco a leggerlo: ' + (e.message||e)); }
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -1584,19 +2049,37 @@ function tabDati(){
       return '<div class="row"><div class="n">'+esc(s)+'<em>'+g+' giornate da 10 partite</em></div>'+
         '<div class="v">'+n+'<span>partite</span></div></div>';
     }).join('')+'</div>';
-  var tutti = M.elencoMercati({casa:.4,pari:.3,via:.3,gol:.5,o05:.9,o15:.7,o25:.5,o35:.3,o45:.2,
-    mg13:.6,mg24:.6,mg15:.7,segnaC:.7,segnaV:.6,cnp:.3,vnp:.3,c1x:.7,cx2:.6,c12:.7}, ['Casa','Trasferta']);
-  h += '<div class="h2">Mercati<span class="r">'+mercatiAttivi().length+' attivi</span></div><div class="card">'+
-    '<p class="lede">Un consiglio su una giocata che il tuo operatore non accetta non serve a niente. '+
-    'Qui scegli quali esistono davvero dove giochi: <b>la scelta più solida viene presa solo fra questi</b>. '+
-    'Partono attivi quelli che si trovano su Sporttip.</p>'+
-    '<div class="chips">'+tutti.map(function(m){
-      return '<button class="'+(mercatoAttivo(m.id)?'on':'')+'" onclick="commutaMercato(\''+m.id+'\')">'+
-        (mercatoAttivo(m.id)?'✓ ':'')+esc(m.nome.replace('Casa','1').replace('Trasferta','2'))+'</button>';
-    }).join('')+'</div>'+
-    '<button class="btn ghost sm" style="margin-top:12px" onclick="ripristinaMercati()">Rimetti quelli di Sporttip</button>'+
+  /* L'elenco si costruisce da una matrice finta ma VERA: così quando aggiungo
+     un mercato compare qui da solo, invece di restare invisibile perché mi sono
+     dimenticato di aggiungerlo anche a questa lista. */
+  var finta = M.mercatiDaMatrice(M.matriceRisultati(1.5, 1.2, -0.04, 11));
+  var tempiFinti = M.mercatiTempi(2.7, 0, -0.04, [0.44, 0.44]);
+  var tutti = M.elencoMercati(finta, ['1', '2']).concat(M.elencoTempi(tempiFinti, ['1', '2']));
+  var perGruppo = {}, ordineGruppi = [];
+  tutti.forEach(function(m){
+    if(!perGruppo[m.gruppo]){ perGruppo[m.gruppo] = []; ordineGruppi.push(m.gruppo); }
+    perGruppo[m.gruppo].push(m);
+  });
+  h += '<div class="h2">Mercati<span class="r">'+mercatiAttivi().length+' di '+tutti.length+'</span></div>'+
+    '<div class="card">'+
+    '<p class="lede">Un consiglio su una giocata che il tuo operatore non accetta non serve a niente: '+
+    'toglie il posto a quella buona. Qui scegli quali esistono davvero dove giochi — '+
+    '<b>la scelta più solida e la sezione Valore pescano solo fra questi</b>.</p>'+
+    '<p class="lede">Partono accesi i trenta che si trovano su Sporttip. Gli altri il modello li sa '+
+    'calcolare lo stesso, ma nessuno qui sa cosa offre il tuo operatore: se li trovi, accendili.</p>';
+  ordineGruppi.forEach(function(g){
+    h += '<div style="font-family:var(--mono);font-size:9.5px;letter-spacing:.8px;text-transform:uppercase;'+
+      'color:var(--mute);margin:14px 0 6px">'+esc(g)+'</div><div class="chips">'+
+      perGruppo[g].map(function(m){
+        return '<button class="'+(mercatoAttivo(m.id)?'on':'')+'" onclick="commutaMercato(\''+m.id+'\')">'+
+          (mercatoAttivo(m.id)?'✓ ':'')+esc(m.nome)+'</button>';
+      }).join('')+'</div>';
+  });
+  h += '<button class="btn ghost sm" style="margin-top:14px" onclick="ripristinaMercati()">'+
+    'Rimetti i trenta di Sporttip</button>'+
     '<div class="note">Se su Sporttip trovi qualcosa che qui non c\'è, dimmelo e lo aggiungo: '+
-    'ogni mercato è solo una somma di caselle della matrice dei risultati.</div></div>';
+    'ogni mercato è solo una somma di caselle della matrice dei risultati, e viene dalla stessa '+
+    'matrice di tutti gli altri — per questo non possono contraddirsi fra loro.</div></div>';
 
   h += '<div class="h2">Come funziona</div><div class="card"><div class="note">'+
     '<p><b>1. Le forze.</b> Ogni squadra ha due numeri: quanto segna e quanto concede. Si stimano tutti insieme '+
@@ -2008,7 +2491,8 @@ var TITOLI = {giornata:'Giornata', valore:'Valore', schedine:'Schedine', squadre
 function sottotitolo(){
   if(S.stato !== 'pronto') return 'MODELLO SERIE A';
   if(S.tab === 'schedine') return 'COMBINAZIONI E QUOTE EQUE';
-  if(S.tab === 'valore') return 'PROBABILITÀ CONTRO PREZZO';
+  if(S.tab === 'valore') return vistaValore()==='registro'
+    ? 'IL MODELLO ALLA PROVA DEI FATTI' : 'PROBABILITÀ CONTRO PREZZO';
   var q = S.back ? ('RPS ' + nu(S.back.modello.rps,4)) : '';
   var n = S.risultato ? S.risultato.partiteUsate : 0;
   return (n + ' PARTITE' + (q ? ' · ' + q.toUpperCase() : '')) +

@@ -693,6 +693,12 @@ function mercatiDaMatrice(m) {
     m1: 0, m2: 0, m3p: 0,
     /* gol esatti in tutta la partita */
     g0: 0, g1: 0, g2: 0, g3: 0, g4p: 0,
+    /* numero di reti dispari o pari (zero conta come pari).
+       Attenzione al nome: 'pari' da solo è già il PAREGGIO, e chiamare così
+       anche questo faceva sommare due probabilità diverse nella stessa
+       casella — con l'1X2 che smetteva di fare 1 e nessuno che se ne accorgeva
+       finché una prova non è diventata rossa. */
+    retiDispari: 0, retiPari: 0,
     /* combinazioni: esito e gol insieme, prese dalla stessa matrice */
     c1o25: 0, c1u25: 0, cXo25: 0, cXu25: 0, c2o25: 0, c2u25: 0,
     c1xo25: 0, cx2o25: 0, c1xu25: 0, cx2u25: 0,
@@ -739,6 +745,7 @@ function mercatiDaMatrice(m) {
     else if (d >= 3 || d <= -3) s.m3p += p;
     if (t === 0) s.g0 += p; else if (t === 1) s.g1 += p;
     else if (t === 2) s.g2 += p; else if (t === 3) s.g3 += p; else s.g4p += p;
+    if (t % 2) s.retiDispari += p; else s.retiPari += p;
     if (d > 0 && t > 2.5) s.c1o25 += p;
     if (d > 0 && t < 2.5) s.c1u25 += p;
     if (d === 0 && t > 2.5) s.cXo25 += p;
@@ -823,6 +830,8 @@ function elencoMercati(s, nomiSquadre) {
     m('G2', 'Due gol in tutto', 'Gol esatti', 'g2'),
     m('G3', 'Tre gol in tutto', 'Gol esatti', 'g3'),
     m('G4P', 'Quattro gol o più', 'Gol esatti', 'g4p'),
+    m('DISP', 'Numero di reti dispari', 'Dispari e pari', 'retiDispari'),
+    m('PARI', 'Numero di reti pari (0 compreso)', 'Dispari e pari', 'retiPari'),
     m('1O25', c + ' vince + Over 2.5', 'Combinazioni', 'c1o25'),
     m('1U25', c + ' vince + Under 2.5', 'Combinazioni', 'c1u25'),
     m('XO25', 'Pareggio + Over 2.5', 'Combinazioni', 'cXo25'),
@@ -877,14 +886,28 @@ var CAMPI_TEMPI = ['pt1', 'ptX', 'pt2', 'pt1x', 'ptx2', 'pt12', 'ptO05', 'ptO15'
 /* Da due matrici piccole (primo tempo, secondo tempo) ai mercati sui tempi.
    Otto reti per tempo bastano: oltre, la probabilità è sotto il miliardesimo. */
 function mercatiTempi(lam, mu, rho, quote, dentro) {
+  if (!quote) {
+    var vuoto = dentro || {};
+    for (var z = 0; z < CAMPI_TEMPI.length; z++) vuoto[CAMPI_TEMPI[z]] = 0;
+    return vuoto;
+  }
+  var l1 = limita(lam * quote[0], 0.02, 5), m1 = limita(mu * quote[1], 0.02, 5);
+  var l2 = limita(lam - l1, 0.02, 5), m2 = limita(mu - m1, 0.02, 5);
+  return tempiDaMatrici(matriceRisultati(l1, m1, rho, 8),
+                        matriceRisultati(l2, m2, rho, 8), dentro);
+}
+
+/* L'aggregazione sta qui da sola, separata da come le due matrici sono nate.
+   Serve perché lo stesso conto deve valere sia per una previsione (matrici di
+   probabilità) sia per una partita già finita (matrici con tutta la massa su
+   una casella sola). Se il registro delle giocate decidesse chi ha vinto con
+   una regola scritta a parte, prima o poi quella regola e questa smetterebbero
+   di dire la stessa cosa, e nessuno se ne accorgerebbe. */
+function tempiDaMatrici(A, B, dentro) {
   var s = dentro || {};
   var k;
   for (k = 0; k < CAMPI_TEMPI.length; k++) s[CAMPI_TEMPI[k]] = 0;
-  if (!quote) return s;
-  var l1 = limita(lam * quote[0], 0.02, 5), m1 = limita(mu * quote[1], 0.02, 5);
-  var l2 = limita(lam - l1, 0.02, 5), m2 = limita(mu - m1, 0.02, 5);
-  var A = matriceRisultati(l1, m1, rho, 8), B = matriceRisultati(l2, m2, rho, 8);
-  var i, j, p, n = 8;
+  var i, j, p, n = Math.min(A.length, B.length);
   for (i = 0; i < n; i++) for (j = 0; j < n; j++) {
     p = A[i][j];
     if (i > j) s.pt1 += p; else if (i === j) s.ptX += p; else s.pt2 += p;
@@ -906,6 +929,51 @@ function mercatiTempi(lam, mu, rho, quote, dentro) {
   for (i = 0; i < n; i++) for (j = 0; j < n; j++) { tA[i + j] += A[i][j]; tB[i + j] += B[i][j]; }
   for (i = 0; i < 2 * n; i++) for (j = 0; j < 2 * n; j++) if (j > i) s.piuSecondo += tA[i] * tB[j];
   return s;
+}
+
+/* ─────────── chi ha vinto: la stessa aritmetica, al contrario ───────────
+
+   Un registro delle giocate serve a niente se la regola con cui decide "vinta"
+   o "persa" è scritta a parte da quella con cui il mercato viene calcolato:
+   basta una svista su un maggiore-uguale e per mesi ti misuri contro un metro
+   storto, il che è peggio che non misurarsi affatto.
+
+   Qui il problema si toglie di mezzo per costruzione. Una partita finita è una
+   previsione in cui tutta la probabilità sta su una casella sola. Si costruisce
+   quella matrice e le si passa esattamente le stesse funzioni: ogni mercato
+   esce 1 se ha vinto e 0 se ha perso, e la regola è una sola per definizione. */
+function matriceSecca(x, y, n) {
+  n = n || 11;
+  var m = [], i, j;
+  for (i = 0; i < n; i++) {
+    m.push([]);
+    for (j = 0; j < n; j++) m[i].push(0);
+  }
+  m[Math.min(n - 1, Math.max(0, x))][Math.min(n - 1, Math.max(0, y))] = 1;
+  return m;
+}
+
+/* gc/gv: gol finali. ptc/ptv: gol all'intervallo, se si sanno. */
+function esitiReali(gc, gv, ptc, ptv) {
+  if (gc == null || gv == null) return null;
+  var s = mercatiDaMatrice(matriceSecca(gc, gv, 11));
+  if (ptc != null && ptv != null &&
+      ptc <= gc && ptv <= gv) {          // un primo tempo impossibile si ignora
+    tempiDaMatrici(matriceSecca(ptc, ptv, 8),
+                   matriceSecca(gc - ptc, gv - ptv, 8), s);
+  }
+  return s;
+}
+
+/* true = vinta, false = persa, null = non si può dire (manca il primo tempo). */
+function haVinto(idMercato, gc, gv, ptc, ptv) {
+  var reali = esitiReali(gc, gv, ptc, ptv);
+  if (!reali) return null;
+  var voce = null, elenco = elencoMercati(reali, null).concat(elencoTempi(reali, null));
+  for (var i = 0; i < elenco.length; i++) if (elenco[i].id === idMercato) { voce = elenco[i]; break; }
+  if (!voce) return null;
+  if (CAMPI_TEMPI.indexOf(voce.campo) >= 0 && (ptc == null || ptv == null)) return null;
+  return voce.p > 0.5;
 }
 
 /* Primo tempo / finale: nove caselle. Si convolvono le due matrici invece di
@@ -938,15 +1006,15 @@ function elencoTempi(s, nomiSquadre) {
     return { id: id, nome: nome, gruppo: 'Primo tempo', campo: campo, inverso: false, p: s[campo] };
   }
   return [
-    m('PT1', c + ' avanti all\'intervallo', 'pt1'),
-    m('PTX', 'Pari all\'intervallo', 'ptX'),
-    m('PT2', v + ' avanti all\'intervallo', 'pt2'),
-    m('PT1X', c + ' non sotto all\'intervallo', 'pt1x'),
-    m('PTX2', v + ' non sotto all\'intervallo', 'ptx2'),
-    m('PTO05', 'Gol nel primo tempo', 'ptO05'),
+    m('PT1', c + ' avanti al 45\'', 'pt1'),
+    m('PTX', 'Pari al 45\'', 'ptX'),
+    m('PT2', v + ' avanti al 45\'', 'pt2'),
+    m('PT1X', c + ' non sotto al 45\'', 'pt1x'),
+    m('PTX2', v + ' non sotto al 45\'', 'ptx2'),
+    m('PTO05', 'Over 0.5 primo tempo', 'ptO05'),
     m('PTO15', 'Over 1.5 primo tempo', 'ptO15'),
     m('PTGG', 'Segnano entrambe nel primo tempo', 'ptGG'),
-    m('STO05', 'Gol nel secondo tempo', 'stO05'),
+    m('STO05', 'Over 0.5 secondo tempo', 'stO05'),
     m('STO15', 'Over 1.5 secondo tempo', 'stO15'),
     m('GENT', 'Gol in entrambi i tempi', 'golEntrambi'),
     m('PIU2T', 'Più gol nel secondo tempo', 'piuSecondo')
@@ -1713,6 +1781,8 @@ var API = {
   kelly: kelly, valore: valore, occasioni: occasioni,
   mercatiDaMatrice: mercatiDaMatrice, elencoMercati: elencoMercati, piuSicure: piuSicure,
   campiMercato: campiMercato, mercatiTempi: mercatiTempi, primoFinale: primoFinale,
+  tempiDaMatrici: tempiDaMatrici, matriceSecca: matriceSecca,
+  esitiReali: esitiReali, haVinto: haVinto,
   elencoTempi: elencoTempi, quotePrimoTempo: quotePrimoTempo, CAMPI_TEMPI: CAMPI_TEMPI,
   campionaBacktest: campionaBacktest, valutaBacktest: valutaBacktest,
   probabilitaDaCampione: probabilitaDaCampione, misura: misura,
