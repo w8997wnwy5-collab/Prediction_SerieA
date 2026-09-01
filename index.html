@@ -1314,7 +1314,13 @@ function candidatiAmmoniti(p, quanti){
     });
   });
   fuori.sort(function(a, b){ return b.p - a.p; });
-  return {lista: fuori.slice(0, quanti || 8), severita: sev,
+  /* Sotto il 4% non è un indiziato: è un portiere. Mostrarlo in cima perché non
+     c'è nessun altro fa sembrare che l'app sappia qualcosa che non sa. */
+  var buoni = fuori.filter(function(x){ return x.p >= 0.04; });
+  var senzaDati = [p.c, p.v].filter(function(sq){
+    return !(r.perSquadra[sq] || []).length;
+  });
+  return {lista: buoni.slice(0, quanti || 8), severita: sev, senzaDati: senzaDati,
           arbitro: car ? car.arbitro : null, noto: car ? car.noto : false};
 }
 
@@ -1352,9 +1358,11 @@ function tabAmmoniti(){
       'arrivate: qui ognuno è attribuito alla squadra di allora.')+
     ' E soprattutto: <b>non so chi gioca titolare</b>.</div>';
 
+  var senzaNessuno = 0;
   g.partite.forEach(function(p){
     var c = candidatiAmmoniti(p, 6);
-    if(!c || !c.lista.length) return;
+    if(!c) return;
+    if(!c.lista.length){ senzaNessuno++; return; }
     h += '<div class="card"><div class="ammtesta" onclick="apriPartita('+prossime.indexOf(p)+')">'+
       '<b>'+esc(p.c)+' – '+esc(p.v)+'</b>'+
       '<em>'+esc(dataBreve(p.d))+(p.o?' · '+esc(p.o):'')+
@@ -1366,8 +1374,19 @@ function tabAmmoniti(){
             '<em>'+(x.g.ruolo?esc(x.g.ruolo)+' · ':'')+x.g.gialli+' gialli in '+x.g.presenze+
             ' presenze'+(x.g.rosaNota?'':' · rosa non confermata')+'</em></div>'+
           '<div class="giocp">'+pc(x.p)+'</div></div>';
-      }).join('')+'</div>';
+      }).join('')+
+      (c.senzaDati.length
+        ? '<div class="note">Di <b>'+c.senzaDati.map(esc).join('</b> e <b>')+'</b> non ho ancora i '+
+          'giocatori: qui sotto manca metà partita. Si riempie da sé quando il robot finisce di '+
+          'raccoglierli.</div>'
+        : '')+'</div>';
   });
+  if(senzaNessuno){
+    h += '<div class="note amber">Per <b>'+senzaNessuno+' partite</b> non ho ancora nessun '+
+      'giocatore. La fonte gratuita dà cento richieste al giorno e le venti squadre non ci stanno '+
+      'in un giro solo: il robot ne prende un pezzo al giorno e riprende da dove si era fermato. '+
+      'Fra un paio di giorni ci sono tutte.</div>';
+  }
   h += cartelliniPerPartita(g, a, prossime);
   return h;
 }
