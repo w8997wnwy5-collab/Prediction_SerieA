@@ -1,5 +1,5 @@
 {
- "aggiornato": "2026-09-05T11:23:40+00:00",
+ "aggiornato": "2026-09-05T17:23:15+00:00",
  "esito": "ok",
  "ultima_partita": "2026-08-31",
  "partite_totali": 1920,
@@ -10,8 +10,8 @@
  "con_tiri": 1920,
  "con_xg": 0,
  "con_quote": 1920,
- "in_arrivo_con_quote": 10,
- "in_arrivo_con_orario": 10,
+ "in_arrivo_con_quote": 0,
+ "in_arrivo_con_orario": 0,
  "marcatori": 0,
  "giocatori": 0,
  "rose": 0,
@@ -26,8 +26,8 @@
  "dettaglio": {
   "modo": "leggero",
   "riserva 2026-27": "ok: 20 giocate, 360 in calendario (senza tiri né arbitri)",
-  "calendario ravvicinato": "ok: 10 partite",
-  "calendario": "360 partite in tutto, 10 con le quote",
+  "calendario ravvicinato": "fallito: HTTP Error 503: Service Temporarily Unavailable",
+  "calendario": "360 partite in tutto, 0 con le quote",
   "ESPN calendario": "non disponibile: HTTP Error 403: Forbidden",
   "ESPN arbitri": "780 partite sono senza arbitro, ma nessuna è stata agganciata a ESPN: senza il suo identificativo non posso chiederne il dettaglio",
   "marcatori": "saltati: nessuna chiave FOOTBALL_DATA_TOKEN"
