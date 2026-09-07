@@ -1,5 +1,5 @@
 {
- "aggiornato": "2026-09-07T09:49:45+00:00",
+ "aggiornato": "2026-09-07T09:53:03+00:00",
  "esito": "ok",
  "ultima_partita": "2026-09-06",
  "partite_totali": 1921,
@@ -51,10 +51,10 @@
   "API-Football 2021-22": "non disponibile: API-Football dice: {\"plan\": \"Free plans do not have access to this season, try from 2022 to 2024.\"}",
   "API-Football richieste": "6 usate su 70 disponibili",
   "marcatori": "saltati: nessuna chiave FOOTBALL_DATA_TOKEN",
-  "notizie Gazzetta": "nessuno dei 99 titoli nomina una squadra di A. Per esempio: 5 NOMI SU CUI PUNTARE AL FANTACALCIO PER IL RUSH FINALE: da  | Viviano sbotta dopo Fiorentina-Inter: \"Ma come caz... si fa ",
-  "notizie ANSA": "44 titoli su 65 nominano una squadra di A",
-  "notizie Sky Sport": "nessuno dei 8 titoli nomina una squadra di A. Per esempio: Ragazzine, nonni, maglie di ogni epoca: la festa dell’Inter  | Sinner-Kotov, dove vedere in tv il match Masters 1000 di Mad",
-  "notizie Football Italia": "19 titoli su 20 nominano una squadra di A",
+  "notizie Gazzetta": "nessuno dei 99 titoli tenuto (38 nessuna squadra, 61 vecchio). Per esempio: 5 NOMI SU CUI PUNTARE AL FANTACALCIO PER IL RUSH FINALE: da Diao a Vla // Viviano sbotta dopo Fiorentina-Inter: \"Ma come caz... si fa a dare rig",
+  "notizie ANSA": "44 titoli tenuti su 65 (scartati: 21 nessuna squadra)",
+  "notizie Corriere": "nessuno dei 8 titoli tenuto (6 nessuna squadra, 2 vecchio). Per esempio: Ragazzine, nonni, maglie di ogni epoca: la festa dell’Inter che unisce // Sinner-Kotov, dove vedere in tv il match Masters 1000 di Madrid",
+  "notizie Football Italia": "19 titoli tenuti su 20 (scartati: 1 nessuna squadra)",
   "notizie": "60 titoli tenuti, 3 segnalano un'assenza, 1 la panchina"
  }
 }
