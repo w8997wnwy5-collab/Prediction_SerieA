@@ -1211,6 +1211,56 @@ function schedaPartita(p, indice){
   '</div>';
 }
 
+/* Quante partite si sono giocate senza che il risultato sia arrivato.
+
+   Le due fonti gratuite dei risultati pubblicano con ritardi diversi e
+   imprevedibili: openfootball quando un volontario aggiorna il file,
+   football-data.co.uk quando gli pare — e per una settimana ha risposto 503.
+   Nel frattempo l'app continuava a fare previsioni con un archivio vecchio di
+   sette giorni senza dirlo a nessuno, il che è il modo più educato di mentire.
+
+   Qui si contano: una partita in calendario la cui data è passata e che non
+   compare fra quelle giocate è una partita di cui non sappiamo com'è finita. */
+function partiteInRitardo(){
+  var oggi = oggiISO();
+  var cal = (S.doc && S.doc.calendario) || [];
+  var giocate = {}, ps = (S.doc && S.doc.partite) || [];
+  ps.forEach(function(p){ if(p.gc != null) giocate[p.c + '|' + p.v] = p; });
+  var mancanti = [];
+  cal.forEach(function(p){
+    if(!p.d || p.d >= oggi) return;
+    var g = giocate[p.c + '|' + p.v];
+    if(g && Math.abs(M.giorni(g.d, p.d)) <= 4) return;
+    mancanti.push(p);
+  });
+  mancanti.sort(function(a,b){ return a.d < b.d ? 1 : -1; });
+  return mancanti;
+}
+
+/* Da quanti giorni l'archivio non vede una partita nuova. */
+function giorniDiRitardo(){
+  var ultima = (S.meta && S.meta.ultima_partita) || null;
+  if(!ultima) return null;
+  return Math.round(M.giorni(ultima, oggiISO()));
+}
+
+function avvisoRitardo(){
+  var m = partiteInRitardo();
+  var gg = giorniDiRitardo();
+  if(!m.length && (gg == null || gg < 8)) return '';
+  var testa = m.length
+    ? '<b>'+m.length+' partit'+(m.length===1?'a giocata'.slice(0,8):'e giocate')+' di cui non ho il risultato.</b> '
+    : '<b>L\'archivio è fermo da '+gg+' giorni.</b> ';
+  return '<div class="note warn" style="margin-bottom:14px">'+testa+
+    'Le due fonti gratuite pubblicano con ritardi diversi e imprevedibili — una quando un '+
+    'volontario aggiorna il file, l\'altra quando le pare. Finché non arrivano, le forze delle '+
+    'squadre qui sotto sono calcolate <b>senza</b> quelle partite.'+
+    (m.length ? '<br><br>'+m.slice(0,6).map(function(p){
+      return esc(dataBreve(p.d))+' · '+esc(p.c)+' – '+esc(p.v); }).join('<br>')+
+      (m.length > 6 ? '<br>e altre '+(m.length-6) : '') : '')+
+    '</div>';
+}
+
 function tabGiornata(){
   var prossime = prossimePartite();
   var h = '';
@@ -1225,6 +1275,7 @@ function tabGiornata(){
   var g = gruppi[0];
   S._prossime = prossime;
   segnaPronostici();
+  h += avvisoRitardo();
   h += '<div class="h2">Prossime partite<span class="r">'+g.partite.length+'</span></div>';
   h += '<p class="lede">Dal '+esc(dataLunga(g.inizio))+(g.fine!==g.inizio?' al '+esc(dataLunga(g.fine)):'')+
     '. Su ogni partita trovi <b>la più solida</b>: la giocata più sicura fra quelle che pagano '+
@@ -1895,8 +1946,12 @@ function cardStatoDati(){
       '<div class="v'+(m.con_xg?'':' ')+'">'+m.con_xg+'</div></div>':'')+
     (m.in_arrivo_con_quote!=null?'<div class="row"><div class="n">In arrivo con quote<em>servono per l\'ancoraggio al mercato</em></div>'+
       '<div class="v">'+m.in_arrivo_con_quote+'</div></div>':'')+
-    (m.ultima_partita?'<div class="row"><div class="n">Ultima partita in archivio</div>'+
+    (m.ultima_partita?'<div class="row"><div class="n">Ultima partita in archivio'+
+      (giorniDiRitardo()!=null?'<em>'+giorniDiRitardo()+' giorni fa</em>':'')+'</div>'+
       '<div class="v" style="font-size:12.5px">'+esc(dataLunga(m.ultima_partita))+'</div></div>':'')+
+    (partiteInRitardo().length?'<div class="row"><div class="n">Risultati che mancano'+
+      '<em>giocate, ma la fonte non le ha ancora pubblicate</em></div>'+
+      '<div class="v" style="color:var(--amber)">'+partiteInRitardo().length+'</div></div>':'')+
     '<button class="btn acc" style="margin-top:12px" onclick="aggiorna()"'+(S.aggiornando?' disabled':'')+'>'+
       (S.aggiornando?'Sto aggiornando…':'Aggiorna adesso')+'</button>'+
     (S.esitoAggiornamento?'<div class="note '+(S.esitoAggiornamento.nuovo?'ok':'')+'">'+
