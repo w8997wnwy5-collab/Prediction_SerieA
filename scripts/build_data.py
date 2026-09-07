@@ -147,6 +147,57 @@ def data_iso(v):
         return None
 
 
+# ────────────────────────────── orari ──────────────────────────────
+#
+# Tre fonti, tre fusi, e nessuna che lo dica. football-data.co.uk scrive
+# l'orario di Londra, openfootball quello italiano, ESPN quello di Greenwich.
+# Finché li si copiava così com'erano, l'app mostrava "19:45" per una partita
+# che in Svizzera comincia alle 20:45: un'ora sbagliata su ogni singola
+# partita, per chi la usa per decidere se fare in tempo a giocare.
+#
+# Qui dentro si entra da fusi diversi e si esce sempre dall'ora italiana, che
+# è anche quella svizzera. Chi legge `o` da qui in avanti sa cosa sta leggendo.
+
+def _ora_legale(data):
+    """Vera fra l'ultima domenica di marzo e l'ultima domenica di ottobre.
+
+    L'Unione Europea e il Regno Unito cambiano l'ora nello stesso giorno, quindi
+    fra Londra e Roma c'è sempre esattamente un'ora, tutto l'anno. Rispetto a
+    Greenwich invece la distanza è una d'inverno e due d'estate, e va calcolata."""
+    try:
+        a, m, g = int(data[0:4]), int(data[5:7]), int(data[8:10])
+    except (ValueError, IndexError):
+        return False
+    if m < 3 or m > 10:
+        return False
+    if 3 < m < 10:
+        return True
+    ultima_domenica = 31
+    while datetime(a, m, ultima_domenica).weekday() != 6:
+        ultima_domenica -= 1
+    if m == 3:
+        return g >= ultima_domenica
+    return g < ultima_domenica
+
+
+def _sposta(hhmm, ore):
+    m = re.match(r'^\s*(\d{1,2})[:.](\d{2})', hhmm or '')
+    if not m:
+        return None
+    h = (int(m.group(1)) + ore) % 24
+    return '%02d:%s' % (h, m.group(2))
+
+
+def ora_da_londra(hhmm):
+    """football-data.co.uk: sempre un'ora indietro rispetto all'Italia."""
+    return _sposta(hhmm, 1)
+
+
+def ora_da_greenwich(hhmm, data):
+    """ESPN, che pubblica in UTC: una d'inverno, due d'estate."""
+    return _sposta(hhmm, 2 if _ora_legale(data) else 1)
+
+
 ALIAS = {
     'Internazionale': 'Inter', 'FC Internazionale Milano': 'Inter', 'Inter Milan': 'Inter',
     'AC Milan': 'Milan', 'Milan AC': 'Milan', 'Juventus FC': 'Juventus', 'AS Roma': 'Roma',
@@ -235,7 +286,7 @@ def leggi_csv(testo, stagione):
         casa, via, d = nome(r.get('HomeTeam')), nome(r.get('AwayTeam')), data_iso(r.get('Date'))
         if not (casa and via and d):
             continue
-        m = {'s': stagione, 'd': d, 'o': (r.get('Time') or '').strip() or None,
+        m = {'s': stagione, 'd': d, 'o': ora_da_londra(r.get('Time')),
              'c': casa, 'v': via,
              'gc': intero(r.get('FTHG')), 'gv': intero(r.get('FTAG')),
              'ptc': intero(r.get('HTHG')), 'ptv': intero(r.get('HTAG')),
@@ -251,15 +302,57 @@ def leggi_csv(testo, stagione):
     return fuori
 
 
+# Lo stesso sito servito da tre porte, e non sempre sono tutte aperte.
+#
+# Per una settimana intera "www.football-data.co.uk" ha risposto 503 su tutto,
+# e siccome era l'unico indirizzo provato l'archivio è rimasto fermo: risultati
+# vecchi di sette giorni, quote assenti, ancoraggio al mercato spento. Il primo
+# giro con tre indirizzi ha scoperto che "football-data.co.uk" senza il www
+# rispondeva benissimo — non era il sito a essere giù, era un nome.
+#
+# Da qui in avanti ogni file di quel sito passa da qui, non solo il calendario:
+# scoprire la porta buona e poi usarla per un file solo era il modo più veloce
+# di rifare la stessa figura la settimana dopo. Il primo indirizzo che risponde
+# viene ricordato per tutto il giro, così le stagioni successive non ripagano
+# ogni volta il prezzo della scoperta.
+
+PORTE_FOOTBALL_DATA = ('https://football-data.co.uk',
+                       'https://www.football-data.co.uk',
+                       'http://football-data.co.uk')
+_porta_buona = [None]
+
+
+def scarica_football_data(percorso, esiti, controllo=None, tentativi=2, attesa=4):
+    porte = list(PORTE_FOOTBALL_DATA)
+    if _porta_buona[0] in porte:
+        porte.remove(_porta_buona[0])
+        porte.insert(0, _porta_buona[0])
+    ultimo = None
+    for porta in porte:
+        try:
+            grezzo = scarica('%s/%s' % (porta, percorso), tentativi=tentativi,
+                             attesa=attesa, controllo=controllo)
+            if _porta_buona[0] != porta:
+                _porta_buona[0] = porta
+                esiti['football-data indirizzo'] = porta
+                log('  risponde %s' % porta)
+            return grezzo
+        except Exception as e:          # noqa: BLE001
+            ultimo = '%s → %s' % (porta.split('//')[1], str(e)[:60])
+            log('  %s' % ultimo)
+    raise RuntimeError(ultimo or 'nessun indirizzo ha risposto')
+
+
 def prendi_football_data(stagioni):
     partite, esiti = [], {}
     for i, (codice, etichetta) in enumerate(stagioni):
         if i:
             time.sleep(PAUSA)
-        url = 'https://www.football-data.co.uk/mmz4281/%s/I1.csv' % codice
         log('· football-data.co.uk %s' % etichetta)
         try:
-            testo = scarica(url, controllo=pare_csv_seriea).decode('utf-8-sig', errors='replace')
+            testo = scarica_football_data('mmz4281/%s/I1.csv' % codice, esiti,
+                                          controllo=pare_csv_seriea).decode('utf-8-sig',
+                                                                           errors='replace')
             p = leggi_csv(testo, etichetta)
             if not p:
                 raise RuntimeError('CSV scaricato ma nessuna partita di Serie A dentro')
@@ -275,6 +368,36 @@ def prendi_football_data(stagioni):
 
 # ────────────────────────────── openfootball (riserva) ──────────────────────────────
 
+def _coppia(v):
+    """[2, 1] → (2, 1). Qualunque altra cosa → None."""
+    if isinstance(v, (list, tuple)) and len(v) == 2 and v[0] is not None and v[1] is not None:
+        try:
+            return int(v[0]), int(v[1])
+        except (TypeError, ValueError):
+            return None
+    return None
+
+
+def _punteggio_openfootball(m):
+    """Il risultato finale e quello all'intervallo, comunque siano scritti.
+
+    openfootball ha cambiato forma tre volte e le stagioni vecchie non sono
+    state riscritte: nello stesso file convivono `score: {ft: [2,1], ht: [1,0]}`
+    e `score: [2,1]` secco, e nelle stagioni più vecchie `score1`/`score2`.
+    Chiedere `.get('ft')` a una lista solleva un'eccezione, e l'eccezione si
+    portava via l'intera stagione: trentasei partite scritte all'antica su
+    trecentottanta bastavano a far sparire il 2025-26 per intero — cioè la
+    stagione più recente, quella che il modello pesa di più."""
+    sc = m.get('score')
+    if isinstance(sc, dict):
+        return _coppia(sc.get('ft')), _coppia(sc.get('ht'))
+    diretto = _coppia(sc)
+    if diretto:
+        return diretto, None
+    finale = _coppia([m.get('score1'), m.get('score2')])
+    return finale, _coppia([m.get('score1i'), m.get('score2i')])
+
+
 def prendi_openfootball(etichetta):
     url = ('https://raw.githubusercontent.com/openfootball/football.json/'
            'master/%s/it.1.json' % etichetta)
@@ -285,12 +408,20 @@ def prendi_openfootball(etichetta):
         data = data_iso(m.get('date'))
         if not (casa and via and data):
             continue
-        sc = (m.get('score') or {}).get('ft')
         base = {'s': etichetta, 'd': data, 'c': casa, 'v': via}
         if m.get('round'):
             base['giornata'] = m['round']
-        if sc and len(sc) == 2 and sc[0] is not None:
-            base['gc'], base['gv'] = sc[0], sc[1]
+        # L'orario c'è ed è già quello italiano: è l'unica fonte che ce l'ha per
+        # le partite in arrivo, ed è il motivo per cui il calendario dell'app
+        # mostrava le date senza mai un'ora.
+        ora = _sposta(m.get('time'), 0)
+        if ora:
+            base['o'] = ora
+        finale, intervallo = _punteggio_openfootball(m)
+        if finale:
+            base['gc'], base['gv'] = finale
+            if intervallo and intervallo[0] <= finale[0] and intervallo[1] <= finale[1]:
+                base['ptc'], base['ptv'] = intervallo
             giocate.append(base)
         else:
             future.append(base)
@@ -299,34 +430,12 @@ def prendi_openfootball(etichetta):
 
 # ────────────────────────────── calendario ──────────────────────────────
 
-URL_CALENDARIO = (
-    'https://www.football-data.co.uk/fixtures.csv',
-    'https://football-data.co.uk/fixtures.csv',
-    'http://www.football-data.co.uk/fixtures.csv',
-)
-
-
 def prendi_calendario(stagioni, esiti):
     fut = []
     try:
-        testo = None
-        ultimo = None
-        # Un 503 che dura una settimana su un file solo, mentre gli altri dello
-        # stesso sito rispondono, di solito non è il sito che è giù: è quel file
-        # che si è spostato, o che viene servito da un'altra parte. Costa tre
-        # tentativi scoprirlo, e il riepilogo dice quale ha funzionato — così la
-        # prossima volta non si tira a indovinare.
-        for indirizzo in URL_CALENDARIO:
-            try:
-                testo = scarica(indirizzo, tentativi=2, attesa=4,
-                                controllo=pare_csv_calendario).decode('utf-8-sig', 'replace')
-                esiti['calendario indirizzo'] = indirizzo
-                break
-            except Exception as e:      # noqa: BLE001
-                ultimo = '%s → %s' % (indirizzo.split('//')[1][:40], str(e)[:50])
-                log('  %s' % ultimo)
-        if testo is None:
-            raise RuntimeError(ultimo or 'nessun indirizzo ha risposto')
+        log('· football-data.co.uk calendario')
+        testo = scarica_football_data('fixtures.csv', esiti,
+                                      controllo=pare_csv_calendario).decode('utf-8-sig', 'replace')
         for r in csv.DictReader(io.StringIO(testo)):
             if (r.get('Div') or '').strip() != 'I1':
                 continue
@@ -656,7 +765,7 @@ def prendi_espn(stagioni, esiti, conteggio):
                 continue
             riga = {'d': d_, 'c': casa, 'v': via, 'espn': ev.get('id')}
             if len(iso) >= 16:
-                riga['o'] = iso[11:16]
+                riga['o'] = ora_da_greenwich(iso[11:16], d_)
             sede = ((comp.get('venue') or {}).get('fullName') or '').strip()
             if sede:
                 riga['stadio'] = sede
@@ -1071,6 +1180,28 @@ def aggiorna_giocatori(esiti, stagioni):
 
 # ────────────────────────────── unione e controlli ──────────────────────────────
 
+VERSIONE_ORARI = 1     # 1 = gli orari nell'archivio sono ora italiana
+
+
+def _porta_a_ora_italiana(doc):
+    """Sposta in avanti di un'ora gli orari scritti prima che questo file sapesse
+    che football-data.co.uk pubblica l'ora di Londra.
+
+    Si fa una volta sola e si lascia detto nell'archivio che è stata fatta: un
+    archivio che non dice in che fuso sono i suoi orari finisce per essere
+    corretto due volte, ed è peggio di prima."""
+    if not doc or doc.get('versione_orari') == VERSIONE_ORARI:
+        return 0
+    spostate = 0
+    for p in (doc.get('partite') or []) + (doc.get('calendario') or []):
+        nuova = ora_da_londra(p.get('o'))
+        if nuova:
+            p['o'] = nuova
+            spostate += 1
+    doc['versione_orari'] = VERSIONE_ORARI
+    return spostate
+
+
 def carica_esistente():
     try:
         with open(FILE_DATI, encoding='utf-8') as f:
@@ -1235,6 +1366,11 @@ def main():
     # ha risposto — che è quello che succedeva finché il primo era l'unico a
     # funzionare — vuol dire passare da trecentosettanta partite a dieci.
     vecchio = carica_esistente()
+    spostate = _porta_a_ora_italiana(vecchio)
+    if spostate:
+        esiti['orari'] = ('%d orari portati da Londra a Roma: erano scritti '
+                          "un'ora indietro su ogni partita" % spostate)
+        log("· orari: %d portati all'ora italiana" % spostate)
     ravvicinato = prendi_calendario(stagioni, esiti)
     stagionale = list(calendario_riserva)
     if not stagionale:
@@ -1259,6 +1395,18 @@ def main():
     tenuto = [p for p in vecchio_cal if p.get('d', '') >= oggi_iso and (p.get('q') or p.get('o'))]
     calendario = unisci_calendario(stagionale, tenuto)
     calendario = unisci_calendario(calendario, ravvicinato)
+    # Una partita che si e' giocata non e' piu' in calendario. Quando una fonte
+    # non ne pubblica mai il risultato — succede: dieci partite dell'ultima
+    # giornata 2024-25 sono rimaste senza — quella riga resta li' per sempre e
+    # l'app la conta fra le partite di cui "non si sa com'e' finita", cioe' fa
+    # suonare un allarme che non rientrera' mai piu'. Un allarme che non si
+    # spegne e' rumore, e il rumore fa ignorare anche quelli veri.
+    limite = (datetime.now(timezone.utc).date() - timedelta(days=10)).isoformat()
+    scadute = len([p for p in calendario if p.get('d', '') < limite])
+    calendario = [p for p in calendario if p.get('d', '') >= limite]
+    if scadute:
+        esiti['calendario scadute'] = ('%d partite tolte dal calendario: giocate da piu\' di dieci '
+                                       'giorni e mai comparse fra i risultati' % scadute)
     con_quote = len([p for p in calendario if p.get('q')])
     freschi = len([p for p in ravvicinato if p.get('q')])
     esiti['calendario'] = '%d partite in tutto, %d con le quote (%d scaricate adesso, %d tenute da prima)' % (
@@ -1316,6 +1464,7 @@ def main():
     marcatori = prendi_marcatori(esiti)
 
     doc = {'lega': 'Serie A', 'aggiornato': adesso,
+           'versione_orari': VERSIONE_ORARI,
            'fonte': ' + '.join(['football-data.co.uk', 'openfootball']
                                + (['understat'] if xg else [])
                                + (['ESPN'] if (espn_giocate or espn_future) else [])

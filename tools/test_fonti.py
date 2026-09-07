@@ -360,6 +360,113 @@ def test_quote_tenute():
           [p for p in cal2 if p['c'] == 'Inter'][0].get('q') == [2.2, 3.3, 3.5])
 
 
+def test_punteggi_openfootball():
+    """openfootball ha cambiato forma tre volte e non ha riscritto il passato."""
+    moderno = {'score': {'ft': [2, 1], 'ht': [1, 0]}}
+    prova('formato con ft e ht', B._punteggio_openfootball(moderno) == ((2, 1), (1, 0)))
+    secco = {'score': [0, 0]}
+    prova('formato con la lista secca — quello che faceva sparire il 2025-26',
+          B._punteggio_openfootball(secco) == ((0, 0), None))
+    antico = {'score1': 3, 'score2': 2, 'score1i': 1, 'score2i': 2}
+    prova('formato antico score1/score2', B._punteggio_openfootball(antico) == ((3, 2), (1, 2)))
+    prova('partita non giocata', B._punteggio_openfootball({'score': None}) == (None, None))
+    prova('lista malformata non esplode', B._punteggio_openfootball({'score': [1]}) == (None, None))
+
+    # La prova che conta: una sola riga scritta all'antica non deve portarsi via
+    # le altre trecentosettantanove.
+    matches = [{'round': 'Matchday 1', 'date': '2025-08-23', 'time': '18:30',
+                'team1': 'Genoa CFC', 'team2': 'US Lecce', 'score': [0, 0]}]
+    matches += [{'round': 'Matchday 1', 'date': '2025-08-24', 'time': '20:45',
+                 'team1': 'AC Milan', 'team2': 'AS Roma',
+                 'score': {'ft': [2, 1], 'ht': [1, 1]}}] * 3
+    sorgente = json.dumps({'name': 'x', 'matches': matches}).encode('utf-8')
+    vero = B.scarica
+    B.scarica = lambda *a, **k: sorgente
+    try:
+        giocate, future = B.prendi_openfootball('2025-26')
+    finally:
+        B.scarica = vero
+    prova('una riga vecchio formato non fa sparire la stagione', len(giocate) == 4,
+          '%d partite lette su 4' % len(giocate))
+    prova('il primo tempo arriva insieme al finale',
+          len([g for g in giocate if g.get('ptc') is not None]) == 3)
+    prova("l'orario arriva da openfootball", giocate[0].get('o') == '18:30')
+    impossibile = json.dumps({'matches': [
+        {'date': '2025-08-23', 'team1': 'AC Milan', 'team2': 'AS Roma',
+         'score': {'ft': [1, 0], 'ht': [2, 0]}}]}).encode('utf-8')
+    B.scarica = lambda *a, **k: impossibile
+    try:
+        strane, _ = B.prendi_openfootball('2025-26')
+    finally:
+        B.scarica = vero
+    prova('un primo tempo con piu gol del finale viene ignorato',
+          strane[0].get('ptc') is None and strane[0]['gc'] == 1)
+
+
+def test_orari():
+    """Tre fonti, tre fusi. Dall'app deve uscirne uno solo."""
+    prova('Londra 19:45 → Roma 20:45', B.ora_da_londra('19:45') == '20:45')
+    prova('Londra 14:00 → Roma 15:00', B.ora_da_londra('14:00') == '15:00')
+    prova('orario mancante resta mancante', B.ora_da_londra(None) is None)
+    prova('orario non numerico resta mancante', B.ora_da_londra('ND') is None)
+    prova('mezzanotte non diventa le 24', B.ora_da_londra('23:30') == '00:30')
+    prova('Greenwich 18:45 in agosto → Roma 20:45',
+          B.ora_da_greenwich('18:45', '2026-08-31') == '20:45')
+    prova('Greenwich 19:45 in dicembre → Roma 20:45',
+          B.ora_da_greenwich('19:45', '2026-12-06') == '20:45')
+    prova('ora legale: il 29 marzo 2026 è già estate', B._ora_legale('2026-03-29'))
+    prova('ora legale: il 28 marzo 2026 è ancora inverno', not B._ora_legale('2026-03-28'))
+    prova('ora legale: il 25 ottobre 2026 è già inverno', not B._ora_legale('2026-10-25'))
+    prova('ora legale: il 24 ottobre 2026 è ancora estate', B._ora_legale('2026-10-24'))
+
+    # La migrazione si fa una volta sola: due giri di seguito non devono
+    # spostare gli orari di due ore.
+    doc = {'partite': [{'d': '2026-08-31', 'o': '19:45'}], 'calendario': []}
+    prova('la prima volta sposta', B._porta_a_ora_italiana(doc) == 1)
+    prova('e sposta di un\'ora sola', doc['partite'][0]['o'] == '20:45')
+    prova('la seconda volta non tocca niente', B._porta_a_ora_italiana(doc) == 0)
+    prova('e l\'orario resta quello', doc['partite'][0]['o'] == '20:45')
+
+
+def test_porta_football_data():
+    """Se il www e giu ma il sito no, si passa dall'altra porta — e per tutti i
+    file, non solo per quello dove il guasto e stato notato."""
+    B._porta_buona[0] = None
+    chiamati = []
+
+    def finto(url, **k):
+        chiamati.append(url)
+        if 'www.' in url:
+            raise RuntimeError('HTTP Error 503: Service Temporarily Unavailable')
+        return b'contenuto'
+
+    vero = B.scarica
+    B.scarica = finto
+    try:
+        esiti = {}
+        prova('il file arriva dalla porta che risponde',
+              B.scarica_football_data('fixtures.csv', esiti) == b'contenuto')
+        prova('e il riepilogo dice quale',
+              esiti.get('football-data indirizzo') == 'https://football-data.co.uk')
+        quante = len(chiamati)
+        B.scarica_football_data('mmz4281/2627/I1.csv', esiti)
+        prova('la porta trovata vale anche per gli altri file, senza ricercarla',
+              len(chiamati) == quante + 1,
+              '%d richieste in piu invece di 1' % (len(chiamati) - quante))
+
+        B._porta_buona[0] = None
+        B.scarica = lambda url, **k: (_ for _ in ()).throw(RuntimeError('503'))
+        caduto = False
+        try:
+            B.scarica_football_data('fixtures.csv', esiti)
+        except RuntimeError:
+            caduto = True
+        prova('se non risponde nessuna porta, si alza le mani', caduto)
+    finally:
+        B.scarica = vero
+        B._porta_buona[0] = None
+
+
 def main():
     test_validatori()
     test_quote()
@@ -370,6 +477,9 @@ def main():
     test_giocatori()
     test_quote_tenute()
     test_freno_api()
+    test_punteggi_openfootball()
+    test_orari()
+    test_porta_football_data()
 
     larghezza = max(len(n) for n, _, _ in ESITI)
     falliti = 0
