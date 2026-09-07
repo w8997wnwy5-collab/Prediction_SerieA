@@ -1,0 +1,25 @@
+name: Sonda fonti
+
+# A mano, quando serve sapere cosa si riesce a raggiungere da qui dentro.
+# Non tocca l'archivio: chiede, guarda, e scrive nel riepilogo.
+on:
+  workflow_dispatch:
+
+jobs:
+  sonda:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Chi risponde
+        env:
+          APIFOOTBALL_KEY: ${{ secrets.APIFOOTBALL_KEY }}
+          FOOTBALL_DATA_TOKEN: ${{ secrets.FOOTBALL_DATA_TOKEN }}
+        run: python3 scripts/sonda_fonti.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sonda
+          path: sonda.json
