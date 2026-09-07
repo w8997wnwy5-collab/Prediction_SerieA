@@ -1244,20 +1244,63 @@ function giorniDiRitardo(){
   return Math.round(M.giorni(ultima, oggiISO()));
 }
 
+/* Una giornata di Serie A comincia venerdì e finisce lunedì sera. Fino a
+   lunedì sera i risultati del venerdì mancano quasi sempre — le fonti
+   pubblicano il file a giornata chiusa, non a partita chiusa — e non è un
+   guasto, è il calendario.
+
+   Quindi la domanda giusta non è "da quanti giorni si è giocata questa
+   partita", ma "la sua giornata è finita?". Se l'ultimo posticipo della sua
+   giornata è passato da più di un giorno e il risultato ancora non c'è,
+   allora sì, è successo qualcosa. */
+function giornataChiusa(p){
+  var cal = (S.doc && S.doc.calendario) || [];
+  var ultima = p.d;
+  cal.forEach(function(x){
+    if(p.giornata && x.giornata === p.giornata && x.d > ultima) ultima = x.d;
+  });
+  return M.giorni(ultima, oggiISO()) >= 2;
+}
+
+/* Un allarme che suona ogni lunedì mattina non è un allarme, è una sveglia
+   che si impara a spegnere senza guardare.
+
+   Le fonti pubblicano i risultati a giornata finita, non a partita finita:
+   finché l'ultimo posticipo non è stato giocato, mancano tutti. Quello non è
+   un guasto, è il calendario. Dopo tre giorni invece il posticipo si è giocato
+   di sicuro, e se il risultato non c'è è successo qualcosa.
+
+   Quindi due messaggi diversi, e uno solo dei due è giallo. */
 function avvisoRitardo(){
   var m = partiteInRitardo();
   var gg = giorniDiRitardo();
+  var vecchie = m.filter(giornataChiusa);
   if(!m.length && (gg == null || gg < 8)) return '';
-  var testa = m.length
-    ? '<b>'+m.length+' partit'+(m.length===1?'a giocata'.slice(0,8):'e giocate')+' di cui non ho il risultato.</b> '
+
+  if(!vecchie.length && m.length){
+    /* giornata ancora in corso: normale, e va detto senza allarmare */
+    return '<div class="note" style="margin-bottom:14px">'+
+      '<b>La giornata non è ancora finita.</b> Mancano '+m.length+' risultat'+
+      (m.length===1?'o':'i')+': le fonti pubblicano a giornata chiusa, quindi arriveranno '+
+      'insieme quando si sarà giocato anche l\'ultimo posticipo. Fino ad allora le forze '+
+      'delle squadre non tengono conto di quelle partite.'+
+      '<br><br>'+m.slice(0,6).map(function(p){
+        return esc(dataBreve(p.d))+(p.o?' · '+esc(p.o):'')+' · '+esc(p.c)+' – '+esc(p.v); }).join('<br>')+
+      (m.length > 6 ? '<br>e altre '+(m.length-6) : '')+'</div>';
+  }
+
+  var testa = vecchie.length
+    ? '<b>'+vecchie.length+' partit'+(vecchie.length===1?'a di una giornata già chiusa':
+        'e di giornate già chiuse')+' di cui non ho il risultato.</b> '
     : '<b>L\'archivio è fermo da '+gg+' giorni.</b> ';
+  var elenco = vecchie.length ? vecchie : [];
   return '<div class="note warn" style="margin-bottom:14px">'+testa+
     'Le due fonti gratuite pubblicano con ritardi diversi e imprevedibili — una quando un '+
     'volontario aggiorna il file, l\'altra quando le pare. Finché non arrivano, le forze delle '+
     'squadre qui sotto sono calcolate <b>senza</b> quelle partite.'+
-    (m.length ? '<br><br>'+m.slice(0,6).map(function(p){
+    (elenco.length ? '<br><br>'+elenco.slice(0,6).map(function(p){
       return esc(dataBreve(p.d))+' · '+esc(p.c)+' – '+esc(p.v); }).join('<br>')+
-      (m.length > 6 ? '<br>e altre '+(m.length-6) : '') : '')+
+      (elenco.length > 6 ? '<br>e altre '+(elenco.length-6) : '') : '')+
     '</div>';
 }
 

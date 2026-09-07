@@ -200,6 +200,19 @@ node tools/test_modello.js /tmp/finto               # ritrova i parametri veri?
 node tools/test_backtest.js                         # batte la baseline? è calibrato?
 ```
 
+**Una quarta prova, ma su dati veri.** Le tre qui sopra dicono se il motore è
+sano. Non dicono se una schedina si prende, e quella è la domanda che uno si fa
+davvero. `tools/verifica_giornata.js` rifà esattamente il gesto dell'app —
+sceglie "la più solida" con lo stesso identico filtro della copertina — su una
+giornata già giocata, allenando il modello **solo** sulle partite precedenti.
+Niente di quello che è successo dopo entra nella previsione: se entrasse, il
+punteggio sarebbe un complimento che ci si fa da soli.
+
+```bash
+node tools/verifica_giornata.js                     # l'ultima giornata giocata
+node tools/verifica_giornata.js 2026-09-04 2026-09-07
+```
+
 ## Struttura
 
 | File | Cosa fa |
@@ -209,7 +222,7 @@ node tools/test_backtest.js                         # batte la baseline? è cali
 | `worker.js` | fa girare il motore fuori dal thread dell'interfaccia, così lo schermo non si blocca |
 | `scripts/build_data.py` | scarica e normalizza i dati da sei fonti (solo libreria standard) |
 | `.github/workflows/aggiorna-dati.yml` | il robot: quattro giri al giorno |
-| `tools/` | generatore di dati sintetici e le tre prove (41 sulle fonti, 43 sul motore, 15 sul backtest) |
+| `tools/` | generatore di dati sintetici, le tre prove (88 sulle fonti, 43 sul motore, 15 sul backtest) e la verifica di una giornata a posteriori |
 | `data/` | riempita dalla Action: `serie-a.json` e `meta.json` |
 
 ## Una nota sul senso di tutto questo

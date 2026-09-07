@@ -342,13 +342,16 @@ def test_quote_tenute():
                   {'d': dopo, 'c': 'Roma', 'v': 'Lazio'}]
     archiviato = [{'d': dopo, 'c': 'Inter', 'v': 'Milan', 'o': '20:45', 'q': [2.0, 3.4, 3.8]},
                   {'d': prima, 'c': 'Como', 'v': 'Genoa', 'o': '18:00', 'q': [1.9, 3.5, 4.0]}]
-    tenuto = [p for p in archiviato if p.get('d', '') >= oggi_iso and (p.get('q') or p.get('o'))]
+    tenuto = B.da_tenere(archiviato, oggi_iso)
 
     cal = B.unisci_calendario(stagionale, tenuto)
     cal = B.unisci_calendario(cal, [])            # la fonte delle quote è giù
     inter = [p for p in cal if p['c'] == 'Inter'][0]
     prova('con la fonte giù le quote di ieri restano', inter.get('q') == [2.0, 3.4, 3.8], str(inter))
-    prova('e con loro l\'orario', inter.get('o') == '20:45')
+    # L'orario invece NON si tiene: viene da due fonti in due fusi diversi, e uno
+    # tenuto da ieri non lo riguarda piu' nessuno. Lo rida' openfootball.
+    prova('l\'orario non si tiene: verrebbe conservato anche se sbagliato',
+          inter.get('o') is None, str(inter))
     prova('una partita già giocata non torna in calendario', len(cal) == 2, str(len(cal)))
     prova('le partite senza quote note restano senza',
           [p for p in cal if p['c'] == 'Roma'][0].get('q') is None)
@@ -421,9 +424,12 @@ def test_orari():
 
     # La migrazione si fa una volta sola: due giri di seguito non devono
     # spostare gli orari di due ore.
-    doc = {'partite': [{'d': '2026-08-31', 'o': '19:45'}], 'calendario': []}
-    prova('la prima volta sposta', B._porta_a_ora_italiana(doc) == 1)
-    prova('e sposta di un\'ora sola', doc['partite'][0]['o'] == '20:45')
+    doc = {'partite': [{'d': '2026-08-31', 'o': '19:45'}],
+           'calendario': [{'d': '2026-09-12', 'o': '20:45'}]}
+    prova('i risultati si spostano', B._porta_a_ora_italiana(doc) == 1)
+    prova('e si spostano di un\'ora sola', doc['partite'][0]['o'] == '20:45')
+    prova('il calendario non si tocca: e un misto, e li nessuna correzione va bene per tutti',
+          doc['calendario'][0]['o'] == '20:45')
     prova('la seconda volta non tocca niente', B._porta_a_ora_italiana(doc) == 0)
     prova('e l\'orario resta quello', doc['partite'][0]['o'] == '20:45')
 
@@ -467,6 +473,25 @@ def test_porta_football_data():
         B._porta_buona[0] = None
 
 
+def test_nessun_orario_grezzo():
+    """La prova che serviva la prima volta: la conversione era stata messa nel
+    lettore dei risultati e dimenticata in quello del calendario, e infatti il
+    calendario e uscito con gli orari di Londra mentre i risultati avevano
+    quelli giusti. Qui si controlla la causa, non il sintomo."""
+    sorgente = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                            'scripts', 'build_data.py')
+    with open(sorgente, encoding='utf-8') as f:
+        testo = f.read()
+    grezzi = [r for r in testo.split('\n')
+              if "get('Time')" in r and 'ora_da_' not in r]
+    prova("nessun orario di football-data entra senza passare dal convertitore",
+          not grezzi, ' / '.join(x.strip()[:70] for x in grezzi))
+    grezzi_espn = [r for r in testo.split('\n')
+                   if "iso[11:16]" in r and 'ora_da_' not in r]
+    prova('nessun orario ESPN entra senza passare dal convertitore',
+          not grezzi_espn, ' / '.join(x.strip()[:70] for x in grezzi_espn))
+
+
 def main():
     test_validatori()
     test_quote()
@@ -480,6 +505,7 @@ def main():
     test_punteggi_openfootball()
     test_orari()
     test_porta_football_data()
+    test_nessun_orario_grezzo()
 
     larghezza = max(len(n) for n, _, _ in ESITI)
     falliti = 0

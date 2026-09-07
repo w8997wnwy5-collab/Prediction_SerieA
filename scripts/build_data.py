@@ -442,7 +442,7 @@ def prendi_calendario(stagioni, esiti):
             d = data_iso(r.get('Date'))
             if not d:
                 continue
-            m = {'d': d, 'o': (r.get('Time') or '').strip() or None,
+            m = {'d': d, 'o': ora_da_londra(r.get('Time')),
                  'c': nome(r.get('HomeTeam')), 'v': nome(r.get('AwayTeam'))}
             m.update(quote_da_riga(r))
             fut.append({k: v for k, v in m.items() if v is not None})
@@ -917,6 +917,28 @@ def innesta(indice, righe, campi, solo_se_vuoto=()):
     return tocche, orfane
 
 
+def da_tenere(calendario, oggi_iso):
+    """Cosa sopravvive a una fonte irraggiungibile.
+
+    Le QUOTE sì: una quota di ieri è una quota vecchia di un giorno e vale
+    ancora, mentre nessuna quota è vecchia di sempre — è per questo che questo
+    strato esiste, dopo una settimana di partite senza prezzi e con l'ancoraggio
+    al mercato spento.
+
+    L'ORARIO no, e non è una svista. Il calendario prende l'orario da due fonti
+    che lo scrivono in due fusi diversi: tenendolo da un giro all'altro, un
+    orario sbagliato non viene mai più riguardato da nessuno e resta sbagliato
+    per sempre. È esattamente com'è finito, per un giro, con metà calendario a
+    Roma e metà a Londra. L'orario lo ridà openfootball ogni volta: meglio
+    ricevuto di nuovo che conservato male.
+
+    E le partite già giocate restano fuori: una riga in calendario con la data
+    di ieri è una partita che il calendario non sa essere finita."""
+    return [{k: v for k, v in p.items() if k != 'o'}
+            for p in (calendario or [])
+            if p.get('d', '') >= oggi_iso and p.get('q')]
+
+
 def unisci_calendario(base, extra):
     """Il calendario arriva a pezzi: openfootball sa quali partite si giocano,
     football-data.co.uk e ESPN sanno a che ora e a quanto le danno. Si fondono
@@ -1180,20 +1202,29 @@ def aggiorna_giocatori(esiti, stagioni):
 
 # ────────────────────────────── unione e controlli ──────────────────────────────
 
-VERSIONE_ORARI = 1     # 1 = gli orari nell'archivio sono ora italiana
+VERSIONE_ORARI = 1     # 1 = i risultati in archivio sono in ora italiana
 
 
 def _porta_a_ora_italiana(doc):
-    """Sposta in avanti di un'ora gli orari scritti prima che questo file sapesse
-    che football-data.co.uk pubblica l'ora di Londra.
+    """Sposta in avanti di un'ora gli orari dei RISULTATI scritti prima che questo
+    file sapesse che football-data.co.uk pubblica l'ora di Londra.
 
     Si fa una volta sola e si lascia detto nell'archivio che è stata fatta: un
     archivio che non dice in che fuso sono i suoi orari finisce per essere
-    corretto due volte, ed è peggio di prima."""
+    corretto due volte, ed è peggio di prima.
+
+    Il calendario non si tocca, e non è una dimenticanza. Le partite giocate
+    vengono tutte dalla stessa fonte, quindi sono tutte sbagliate allo stesso
+    modo e si aggiustano in blocco. Il calendario invece è un misto — l'orario
+    lo danno openfootball (già italiano) e football-data.co.uk (di Londra) — e
+    in un misto non c'è nessuna correzione che vada bene per tutti: applicandone
+    una si sistema una metà e si rompe l'altra. Il calendario si rifà da capo a
+    ogni giro dalle fonti, che adesso convertono entrambe: si lascia fare a
+    loro. Vedi anche cosa NON si tiene nello strato di ritenzione."""
     if not doc or doc.get('versione_orari') == VERSIONE_ORARI:
         return 0
     spostate = 0
-    for p in (doc.get('partite') or []) + (doc.get('calendario') or []):
+    for p in (doc.get('partite') or []):
         nuova = ora_da_londra(p.get('o'))
         if nuova:
             p['o'] = nuova
@@ -1392,7 +1423,7 @@ def main():
     # calendario, che e' esattamente dove serviva di piu'.
     vecchio_cal = (vecchio or {}).get('calendario') or []
     oggi_iso = datetime.now(timezone.utc).date().isoformat()
-    tenuto = [p for p in vecchio_cal if p.get('d', '') >= oggi_iso and (p.get('q') or p.get('o'))]
+    tenuto = da_tenere(vecchio_cal, oggi_iso)
     calendario = unisci_calendario(stagionale, tenuto)
     calendario = unisci_calendario(calendario, ravvicinato)
     # Una partita che si e' giocata non e' piu' in calendario. Quando una fonte
