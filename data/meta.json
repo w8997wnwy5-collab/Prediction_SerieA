@@ -1,10 +1,10 @@
 {
- "aggiornato": "2026-09-07T09:45:09+00:00",
+ "aggiornato": "2026-09-07T09:49:45+00:00",
  "esito": "ok",
  "ultima_partita": "2026-09-06",
  "partite_totali": 1921,
  "partite_giocate": 1921,
- "nuove_oggi": 1,
+ "nuove_oggi": 0,
  "partite_in_arrivo": 360,
  "con_arbitro": 1140,
  "con_tiri": 1920,
@@ -32,7 +32,7 @@
   "2023-24": "ok: 380 partite, 0 con arbitro",
   "2022-23": "ok: 380 partite, 0 con arbitro",
   "2021-22": "ok: 380 partite, 0 con arbitro",
-  "TheSportsDB": "ok: 1 giocate (1 col risultato), 1 in arrivo",
+  "TheSportsDB": "ok: 1 giocate di cui 1 col risultato, 1 in arrivo",
   "calendario ravvicinato": "ok: 10 partite",
   "calendario stagione": "ok da openfootball: 360 partite",
   "calendario": "360 partite in tutto, 10 con le quote (10 scaricate adesso, 0 tenute da prima)",
@@ -51,10 +51,10 @@
   "API-Football 2021-22": "non disponibile: API-Football dice: {\"plan\": \"Free plans do not have access to this season, try from 2022 to 2024.\"}",
   "API-Football richieste": "6 usate su 70 disponibili",
   "marcatori": "saltati: nessuna chiave FOOTBALL_DATA_TOKEN",
-  "notizie Gazzetta": "0 titoli su 99 nominano una squadra di A",
+  "notizie Gazzetta": "nessuno dei 99 titoli nomina una squadra di A. Per esempio: 5 NOMI SU CUI PUNTARE AL FANTACALCIO PER IL RUSH FINALE: da  | Viviano sbotta dopo Fiorentina-Inter: \"Ma come caz... si fa ",
   "notizie ANSA": "44 titoli su 65 nominano una squadra di A",
-  "notizie Sky Sport": "0 titoli su 8 nominano una squadra di A",
+  "notizie Sky Sport": "nessuno dei 8 titoli nomina una squadra di A. Per esempio: Ragazzine, nonni, maglie di ogni epoca: la festa dell’Inter  | Sinner-Kotov, dove vedere in tv il match Masters 1000 di Mad",
   "notizie Football Italia": "19 titoli su 20 nominano una squadra di A",
-  "notizie": "60 titoli tenuti, 3 segnalano un'assenza"
+  "notizie": "60 titoli tenuti, 3 segnalano un'assenza, 1 la panchina"
  }
 }
