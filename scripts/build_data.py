@@ -1569,12 +1569,16 @@ def main():
                             {p['v'] for p in partite if p.get('s') == stagioni[0][1]} |
                             {p.get('c') for p in calendario if p.get('c')} |
                             {p.get('v') for p in calendario if p.get('v')})
+    # Le notizie girano a OGNI giro, anche in quelli leggeri, ed e' l'unica cosa
+    # in questo file che lo fa. Tutto il resto qui dentro cambia quando si
+    # gioca; una notizia invecchia in ore. Nella prima versione le prendevo solo
+    # nel giro completo delle 5:17, quindi un esonero delle due del pomeriggio
+    # si sarebbe visto il mattino dopo — cioe' il dato piu' deperibile
+    # dell'archivio era quello aggiornato meno spesso. Costa tre richieste.
     try:
-        notizie = [] if leggero else prendi_notizie(squadre_attive, esiti)
+        notizie = prendi_notizie(squadre_attive, esiti)
     except Exception as e:            # noqa: BLE001
         esiti['notizie'] = 'fallite: %s' % e
-        notizie = []
-    if leggero:
         notizie = ((vecchio or {}).get('notizie') or [])
 
     doc = {'lega': 'Serie A', 'aggiornato': adesso,

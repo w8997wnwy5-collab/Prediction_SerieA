@@ -570,6 +570,81 @@ def test_notizie():
           'Per esempio' in detto and 'Tennis' in detto, detto[:90])
 
 
+def test_notizie_a_ogni_giro():
+    """Il dato piu deperibile dell'archivio non puo essere quello aggiornato
+    meno spesso. Un esonero delle due del pomeriggio non si vede il mattino
+    dopo."""
+    sorgente = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                            'scripts', 'build_data.py')
+    with open(sorgente, encoding='utf-8') as f:
+        testo = f.read()
+    prova('le notizie non sono saltate nei giri leggeri',
+          'notizie = [] if leggero' not in testo and 'prendi_notizie(squadre_attive' in testo)
+    # e tutto il resto invece deve restare saltato: sono giri leggeri per un motivo
+    prova('i giri leggeri restano leggeri su tutto il resto',
+          'if not leggero else' in testo or '0 if leggero else' in testo or
+          '[] if leggero else' in testo)
+
+
+def test_europa():
+    """Le coppe: l'unico posto dove squadre di campionati diversi si
+    incontrano, e quindi l'unico da cui si puo capire quanto vale una lega
+    rispetto a un'altra. Il formato ha tre trappole, e sono tutte qui."""
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(
+        os.path.abspath(__file__))), 'scripts'))
+    import build_europa as E
+
+    finto = (
+        b'= UEFA Champions League 2025/26\n\n'
+        b'  Tue Sep 16 2025\n'
+        b'    21:00  Juventus FC (ITA)       v Borussia Dortmund (GER)  4-4 (0-0)\n'
+        b'    18:45  PAE Olympiakos SFP (GRE) v Paphos FC (CYP)          0-0\n'
+        b'  Wed Feb 25\n'
+        b'    21:00  Juventus FC (ITA)       v Galatasaray SK (TUR)     3-2 a.e.t. (3-0, 1-0)\n'
+        b'  Sat May 30\n'
+        b'    18:00  Paris Saint-Germain FC (FRA) v Arsenal FC (ENG)   4-3 pen. 1-1 a.e.t. (1-1, 0-1)\n'
+        b'  Wed Jun 03\n'
+        b'    21:00  Real Madrid CF (ESP)    v FC Barcelona (ESP)\n'
+    )
+    vero = E.B.scarica
+    E.B.scarica = lambda *a, **k: finto
+    try:
+        giocate, future = E.prendi_coppa('x', 'Champions League', '2025-26', {})
+    finally:
+        E.B.scarica = vero
+
+    prova('legge tutte le partite giocate', len(giocate) == 4, len(giocate))
+    prova('e tiene da parte quelle ancora da giocare', len(future) == 1, len(future))
+
+    per = {g['c'][:8] + g['v'][:8]: g for g in giocate}
+    jd = [g for g in giocate if g['v'].startswith('Borussia')][0]
+    prova('il caso normale: risultato e primo tempo',
+          (jd['gc'], jd['gv'], jd['ptc'], jd['ptv']) == (4, 4, 0, 0))
+    prova('il paese di ogni squadra arriva con lei — e la chiave di tutto',
+          jd['pc'] == 'ITA' and jd['pv'] == 'GER')
+    op = [g for g in giocate if g['c'].startswith('PAE')][0]
+    prova('una partita senza primo tempo non si inventa il primo tempo',
+          'ptc' not in op and (op['gc'], op['gv']) == (0, 0))
+
+    # LA trappola: per una scommessa conta il 90', non i supplementari.
+    jg = [g for g in giocate if g['v'].startswith('Galatasaray')][0]
+    prova('coi supplementari si tiene il risultato dei 90 minuti, non quello finale',
+          (jg['gc'], jg['gv']) == (3, 0), '%d-%d invece di 3-0' % (jg['gc'], jg['gv']))
+    prova('e si segna che e andata oltre il 90esimo', jg.get('oltre90') is True)
+    fin = [g for g in giocate if g['c'].startswith('Paris')][0]
+    prova('una finale decisa ai rigori resta un PAREGGIO',
+          (fin['gc'], fin['gv']) == (1, 1), '%d-%d invece di 1-1' % (fin['gc'], fin['gv']))
+    prova('e il suo primo tempo e quello vero', (fin['ptc'], fin['ptv']) == (0, 1))
+
+    # le date, che scavalcano il capodanno
+    prova('la data arriva su ogni partita', all(g.get('d') for g in giocate))
+    prova("l'anno si eredita dalla riga sopra",
+          jd['d'] == '2025-09-16', jd['d'])
+    prova('e passa al nuovo anno a gennaio senza che nessuno glielo dica',
+          jg['d'] == '2026-02-25' and fin['d'] == '2026-05-30',
+          '%s / %s' % (jg['d'], fin['d']))
+
+
 def main():
     test_validatori()
     test_quote()
@@ -585,6 +660,8 @@ def main():
     test_nessun_orario_grezzo()
     test_thesportsdb()
     test_notizie()
+    test_notizie_a_ogni_giro()
+    test_europa()
 
     larghezza = max(len(n) for n, _, _ in ESITI)
     falliti = 0
