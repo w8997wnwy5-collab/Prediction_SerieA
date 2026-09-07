@@ -337,7 +337,7 @@ def accoppia_nomi(partite, coppe, paese_in_campionato):
 ID_CHAMPIONS_TSDB = 4480
 
 
-def calendario_champions(mappa, esiti):
+def calendario_champions(mappa, squadre_note, esiti):
     """Le prossime di Champions, con i nomi gia' tradotti in quelli dei
     campionati. Chi non si riesce a tradurre entra lo stesso, marcato: una
     partita che c'e' e di cui non so prevedere l'esito e' un fatto, una partita
@@ -357,9 +357,15 @@ def calendario_champions(mappa, esiti):
             data = B.data_iso(ev.get('dateEvent') or (ev.get('strTimestamp') or '')[:10])
             if not (casa and via and data):
                 continue
-            voce = {'c': mappa.get(casa, casa), 'v': mappa.get(via, via),
-                    'd': data, 'coppa': 'Champions League',
-                    'noto': casa in mappa and via in mappa}
+            c, v = mappa.get(casa, casa), mappa.get(via, via)
+            # "noto" vuol dire "so quanto vale", cioe' gioca in un campionato
+            # che scarico — non "il suo nome sta nella tabella di traduzione".
+            # TheSportsDB scrive gia' "Club Brugge" e "Aston Villa", cioe' i
+            # nomi di football-data: non sono chiavi da tradurre, sono gia'
+            # arrivati. Confondere le due cose marcava come sconosciute proprio
+            # le squadre che si conoscono meglio.
+            voce = {'c': c, 'v': v, 'd': data, 'coppa': 'Champions League',
+                    'noto': c in squadre_note and v in squadre_note}
             ts = ev.get('strTimestamp') or ''
             if len(ts) >= 16:
                 ora = B.ora_da_greenwich(ts[11:16], data)
@@ -371,7 +377,7 @@ def calendario_champions(mappa, esiti):
             fuori.append(voce)
         time.sleep(1.5)
     da_giocare = [x for x in fuori if 'gc' not in x]
-    esiti['Champions calendario'] = 'ok: %d partite (%d da giocare, %d con nomi riconosciuti)' % (
+    esiti['Champions calendario'] = 'ok: %d partite (%d da giocare, %d fra squadre di cui so la forza)' % (
         len(fuori), len(da_giocare), len([x for x in fuori if x['noto']]))
     return fuori
 
@@ -413,7 +419,11 @@ def main():
 
     # Il calendario della stagione in corso, che openfootball non ha ancora.
     try:
-        prossime_cl = calendario_champions(mappa, esiti)
+        squadre_note = set()
+        for m in campionati:
+            squadre_note.add(m['c'])
+            squadre_note.add(m['v'])
+        prossime_cl = calendario_champions(mappa, squadre_note, esiti)
     except Exception as e:                                # noqa: BLE001
         esiti['Champions calendario'] = 'fallito: %s' % e
         prossime_cl = []
