@@ -253,6 +253,11 @@ NOMI_A_MANO = {
     # fuori — cioe' il Bayern sarebbe stato una squadra "di cui non so niente".
     'FC Bayern München': 'Bayern Munich',
     'FC Bayern Munchen': 'Bayern Munich',
+    # A Parigi ci sono DUE squadre in Ligue 1, e il contenimento le confondeva:
+    # "paris" (Paris FC) sta dentro "paris saint germain" (PSG), ed era l'unico
+    # candidato, quindi passava senza che niente protestasse. Il PSG e' finito
+    # quinto in Europa con la forza del Paris FC per un giro intero.
+    'Paris Saint-Germain FC': 'Paris SG',
 }
 
 
@@ -300,13 +305,25 @@ def accoppia_nomi(partite, coppe, paese_in_campionato):
             if chiave in idx:
                 mappa[nome] = idx[chiave]
                 continue
-            # 3. uno contenuto nell'altro, ma solo se il candidato e' UNO: due
-            #    candidati vogliono dire che non si sa, e non si tira a indovinare
+            # 3. uno contenuto nell'altro. Un candidato solo non basta a stare
+            #    tranquilli: a Parigi ci sono due squadre in Ligue 1, "paris"
+            #    (Paris FC) sta dentro "paris saint germain" (PSG) ed era
+            #    l'unico candidato — il PSG ha girato per un po' con la forza
+            #    del Paris FC. Quindi si guarda anche se nel campionato c'e'
+            #    qualcun altro che comincia con la stessa parola: se c'e', la
+            #    somiglianza non decide niente e si lascia perdere.
             cand = [v for k, v in idx.items() if k and (k in chiave or chiave in k)]
-            if len(cand) == 1:
-                mappa[nome] = cand[0]
-            else:
+            if len(cand) != 1:
                 orfane.append((nome, paese, '%d candidati' % len(cand)))
+                continue
+            primo = _senza_fronzoli(cand[0]).split(' ')[0]
+            omonime = [s for s in per_paese[dove]
+                       if _senza_fronzoli(s).split(' ')[0] == primo]
+            if len(omonime) > 1:
+                orfane.append((nome, paese,
+                               'ambiguo fra %s' % ', '.join(sorted(omonime)[:3])))
+                continue
+            mappa[nome] = cand[0]
     return mappa, orfane
 
 

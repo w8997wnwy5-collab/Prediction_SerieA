@@ -1890,6 +1890,272 @@ function tabSchedine(){
 }
 
 /* ══════════════════════════════════════════════════════════════
+   VISTA: CHAMPIONS
+
+   Perche' questa sezione ha un motore suo invece di riusare quello di sopra.
+
+   Le forze di una squadra si stimano dal suo campionato, dove tutte incontrano
+   tutte: e' quello che le rende confrontabili. La Champions non e' cosi —
+   trentasei squadre di sedici paesi che si incontrano otto volte in tutto. E
+   c'e' un guaio piu' grosso, che si vede solo se lo si cerca: un attacco di
+   0.5 in Eredivisie NON vale un attacco di 0.5 in Premier, perche' sono
+   misurati contro difese diverse. Confrontarli e' come sommare Celsius e
+   Fahrenheit.
+
+   La soluzione non e' un fattore di conversione scritto a mano. E' mettere
+   campionati e coppe nella STESSA stima: le partite europee sono le uniche in
+   cui leghe diverse si incontrano, e fanno da ponte. La stima congiunta trova
+   da sola quanto vale una lega rispetto a un'altra.
+
+   Che i ponti servano davvero non e' un'opinione. Su 140 partite di Champions
+   previste senza sapere come erano finite:
+
+     con i ponti (coppe dentro la stima)   errore 0.20771
+     senza i ponti (solo campionati)       errore 0.23476
+     chi tira a indovinare                 errore 0.23592
+
+   I ponti valgono l'11.5% (z=2.02), e senza di loro il modello scende al
+   livello di chi tira a indovinare: tutto il lavoro sui campionati non serve a
+   niente finche' le forze non stanno sulla stessa scala.
+
+   Questi numeri sono la seconda versione. La prima diceva 0.26065 senza i
+   ponti — cioe' PEGGIO del caso — ed era vera solo perche' il PSG era
+   accoppiato al Paris FC: una squadra sbagliata su trentanove bastava a far
+   sembrare il problema piu' grosso di quanto sia. Il conto si rifa' con
+   tools/misura_champions.js.
+
+   Costa: settemila partite e duecentoventinove squadre. Si calcola la prima
+   volta che si apre questa sezione, non all'avvio.
+   ══════════════════════════════════════════════════════════════ */
+var _europa = null, _modEuropa = null, _europaStato = null;
+
+function caricaEuropa(){
+  if(_europaStato === 'carico' || _europaStato === 'assente') return;
+  _europaStato = 'carico';
+  render();
+  prendi('data/europa.json', false).then(function(doc){
+    _europa = doc;
+    /* Un fit su settemila partite: mezzo secondo scarso, ma non e' zero.
+       Si lascia respirare il browser fra il messaggio e il conto, se no il
+       messaggio non fa in tempo a comparire. */
+    setTimeout(function(){
+      try{
+        _modEuropa = costruisciEuropa(doc);
+        _europaStato = 'pronto';
+      }catch(e){
+        _europaStato = 'rotto'; _europa = {errore: e.message};
+      }
+      render();
+    }, 60);
+  }).catch(function(){
+    _europaStato = 'assente';
+    render();
+  });
+}
+
+/* Campionati e coppe nella stessa stima. I nomi delle squadre di coppa sono
+   gia' stati tradotti in quelli dei campionati quando il file e' stato
+   costruito: senza quella traduzione ogni squadra esisterebbe due volte e i
+   ponti non si formerebbero. */
+function costruisciEuropa(doc){
+  var nomi = doc.nomi || {};
+  var tutte = [], campionato = {};
+  (doc.partite || []).forEach(function(p){
+    tutte.push({d: p.d, c: p.c, v: p.v, gc: p.gc, gv: p.gv});
+    campionato[p.c] = 1; campionato[p.v] = 1;
+  });
+  /* La traduzione dei nomi viene fatta quando il file è costruito, ma si
+     riapplica anche qui: se un giorno il file arrivasse senza, ogni squadra
+     esisterebbe due volte e i ponti sparirebbero — in silenzio, e le
+     previsioni sarebbero solo un po' peggiori invece che assenti, che è il
+     modo peggiore in cui una cosa può rompersi. */
+  (doc.coppe || []).forEach(function(p){
+    if(p.gc == null) return;
+    tutte.push({d: p.d, c: nomi[p.c] || p.c, v: nomi[p.v] || p.v, gc: p.gc, gv: p.gv});
+  });
+  if(tutte.length < 1000) throw new Error('troppe poche partite: ' + tutte.length);
+  var mod = M.costruisci(tutte, {primoTempo: false, iterazioni: 150});
+  /* Chi gioca in un campionato che ho, e chi no. Le squadre che compaiono solo
+     nelle coppe stanno nel modello — le loro partite dicono comunque qualcosa
+     sugli avversari — ma la loro forza è stimata su otto partite, e mostrarla
+     accanto a quella del Real Madrid sarebbe far passare per misura quello che
+     è un indizio. */
+  mod.conCampionato = campionato;
+  return mod;
+}
+
+/* Le squadre di cui so davvero qualcosa: quelle con un campionato alle spalle. */
+function noteInEuropa(p){
+  if(!_modEuropa || !_modEuropa.conCampionato) return false;
+  var nomi = (_europa && _europa.nomi) || {};
+  var c = nomi[p.c] || p.c, v = nomi[p.v] || p.v;
+  return !!_modEuropa.conCampionato[c] && !!_modEuropa.conCampionato[v] &&
+         _modEuropa.indice[c] != null && _modEuropa.indice[v] != null;
+}
+function nomeEuropa(n){ return ((_europa && _europa.nomi) || {})[n] || n; }
+
+function prossimeChampions(){
+  if(!_europa || !_europa.coppe_calendario) return [];
+  var oggi = oggiISO();
+  return _europa.coppe_calendario.filter(function(p){
+    return p.d >= oggi && !iniziata(p);
+  }).sort(function(a, b){
+    if(a.d !== b.d) return a.d < b.d ? -1 : 1;
+    var oa = a.o || '99:99', ob = b.o || '99:99';
+    return oa < ob ? -1 : (oa > ob ? 1 : 0);
+  });
+}
+
+function scelteChampions(p){
+  if(!_modEuropa || !noteInEuropa(p)) return null;
+  var sim = M.simula(_modEuropa, nomeEuropa(p.c), nomeEuropa(p.v), {N: 1500, campioni: 140});
+  if(!sim) return null;
+  var medie = {}, k;
+  for(k in sim.fasce) medie[k] = sim.fasce[k].p;
+  var voci = M.elencoMercati(medie, [p.c, p.v]).filter(function(m){
+    return mercatoAttivo(m.id) && m.p >= 0.12 && m.p <= 0.88;
+  });
+  voci.forEach(function(m){
+    var b = sim.fasce[m.campo];
+    if(b) m.p05 = m.inverso ? 1 - b.p95 : b.p05;
+    m.p05 = Math.max(0, Math.min(m.p, m.p05 == null ? m.p : m.p05));
+    m.quota = m.p > 0.001 ? 1 / m.p : null;
+  });
+  voci.sort(function(a, b){ return b.p05 - a.p05; });
+  var pag = voci.filter(function(m){ return m.p <= prudenza().soglia; });
+  return {sim: sim, tutte: voci, piuSolida: pag[0] || voci[0] || null};
+}
+
+function tabChampions(){
+  if(_europaStato == null){ caricaEuropa(); }
+  if(_europaStato === 'carico'){
+    return '<div class="card"><div class="empty"><b>Sto mettendo in fila l\'Europa</b>'+
+      'Settemila partite di dieci campionati piu\' le coppe, in una stima sola. '+
+      'Ci vuole un attimo, e si fa una volta per apertura.</div></div>';
+  }
+  if(_europaStato === 'assente'){
+    return '<div class="card"><div class="empty"><b>I dati europei non ci sono ancora</b>'+
+      'Il robot li raccoglie una volta al giorno, insieme al resto. '+
+      'Se hai appena pubblicato l\'app, aspetta il prossimo giro.</div></div>'+
+      cardComeFunziona();
+  }
+  if(_europaStato === 'rotto'){
+    return '<div class="card"><div class="empty"><b>Non riesco a costruire il modello europeo</b>'+
+      esc((_europa && _europa.errore) || '')+'</div></div>';
+  }
+
+  var prossime = prossimeChampions();
+  var h = '';
+  if(!prossime.length){
+    h += '<div class="card"><div class="empty"><b>Nessuna partita di Champions in programma</b>'+
+      'Il calendario arriva da TheSportsDB e da openfootball. Fra una fase e l\'altra '+
+      'ci sono settimane di pausa, e a stagione appena cominciata il sorteggio potrebbe '+
+      'non essere ancora pubblicato.</div></div>';
+    return h + cardForzeEuropa() + cardComeFunziona();
+  }
+
+  var noti = prossime.filter(noteInEuropa);
+  h += '<div class="h2">Prossime di Champions<span class="r">'+prossime.length+'</span></div>';
+  h += '<p class="lede">Le forze vengono dai campionati nazionali, messe sulla stessa scala '+
+    'dalle partite europee. Su ogni partita <b>la più solida</b>, con lo stesso filtro della '+
+    'Serie A.</p>';
+  h += prossime.slice(0, 12).map(schedaChampions).join('');
+  if(noti.length < prossime.length){
+    h += '<div class="note amber"><b>'+(prossime.length - noti.length)+' partite senza previsione.</b> '+
+      'Almeno una delle due squadre gioca in un campionato che non ho — Cechia, Norvegia, Cipro, '+
+      'Danimarca, Kazakistan, Austria, Croazia, Ucraina, Svizzera, Azerbaigian non sono in '+
+      'football-data.co.uk. Senza il suo campionato non so quanto vale quella squadra, e '+
+      'preferisco dirtelo che inventare un numero.</div>';
+  }
+  return h + cardForzeEuropa() + cardComeFunziona();
+}
+
+function schedaChampions(p){
+  var sc = scelteChampions(p);
+  var quando = '<div class="quando"><span>'+esc(dataBreve(p.d))+(p.o?' · '+esc(p.o):'')+'</span></div>';
+  var sfida = '<div class="sfida"><div class="sq">'+esc(p.c)+'</div><div class="vs">—</div>'+
+    '<div class="sq v">'+esc(p.v)+'</div></div>';
+  if(!sc){
+    return '<div class="match spenta">'+quando+sfida+
+      '<div class="note" style="margin:10px 0 0">Non ho il campionato di almeno una delle due: '+
+      'niente previsione, e non me la invento.</div></div>';
+  }
+  var pr = sc.sim.fasce;
+  var m = sc.piuSolida;
+  return '<div class="match">'+quando+sfida+
+    barraProb({casa: pr.casa.p, pari: pr.pari.p, via: pr.via.p})+
+    '<div class="mini">'+
+      '<div><div class="l">Gol attesi</div><div class="v">'+nu(sc.sim.golCasa,1)+'–'+nu(sc.sim.golVia,1)+'</div></div>'+
+      '<div><div class="l">Over 2.5</div><div class="v">'+pc(pr.o25.p)+'</div></div>'+
+      '<div><div class="l">Gol/Gol</div><div class="v">'+pc(pr.gol.p)+'</div></div>'+
+    '</div>'+
+    (m ? '<div class="solida"><div class="solt">La più solida</div>'+
+      '<div class="solr"><b>'+esc(m.nome)+'</b><span>'+pc(m.p)+'</span></div>'+
+      '<div class="soln">quota equa '+nu(m.quota,2)+' · non scende sotto il '+pc(m.p05,0)+
+      ' nemmeno nello scenario sfavorevole</div></div>' : '')+
+    '</div>';
+}
+
+/* La classifica europea: l'unica cosa in quest'app che confronta squadre di
+   campionati diversi, ed e' anche il modo piu' rapido di vedere se il conto ha
+   senso. Se il Real Madrid finisse dietro all'Olympiakos, ci sarebbe da
+   preoccuparsi. */
+function cardForzeEuropa(){
+  if(!_modEuropa) return '';
+  var inCoppa = {};
+  ((_europa && _europa.coppe) || []).forEach(function(p){ inCoppa[p.c] = 1; inCoppa[p.v] = 1; });
+  ((_europa && _europa.coppe_calendario) || []).forEach(function(p){ inCoppa[p.c] = 1; inCoppa[p.v] = 1; });
+  var nomi = Object.keys(inCoppa).map(nomeEuropa).filter(function(n){
+    return _modEuropa.indice[n] != null && _modEuropa.conCampionato[n];
+  });
+  nomi = nomi.filter(function(n, i){ return nomi.indexOf(n) === i; });
+  if(nomi.length < 8) return '';
+  var f = M.forze(_modEuropa, nomi).slice(0, 16);
+  return '<div class="h2">Chi è più forte, in Europa<span class="r">'+nomi.length+'</span></div>'+
+    '<div class="card">'+
+    barreOriz(f.map(function(x){
+      return {l: x.squadra, v: Math.exp(x.forza), testo: nu(Math.exp(x.forza),2)};
+    }))+
+    '<div class="note">Attacco meno difesa, sulla stessa scala per tutti. È l\'unico posto '+
+    'in quest\'app dove ha senso confrontare una squadra spagnola con una olandese, e ha senso '+
+    'solo perché le partite di coppa le hanno messe sullo stesso metro.<br><br>'+
+    'Ci sono solo le squadre che giocano in uno dei dieci campionati che scarico. Chi arriva da '+
+    'Cechia, Norvegia, Cipro, Danimarca, Kazakistan, Austria, Croazia, Ucraina, Svizzera o '+
+    'Azerbaigian resta fuori: la sua forza sarebbe stimata su otto partite di coppa, e messa '+
+    'accanto a queste passerebbe per una misura quando è un indizio.</div></div>';
+}
+
+function cardComeFunziona(){
+  return '<div class="h2">Come faccio i conti qui</div><div class="card">'+
+    '<p class="lede" style="margin:0 0 12px">La Champions non si può prevedere come un '+
+    'campionato, e vale la pena sapere perché.</p>'+
+    '<div class="note"><p>In Serie A tutte incontrano tutte: trecentottanta partite l\'anno '+
+    'rendono l\'attacco del Napoli e quello del Lecce due numeri confrontabili. In Champions '+
+    'le squadre sono trentasei di sedici paesi e si incontrano otto volte in tutto.</p>'+
+    '<p>E c\'è un guaio più grosso: <b>un attacco di 0.5 in Eredivisie non vale un attacco di '+
+    '0.5 in Premier</b>, perché sono misurati contro difese diverse. Metterli uno accanto '+
+    'all\'altro è come sommare gradi Celsius e Fahrenheit.</p>'+
+    '<p>Quindi le forze le prendo dai campionati nazionali — dieci, settemila partite — e le '+
+    'metto sulla stessa scala usando <b>le partite europee</b>, che sono le uniche in cui leghe '+
+    'diverse si incontrano. Non c\'è nessun fattore di conversione scritto a mano: campionati e '+
+    'coppe stanno nella stessa stima, e i ponti fanno il resto.</p>'+
+    '<p><b>Che servano davvero non è un\'opinione.</b> Su 140 partite di Champions previste '+
+    'senza sapere come erano finite:</p></div>'+
+    '<div class="gara">'+
+    '<div class="garar"><span class="gn">Con i ponti</span><span class="gv buono">0.208</span></div>'+
+    '<div class="garar"><span class="gn">Senza i ponti, solo campionati</span><span class="gv sotto">0.235</span></div>'+
+    '<div class="garar"><span class="gn">Chi tira a indovinare</span><span class="gv pari">0.236</span></div>'+
+    '</div>'+
+    '<div class="note">I ponti valgono l\'<b>11.5%</b>. E si vede meglio guardando le ultime '+
+    'due righe: <b>senza</b> di loro, tutto il lavoro sui dieci campionati non serve a niente — '+
+    'il modello scende al livello di chi tira a indovinare, perché confronta forze misurate su '+
+    'scale diverse.<br><br>'+
+    'Rispetto alla Serie A qui il modello è più incerto, e ci sono due motivi: le partite sono '+
+    'molte meno, e <b>non ci sono le quote</b> — quindi manca l\'ancoraggio al mercato, che in '+
+    'Serie A è metà del lavoro. Prendi questi numeri con più cautela di quelli di là.</div></div>';
+}
+
+/* ══════════════════════════════════════════════════════════════
    VISTA: SQUADRE
    ══════════════════════════════════════════════════════════════ */
 function formaSquadra(nome, n){
@@ -2706,15 +2972,20 @@ function vai(t){
 var TABS = [
   {k:'giornata',  n:'Giornata',  p:'M4 6h16M4 12h16M4 18h10'},
   {k:'schedine',  n:'Schedine',  p:'M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6'},
+  /* La coppa: corpo che si stringe in basso, le due maniglie larghe che sono
+     la cosa piu' riconoscibile della Coppa dei Campioni, stelo e base. Disegnata
+     qui a mano — il marchio UEFA e' loro, la forma di una coppa e' di tutti. */
+  {k:'champions', n:'Champions', p:'M8 3h8v6a4 4 0 0 1-8 0zM8 4.5H5.5a2.5 2.5 0 0 0 2.8 4M16 4.5h2.5a2.5 2.5 0 0 1-2.8 4M12 13v4M9.5 20h5'},
   {k:'squadre',   n:'Squadre',   p:'M12 3l7 4v6c0 4-3 6.5-7 8-4-1.5-7-4-7-8V7z'},
   {k:'precisione',n:'Precisione',p:'M4 18L9 12l4 3 7-9M4 20h16'},
   {k:'dati',      n:'Dati',      p:'M4 7c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3zM4 7v10c0 1.7 3.6 3 8 3s8-1.3 8-3V7'}
 ];
-var TITOLI = {giornata:'Giornata', schedine:'Schedine',
+var TITOLI = {giornata:'Giornata', schedine:'Schedine', champions:'Champions',
               squadre:'Squadre', precisione:'Precisione', dati:'Dati'};
 var SOTTO = {
   giornata:   'COSA HA DI DIVERSO OGNI PARTITA',
   schedine:   'QUOTA, PROBABILITÀ E VINCITA POSSIBILE',
+  champions:  'DIECI CAMPIONATI SULLA STESSA SCALA',
   squadre:    'CHI SEGNA, CHI CONCEDE, CHI TIRA CORNER',
   precisione: 'QUANTO MI POSSO SBAGLIARE',
   dati:       'DA DOVE ARRIVA TUTTO'
@@ -2755,6 +3026,7 @@ function render(){
   }
   var corpo =
     S.tab==='schedine'   ? tabSchedine() :
+    S.tab==='champions'  ? tabChampions() :
     S.tab==='squadre'    ? tabSquadre() :
     S.tab==='precisione' ? tabPrecisione() :
     S.tab==='dati'       ? tabDati() : tabGiornata();

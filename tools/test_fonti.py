@@ -645,6 +645,60 @@ def test_europa():
           '%s / %s' % (jg['d'], fin['d']))
 
 
+def test_accoppiamento_nomi():
+    """football-data scrive "Man City", openfootball "Manchester City FC". Su
+    cinquantaquattro squadre di coppa i nomi che coincidono alla lettera sono
+    UNO: senza accoppiarli, ogni squadra esiste due volte e le partite di coppa
+    smettono di fare da ponte fra i campionati — cioe' l'unica ragione per cui
+    sono li'."""
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(
+        os.path.abspath(__file__))), 'scripts'))
+    import build_europa as E
+
+    campionati = [
+        {'p': 'FRA', 'c': 'Paris SG', 'v': 'Paris FC', 'd': '2026-01-01', 'gc': 1, 'gv': 0},
+        {'p': 'FRA', 'c': 'Marseille', 'v': 'Lille', 'd': '2026-01-01', 'gc': 1, 'gv': 0},
+        {'p': 'GER', 'c': 'Bayern Munich', 'v': 'Dortmund', 'd': '2026-01-01', 'gc': 1, 'gv': 0},
+        {'p': 'ITA', 'c': 'Inter', 'v': 'Juventus', 'd': '2026-01-01', 'gc': 1, 'gv': 0},
+    ]
+    coppe = [
+        {'c': 'Olympique de Marseille', 'v': 'FC Bayern München', 'pc': 'FRA', 'pv': 'GER'},
+        {'c': 'FC Internazionale Milano', 'v': 'Lille OSC', 'pc': 'ITA', 'pv': 'FRA'},
+        {'c': 'Paris Saint-Germain FC', 'v': 'Juventus FC', 'pc': 'FRA', 'pv': 'ITA'},
+    ]
+    mappa, orfane = E.accoppia_nomi(campionati, coppe, {})
+    prova('i fronzoli societari non contano: Lille OSC e Lille',
+          mappa.get('Lille OSC') == 'Lille', mappa.get('Lille OSC'))
+    prova('ne i nomi lunghi: Olympique de Marseille e Marseille',
+          mappa.get('Olympique de Marseille') == 'Marseille')
+    prova('ne le sigle: FC Internazionale Milano e Inter',
+          mappa.get('FC Internazionale Milano') == 'Inter')
+    prova('Munchen e Munich e una traduzione, e sta nella tabella a mano',
+          mappa.get('FC Bayern München') == 'Bayern Munich')
+    prova('e il PSG e il PSG, non il Paris FC',
+          mappa.get('Paris Saint-Germain FC') == 'Paris SG',
+          mappa.get('Paris Saint-Germain FC'))
+
+    # LA prova che conta: senza la riga scritta a mano, l'ambiguita' deve
+    # bloccare l'accoppiamento invece di risolverlo a caso. A Parigi ci sono due
+    # squadre in Ligue 1 e per un giro intero il PSG ha avuto la forza del
+    # Paris FC — un candidato unico non basta a stare tranquilli.
+    salva = E.NOMI_A_MANO.pop('Paris Saint-Germain FC')
+    try:
+        m2, o2 = E.accoppia_nomi(campionati, coppe, {})
+    finally:
+        E.NOMI_A_MANO['Paris Saint-Germain FC'] = salva
+    prova('senza la riga a mano, due squadre della stessa citta non si accoppiano a caso',
+          'Paris Saint-Germain FC' not in m2, m2.get('Paris Saint-Germain FC'))
+    prova('e il motivo viene scritto, non ingoiato',
+          any('ambiguo' in perche for _, _, perche in o2),
+          [p for _, _, p in o2])
+
+    # due squadre di coppa non devono mai finire sulla stessa squadra di campionato
+    doppie = [v for v in mappa.values() if list(mappa.values()).count(v) > 1]
+    prova('nessuna squadra di campionato riceve due squadre di coppa', not doppie, doppie)
+
+
 def main():
     test_validatori()
     test_quote()
@@ -662,6 +716,7 @@ def main():
     test_notizie()
     test_notizie_a_ogni_giro()
     test_europa()
+    test_accoppiamento_nomi()
 
     larghezza = max(len(n) for n, _, _ in ESITI)
     falliti = 0
