@@ -299,11 +299,34 @@ def prendi_openfootball(etichetta):
 
 # ────────────────────────────── calendario ──────────────────────────────
 
+URL_CALENDARIO = (
+    'https://www.football-data.co.uk/fixtures.csv',
+    'https://football-data.co.uk/fixtures.csv',
+    'http://www.football-data.co.uk/fixtures.csv',
+)
+
+
 def prendi_calendario(stagioni, esiti):
     fut = []
     try:
-        testo = scarica('https://www.football-data.co.uk/fixtures.csv',
-                        tentativi=2, controllo=pare_csv_calendario).decode('utf-8-sig', 'replace')
+        testo = None
+        ultimo = None
+        # Un 503 che dura una settimana su un file solo, mentre gli altri dello
+        # stesso sito rispondono, di solito non è il sito che è giù: è quel file
+        # che si è spostato, o che viene servito da un'altra parte. Costa tre
+        # tentativi scoprirlo, e il riepilogo dice quale ha funzionato — così la
+        # prossima volta non si tira a indovinare.
+        for indirizzo in URL_CALENDARIO:
+            try:
+                testo = scarica(indirizzo, tentativi=2, attesa=4,
+                                controllo=pare_csv_calendario).decode('utf-8-sig', 'replace')
+                esiti['calendario indirizzo'] = indirizzo
+                break
+            except Exception as e:      # noqa: BLE001
+                ultimo = '%s → %s' % (indirizzo.split('//')[1][:40], str(e)[:50])
+                log('  %s' % ultimo)
+        if testo is None:
+            raise RuntimeError(ultimo or 'nessun indirizzo ha risposto')
         for r in csv.DictReader(io.StringIO(testo)):
             if (r.get('Div') or '').strip() != 'I1':
                 continue
