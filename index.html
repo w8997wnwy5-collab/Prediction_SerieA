@@ -283,6 +283,7 @@ select{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:1
 .notz.ass .ntesto{font-weight:600;}
 .nass{flex:none;align-self:center;font-family:var(--mono);font-size:9px;font-weight:700;
   padding:2px 6px;border-radius:5px;background:var(--amber-soft);color:var(--amber);}
+.nass.pan{background:var(--warn-soft);color:var(--warn);}
 
 /* ── la maledizione del vincitore ── */
 .curse{display:flex;flex-direction:column;gap:5px;margin:2px 0 10px;}
@@ -2353,7 +2354,10 @@ function notiziePer(p){
   return tutte.filter(function(n){
     return n.sq && (n.sq.indexOf(p.c) >= 0 || n.sq.indexOf(p.v) >= 0);
   }).sort(function(a, b){
-    if(a.ass !== b.ass) return a.ass ? -1 : 1;      /* prima le assenze */
+    /* prima quello che il modello non può sapere: chi siede in panchina, poi
+       chi non gioca. Il resto è cronaca, e la cronaca il mercato l'ha già. */
+    var pa = a.pan ? 2 : (a.ass ? 1 : 0), pb = b.pan ? 2 : (b.ass ? 1 : 0);
+    if(pa !== pb) return pb - pa;
     return (b.d || '') < (a.d || '') ? -1 : 1;
   });
 }
@@ -2362,17 +2366,22 @@ function cardNotizie(p){
   var l = notiziePer(p);
   if(!l.length) return '';
   var ass = l.filter(function(n){ return n.ass; }).length;
+  var pan = l.filter(function(n){ return n.pan; }).length;
   var h = '<div class="h2">Che si dice<span class="r">'+l.length+'</span></div><div class="card">';
   h += l.slice(0, 8).map(function(n){
     var lato = n.sq.indexOf(p.c) >= 0 ? (n.sq.indexOf(p.v) >= 0 ? 'due' : 'casa') : 'via';
     var testo = '<div class="ntesto">'+esc(n.t)+
       '<em>'+esc(n.f)+(n.d ? ' · '+esc(dataBreve(n.d)) : '')+'</em></div>';
-    return '<div class="notz'+(n.ass ? ' ass' : '')+'">'+
+    return '<div class="notz'+(n.ass || n.pan ? ' ass' : '')+'">'+
       '<span class="nlato '+lato+'">'+esc(lato === 'due' ? '↔' : sigla(lato === 'casa' ? p.c : p.v))+'</span>'+
       (n.l ? '<a href="'+esc(n.l)+'" target="_blank" rel="noopener noreferrer nofollow">'+testo+'</a>' : testo)+
-      (n.ass ? '<span class="nass">assenza?</span>' : '')+'</div>';
+      (n.pan ? '<span class="nass pan">panchina</span>'
+             : (n.ass ? '<span class="nass">assenza?</span>' : ''))+'</div>';
   }).join('');
   h += '<div class="note">'+
+    (pan ? '<b>Attenzione alla panchina.</b> '+(pan===1?'Un titolo parla':'Alcuni titoli parlano')+
+      ' di un cambio di allenatore. È la cosa che il modello sa peggio di tutte: le forze qui sopra '+
+      'sono calcolate sui risultati di una squadra che da domani è guidata da un altro.<br><br>' : '')+
     (ass ? '<b>'+ass+' '+(ass===1?'titolo segnala':'titoli segnalano')+' un\'assenza.</b> Li riconosco '+
       'da un elenco di parole, non capendo la frase: qualcuno sarà un falso allarme e qualcuno mi '+
       'sfuggirà. Sono lì perché li guardi tu.<br><br>' : '')+

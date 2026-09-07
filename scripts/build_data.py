@@ -419,7 +419,9 @@ def prendi_thesportsdb(stagione, esiti):
                 dove.append(p)
         time.sleep(1.5)
     con_risultato = [p for p in giocate if p.get('gc') is not None]
-    esiti['TheSportsDB'] = 'ok: %d giocate (%d col risultato), %d in arrivo' % (
+    # Il piano aperto serve poche partite per volta: dire quante ne ha mandate
+    # e' l'unico modo per accorgersi se un giorno smette di mandarne.
+    esiti['TheSportsDB'] = 'ok: %d giocate di cui %d col risultato, %d in arrivo' % (
         len(giocate), len(con_risultato), len(future))
     return con_risultato, future
 
@@ -454,10 +456,50 @@ FONTI_NOTIZIE = (
 # Parole che segnalano un'assenza. Non e' un modello di linguaggio: e' un
 # elenco, e come tale sbaglia in entrambe le direzioni. Serve a far risaltare
 # le notizie che contano davvero, non a decidere niente.
+# Come le squadre si chiamano nei titoli, che non e' come si chiamano nelle
+# tabelle. "Juve" e' scritto piu' spesso di "Juventus", e un titolo che dice
+# "Nerazzurri" non contiene la parola "Inter" da nessuna parte. Senza questi,
+# la Gazzetta ha dato zero titoli riconosciuti su novantanove.
+#
+# Ci sono solo i soprannomi che stanno per UNA squadra sola. "Bianconeri" e'
+# Juventus ma anche Udinese, "granata" e' Torino ma anche Salernitana: quelli
+# restano fuori, perche' attaccare una notizia alla squadra sbagliata e' peggio
+# che non attaccarla.
+SOPRANNOMI = {
+    'Juventus': ('juve',),
+    'Inter': ('nerazzurri', 'internazionale'),
+    'Milan': ('rossoneri', 'diavolo'),
+    'Roma': ('giallorossi', 'lupi'),
+    'Lazio': ('biancocelesti',),
+    'Napoli': ('partenopei', 'azzurri di conte'),
+    'Fiorentina': ('viola', 'gigliati'),
+    'Atalanta': ('dea', 'orobici', 'bergamaschi'),
+    'Bologna': ('rossoblu felsinei', 'felsinei'),
+    'Genoa': ('grifone', 'rossoblu di genova'),
+    'Sampdoria': ('doria', 'blucerchiati'),
+    'Sassuolo': ('neroverdi',),
+    'Udinese': ('friulani',),
+    'Cagliari': ('rossoblu sardi', 'isolani'),
+    'Lecce': ('salentini',),
+    'Verona': ('gialloblu', 'scaligeri'),
+    'Empoli': ('azzurri toscani',),
+    'Monza': ('brianzoli',),
+    'Parma': ('ducali', 'crociati'),
+    'Como': ('lariani',),
+    'Venezia': ('lagunari', 'arancioneroverdi'),
+    'Torino': ('toro',),
+}
+
 PAROLE_ASSENZA = ('infortun', 'squalific', 'lesion', 'stiramento', 'distorsion',
                   'operaz', 'out ', ' ko', 'salta la', 'salterà', 'salta il',
                   'indisponibil', 'forfait', 'in dubbio', 'injur', 'suspend',
                   'doubt', 'sidelin', 'ruled out')
+# L'altra cosa che il modello non puo' sapere e che sposta davvero: chi siede
+# in panchina. Un esonero a stagione in corso cambia la squadra in un modo che
+# i risultati passati non raccontano ancora.
+PAROLE_PANCHINA = ('esoner', 'dimission', 'nuovo allenatore', 'nuovo tecnico',
+                   'in panchina', 'subentra', 'ufficiale:', 'sack', 'appointed',
+                   'new coach', 'takes charge', 'resign')
 MAX_NOTIZIE = 60
 
 
@@ -515,6 +557,9 @@ def prendi_notizie(squadre, esiti):
     for lungo, corto in ALIAS.items():
         if corto in per_squadra:
             per_squadra[corto].add(lungo.lower())
+    for sq, soprannomi in SOPRANNOMI.items():
+        if sq in per_squadra:
+            per_squadra[sq].update(soprannomi)
 
     oggi = datetime.now(timezone.utc).date()
     limite = (oggi - timedelta(days=10)).isoformat()
@@ -546,16 +591,27 @@ def prendi_notizie(squadre, esiti):
             viste.add(basso)
             fuori.append({'t': titolo[:180], 'f': etichetta, 'd': quando,
                           'sq': citate, 'l': link,
-                          'ass': any(k in basso for k in PAROLE_ASSENZA)})
+                          'ass': any(k in basso for k in PAROLE_ASSENZA),
+                          'pan': any(k in basso for k in PAROLE_PANCHINA)})
             prese += 1
-        esiti['notizie %s' % etichetta] = '%d titoli su %d nominano una squadra di A' % (
-            prese, len(voci))
+        if prese or not voci:
+            esiti['notizie %s' % etichetta] = '%d titoli su %d nominano una squadra di A' % (
+                prese, len(voci))
+        else:
+            # Zero su novantanove e' un numero che non spiega niente: o il feed
+            # parla d'altro, o i titoli chiamano le squadre in un modo che non
+            # riconosco. Un paio di titoli veri lo dicono in un colpo d'occhio.
+            campione = ' | '.join(re.sub(r'\s+', ' ', v['title'])[:60] for v in voci[:2])
+            esiti['notizie %s' % etichetta] = (
+                'nessuno dei %d titoli nomina una squadra di A. Per esempio: %s'
+                % (len(voci), campione))
         time.sleep(1.5)
-    fuori.sort(key=lambda x: (x['d'] or '', x['ass']), reverse=True)
+    fuori.sort(key=lambda x: (x['d'] or '', x['ass'] or x['pan']), reverse=True)
     fuori = fuori[:MAX_NOTIZIE]
     quante = len([x for x in fuori if x['ass']])
-    esiti['notizie'] = '%d titoli tenuti, %d %s un\'assenza' % (
-        len(fuori), quante, 'segnala' if quante == 1 else 'segnalano')
+    panchine = len([x for x in fuori if x['pan']])
+    esiti['notizie'] = '%d titoli tenuti, %d %s un\'assenza, %d la panchina' % (
+        len(fuori), quante, 'segnala' if quante == 1 else 'segnalano', panchine)
     return fuori
 
 

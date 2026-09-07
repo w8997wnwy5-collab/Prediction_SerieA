@@ -524,6 +524,51 @@ def test_notizie():
         B.scarica, B.time.sleep, B.FONTI_NOTIZIE = vero, vera_pausa, vere_fonti
     prova('un feed che non e un feed non fa saltare niente', out2 == [], out2)
 
+    # I titoli veri non chiamano le squadre come le tabelle: "Juve" e' scritto
+    # piu' spesso di "Juventus", e "Nerazzurri" non contiene "Inter". Senza i
+    # soprannomi la Gazzetta ha dato zero titoli riconosciuti su novantanove.
+    rss2 = b'''<?xml version="1.0"?><rss version="2.0"><channel>
+<item><title>Juve, altro stop: il difensore out un mese</title><link>https://e.it/a</link>
+<pubDate>Mon, 07 Sep 2026 08:00:00 +0200</pubDate></item>
+<item><title>Nerazzurri scatenati sul mercato</title><link>https://e.it/b</link>
+<pubDate>Mon, 07 Sep 2026 08:00:00 +0200</pubDate></item>
+<item><title>Ufficiale: la Fiorentina esonera il tecnico</title><link>https://e.it/c</link>
+<pubDate>Mon, 07 Sep 2026 08:00:00 +0200</pubDate></item>
+</channel></rss>'''
+    B.scarica = lambda *a, **k: rss2
+    B.time.sleep = lambda *a: None
+    B.FONTI_NOTIZIE = (('Prova', 'http://x'),)
+    try:
+        esiti3 = {}
+        out3 = B.prendi_notizie(['Juventus', 'Inter', 'Fiorentina'], esiti3)
+    finally:
+        B.scarica, B.time.sleep, B.FONTI_NOTIZIE = vero, vera_pausa, vere_fonti
+    prova('"Juve" viene riconosciuta come Juventus',
+          any(n['sq'] == ['Juventus'] for n in out3), [n['sq'] for n in out3])
+    prova('"Nerazzurri" viene riconosciuto come Inter',
+          any(n['sq'] == ['Inter'] for n in out3), [n['sq'] for n in out3])
+    fio = [n for n in out3 if n['sq'] == ['Fiorentina']]
+    prova('un esonero viene marcato come cambio di panchina',
+          len(fio) == 1 and fio[0]['pan'] is True and fio[0]['ass'] is False,
+          fio[0] if fio else 'non trovata')
+
+    # Quando una fonte non da' niente, il riepilogo deve dire perche'.
+    rss3 = b'''<?xml version="1.0"?><rss version="2.0"><channel>
+<item><title>Tennis, finale a New York</title><link>https://e.it/d</link></item>
+<item><title>Ciclismo, la Vuelta si decide oggi</title><link>https://e.it/e</link></item>
+</channel></rss>'''
+    B.scarica = lambda *a, **k: rss3
+    B.time.sleep = lambda *a: None
+    B.FONTI_NOTIZIE = (('Muta', 'http://x'),)
+    try:
+        esiti4 = {}
+        B.prendi_notizie(['Juventus'], esiti4)
+    finally:
+        B.scarica, B.time.sleep, B.FONTI_NOTIZIE = vero, vera_pausa, vere_fonti
+    detto = esiti4.get('notizie Muta', '')
+    prova('zero titoli riconosciuti si spiega, non si conta e basta',
+          'Per esempio' in detto and 'Tennis' in detto, detto[:90])
+
 
 def main():
     test_validatori()
