@@ -1,5 +1,5 @@
 {
- "aggiornato": "2026-09-07T05:06:53+00:00",
+ "aggiornato": "2026-09-07T05:24:50+00:00",
  "esito": "ok",
  "ultima_partita": "2026-08-31",
  "partite_totali": 1920,
@@ -35,8 +35,8 @@
   "calendario ravvicinato": "ok: 10 partite",
   "calendario stagione": "ok da openfootball: 360 partite",
   "calendario": "360 partite in tutto, 10 con le quote (10 scaricate adesso, 0 tenute da prima)",
-  "Understat 2026-27": "fallita: nella pagina non compare mai datesData (18714 byte): o è cambiato il nome, o quella servita non è la pagina della lega",
-  "Understat 2025-26": "fallita: nella pagina non compare mai datesData (18714 byte): o è cambiato il nome, o quella servita non è la pagina della lega",
+  "Understat 2026-27": "fallita: nella pagina non compare mai datesData (18704 byte): o è cambiato il nome, o quella servita non è la pagina della lega",
+  "Understat 2025-26": "fallita: nella pagina non compare mai datesData (18704 byte): o è cambiato il nome, o quella servita non è la pagina della lega",
   "Understat": "fermato dopo 2 tentativi: understat.com risponde sempre con la stessa pagina, la stessa per tutte le stagioni. Non è un formato cambiato, è un blocco — probabilmente sull'indirizzo da cui gira la Action. Gli xG restano dedotti dai tiri.",
   "ESPN calendario": "non disponibile: HTTP Error 403: Forbidden",
   "football-data.org arbitri": "saltati: nessuna chiave FOOTBALL_DATA_TOKEN",
