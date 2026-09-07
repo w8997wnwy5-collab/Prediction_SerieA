@@ -2348,10 +2348,33 @@ function apriPartita(i){
    passa da esc() come tutto il resto, e i link non-http sono già stati buttati
    a monte, quando sono stati raccolti.
    ══════════════════════════════════════════════════════════════ */
+/* Un esonero è UN fatto, anche quando lo scrivono in tre.
+
+   La prima raccolta vera l'ha mostrato subito: "la Fiorentina esonera Grosso"
+   è arrivato da ANSA e due volte da Repubblica, con tre titoli diversi, e si
+   è preso metà della scheda. I titoli sono diversi davvero, quindi lo scarto
+   dei doppioni non li tocca — ma il fatto è uno. Una squadra ha un allenatore:
+   se più titoli parlano della sua panchina, parlano della stessa cosa.
+
+   Vale solo per la panchina. Due infortuni nella stessa squadra sono due
+   notizie diverse, e accorparle sarebbe nascondere. */
+function accorpaPanchina(l){
+  var visto = {}, fuori = [];
+  l.forEach(function(n){
+    if(!n.pan){ fuori.push(n); return; }
+    var chiave = n.sq.join('+');
+    if(visto[chiave]){ visto[chiave].altre = (visto[chiave].altre || 0) + 1; return; }
+    var copia = {}; for(var k in n) copia[k] = n[k];
+    visto[chiave] = copia;
+    fuori.push(copia);
+  });
+  return fuori;
+}
+
 function notiziePer(p){
   var tutte = (S.doc && S.doc.notizie) || [];
   if(!tutte.length) return [];
-  return tutte.filter(function(n){
+  return accorpaPanchina(tutte.filter(function(n){
     return n.sq && (n.sq.indexOf(p.c) >= 0 || n.sq.indexOf(p.v) >= 0);
   }).sort(function(a, b){
     /* prima quello che il modello non può sapere: chi siede in panchina, poi
@@ -2359,7 +2382,7 @@ function notiziePer(p){
     var pa = a.pan ? 2 : (a.ass ? 1 : 0), pb = b.pan ? 2 : (b.ass ? 1 : 0);
     if(pa !== pb) return pb - pa;
     return (b.d || '') < (a.d || '') ? -1 : 1;
-  });
+  }));
 }
 
 function cardNotizie(p){
@@ -2371,7 +2394,8 @@ function cardNotizie(p){
   h += l.slice(0, 8).map(function(n){
     var lato = n.sq.indexOf(p.c) >= 0 ? (n.sq.indexOf(p.v) >= 0 ? 'due' : 'casa') : 'via';
     var testo = '<div class="ntesto">'+esc(n.t)+
-      '<em>'+esc(n.f)+(n.d ? ' · '+esc(dataBreve(n.d)) : '')+'</em></div>';
+      '<em>'+esc(n.f)+(n.altre ? ' e altre '+n.altre+' fonti' : '')+
+      (n.d ? ' · '+esc(dataBreve(n.d)) : '')+'</em></div>';
     return '<div class="notz'+(n.ass || n.pan ? ' ass' : '')+'">'+
       '<span class="nlato '+lato+'">'+esc(lato === 'due' ? '↔' : sigla(lato === 'casa' ? p.c : p.v))+'</span>'+
       (n.l ? '<a href="'+esc(n.l)+'" target="_blank" rel="noopener noreferrer nofollow">'+testo+'</a>' : testo)+

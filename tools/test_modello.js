@@ -328,6 +328,48 @@ prova('e nessuna selezione finisce in due schedine',
         /prud: prudenza\(\)\.id/.test(html));
 })();
 
+/* ─── le notizie: un esonero e' un fatto solo, anche se lo scrivono in tre ─── */
+(function () {
+  var html;
+  try {
+    html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  } catch (e) { return; }
+  function estrai(n) {
+    var i = html.indexOf('function ' + n + '(');
+    if (i < 0) return null;
+    var d = 0;
+    for (var k = html.indexOf('{', i); k < html.length; k++) {
+      if (html[k] === '{') d++;
+      else if (html[k] === '}') { d--; if (!d) return html.slice(i, k + 1); }
+    }
+    return null;
+  }
+  var src = estrai('accorpaPanchina');
+  prova('l\'accorpamento delle notizie di panchina esiste', !!src);
+  if (!src) return;
+  var accorpaPanchina = eval('(' + src + ')');            // eslint-disable-line no-eval
+  var l = [
+    { t: 'La Fiorentina esonera Grosso', f: 'ANSA', sq: ['Fiorentina'], pan: true, ass: false },
+    { t: 'Grosso esonerato: il poco feeling', f: 'Repubblica', sq: ['Fiorentina'], pan: true, ass: false },
+    { t: 'La Fiorentina ha esonerato Fabio Grosso', f: 'Repubblica', sq: ['Fiorentina'], pan: true, ass: false },
+    { t: 'Fiorentina, Kean out', f: 'Gazzetta', sq: ['Fiorentina'], pan: false, ass: true },
+    { t: 'Fiorentina, Gudmundsson out', f: 'ANSA', sq: ['Fiorentina'], pan: false, ass: true }
+  ];
+  var r = accorpaPanchina(l);
+  prova('tre titoli sullo stesso esonero diventano uno', r.length === 3, r.length);
+  var pan = r.filter(function (x) { return x.pan; });
+  prova('e resta il primo, con quante altre fonti lo dicono',
+        pan.length === 1 && pan[0].altre === 2, pan.length ? pan[0].altre : 'nessuno');
+  prova('due infortuni diversi restano due notizie: accorparli sarebbe nascondere',
+        r.filter(function (x) { return x.ass; }).length === 2);
+  prova('non si tocca l\'originale', l[0].altre === undefined);
+  var due = accorpaPanchina([
+    { t: 'Milan cambia', f: 'A', sq: ['Milan'], pan: true },
+    { t: 'Roma cambia', f: 'B', sq: ['Roma'], pan: true }
+  ]);
+  prova('due squadre diverse non si accorpano fra loro', due.length === 2, due.length);
+})();
+
 var largh = esiti.reduce(function (a, e) { return Math.max(a, e[0].length); }, 0);
 var falliti = 0;
 esiti.forEach(function (e) {

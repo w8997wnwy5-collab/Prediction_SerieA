@@ -235,9 +235,39 @@ partita mancante.
 `"Free plans do not have access to this season, try from 2022 to 2024"`. Il
 dato che sarebbe servito di più è l'unico negato.
 
-**Quattro RSS** rispondono: Gazzetta, ANSA, Sky Sport, Football Italia. I titoli
-vengono raccolti, attaccati alle squadre che nominano, e mostrati **accanto**
-alla partita — mai dentro il calcolo.
+**Tre RSS su otto provati** sono rimasti in piedi, e non per scelta di gusto —
+i contatori hanno bocciato gli altri:
+
+| feed | esito |
+|---|---|
+| ANSA | 44 titoli tenuti su 65 |
+| Football Italia | 19 su 20 |
+| Repubblica | 13 su 25 |
+| Gazzetta `/calcio` | 99 titoli, zero: è fantacalcio e rubriche |
+| Gazzetta `/serie-a` | 100 titoli, zero: 65 più vecchi di dieci giorni — è un archivio, non un flusso |
+| corriereobjects | 8 titoli, zero |
+| Sky `sport.sky.it` | ha risposto alla sonda e poi 404 al giro vero |
+| Tuttomercatoweb | 403 |
+
+I titoli vengono raccolti, attaccati alle squadre che nominano, e mostrati
+**accanto** alla partita — mai dentro il calcolo.
+
+Due cose imparate dal primo giro vero, che nessuna sonda poteva anticipare.
+I titoli non chiamano le squadre come le chiamano le tabelle: "Juve" è scritto
+più spesso di "Juventus", e "Nerazzurri" non contiene "Inter" — c'è una tabella
+di soprannomi, con dentro solo quelli che stanno per una squadra sola
+(«bianconeri» è Juventus ma anche Udinese, e resta fuori). E quando una fonte
+non dà niente, il riepilogo riporta il motivo dello scarto e un paio di titoli
+veri: «zero su novantanove» non è un numero, è una domanda.
+
+Oltre alle assenze c'è un secondo tipo di notizia, che pesa di più: **chi siede
+in panchina**. Il primo giro ha pescato «la Fiorentina esonera Grosso dopo 3
+giornate», ed è la cosa che il modello sa peggio di tutte — le forze di una
+squadra sono calcolate sui risultati di una squadra che da domani è guidata da
+un altro, e nessun decadimento temporale se ne accorge. Va in cima con la sua
+etichetta. Tre fonti che raccontano lo stesso esonero diventano una riga sola
+con «e altre 2 fonti»: due infortuni diversi invece restano due notizie,
+perché accorparli sarebbe nascondere.
 
 Perché fuori dal calcolo, e non è pigrizia. "La Roma ha nove punti su nove" è
 informazione che il mercato ha già, e il mercato lo usiamo come ancora: quella
@@ -399,7 +429,7 @@ una accettata: senza il conto scritto, fra sei mesi qualcuno la riprova.
 | `worker.js` | fa girare il motore fuori dal thread dell'interfaccia, così lo schermo non si blocca |
 | `scripts/build_data.py` | scarica e normalizza i dati da sei fonti (solo libreria standard) |
 | `.github/workflows/aggiorna-dati.yml` | il robot: quattro giri al giorno |
-| `tools/` | generatore di dati sintetici, le tre prove (96 sulle fonti, 72 sul motore, 15 sul backtest), la verifica di una giornata a posteriori e le quattro misure (arbitri, indipendenza, valore, regola di selezione) |
+| `tools/` | generatore di dati sintetici, le tre prove (100 sulle fonti, 78 sul motore, 15 sul backtest), la verifica di una giornata a posteriori e le quattro misure (arbitri, indipendenza, valore, regola di selezione) |
 | `data/` | riempita dalla Action: `serie-a.json` e `meta.json` |
 
 ## Una nota sul senso di tutto questo
