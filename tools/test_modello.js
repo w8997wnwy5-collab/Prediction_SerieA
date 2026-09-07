@@ -284,6 +284,50 @@ prova('e nessuna selezione finisce in due schedine',
         return n === 10;
       }));
 
+/* ─── la manopola della prudenza, letta dal sorgente dell'app ───
+
+   PRUDENZE non e' codice di calcolo, e' una tabella di numeri MISURATI su 47
+   giornate mai viste (tools/ottimizza_regola.js). Una tabella di numeri
+   misurati puo' essere ricopiata male, e nessuno se ne accorge: qui si
+   controlla che le quattro posizioni raccontino una storia coerente — piu'
+   prudente vuol dire prendere piu' spesso e pagare di meno — e che la soglia
+   non sia rimasta scritta a mano da qualche parte. */
+(function () {
+  var html;
+  try {
+    html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  } catch (e) { return; }
+  var blocco = html.match(/var PRUDENZE = \[[\s\S]*?\n\];/);
+  prova('la manopola della prudenza esiste nel sorgente', !!blocco);
+  if (!blocco) return;
+  /* In strict mode un eval non puo' assegnare una variabile di fuori: si
+     valuta l'array come espressione e si prende quello che torna. */
+  var PRUDENZE = eval('(' + blocco[0].replace('var PRUDENZE = ', '').replace(/;\s*$/, '') + ')');
+  prova('quattro posizioni', PRUDENZE.length === 4, PRUDENZE.length);
+  prova('soglie crescenti',
+        PRUDENZE.every(function (x, i) { return i === 0 || x.soglia > PRUDENZE[i - 1].soglia; }));
+  prova('piu prudente = paga meno',
+        PRUDENZE.every(function (x, i) { return i === 0 || x.quota < PRUDENZE[i - 1].quota; }));
+  prova('piu prudente = ne prende di piu',
+        PRUDENZE.every(function (x, i) { return i === 0 || x.prese >= PRUDENZE[i - 1].prese; }));
+  prova('piu prudente = almeno otto su dieci piu spesso',
+        PRUDENZE.every(function (x, i) { return i === 0 || x.alm8 > PRUDENZE[i - 1].alm8; }));
+  prova('ogni posizione ha id, nome e spiegazione',
+        PRUDENZE.every(function (x) { return x.id && x.nome && x.testo && x.testo.length > 30; }));
+  prova('gli id sono distinti',
+        Object.keys(PRUDENZE.reduce(function (a, x) { a[x.id] = 1; return a; }, {})).length === 4);
+  prova('le soglie stanno nell\'intervallo provato (0.70-0.90)',
+        PRUDENZE.every(function (x) { return x.soglia >= 0.70 && x.soglia <= 0.90; }));
+  prova('si parte da quella dove i conti tornano, non dalla prima',
+        PRUDENZE[2].id === 'equi' && /PRUDENZE\[2\]/.test(html), PRUDENZE[2].id);
+  prova('la soglia non e piu scritta a mano dentro sceltePartita',
+        !/m\.p <= 0\.78/.test(html) && /m\.p <= prudenza\(\)\.soglia/.test(html));
+  prova('cambiando manopola si butta la media della giornata',
+        /impostaPrudenza[\s\S]{0,300}_mediaGiornata = null/.test(html));
+  prova('la posizione attiva finisce nel pronostico che l\'app segna a se stessa',
+        /prud: prudenza\(\)\.id/.test(html));
+})();
+
 var largh = esiti.reduce(function (a, e) { return Math.max(a, e[0].length); }, 0);
 var falliti = 0;
 esiti.forEach(function (e) {

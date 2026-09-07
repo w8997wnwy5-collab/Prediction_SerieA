@@ -213,7 +213,71 @@ node tools/verifica_giornata.js                     # l'ultima giornata giocata
 node tools/verifica_giornata.js 2026-09-04 2026-09-07
 node tools/misura_arbitri.js                        # l'arbitro sposta i gol? (no)
 node tools/misura_indipendenza.js                   # le giocate cadono insieme? (no)
+node tools/misura_valore.js                         # si batte il mercato? (no, e c'è di peggio)
+node tools/ottimizza_regola.js                      # quale soglia conviene? (nessuna, e va bene così)
 ```
+
+### La maledizione del vincitore
+
+La domanda giusta da fare a un modello di scommesse: **se sono alla pari col
+mercato, giocare dove ci DISSENTO non dovrebbe pagare?**
+
+La risposta è no, e all'incontrario. Sulle quote vere di chiusura, 5800 giocate
+possibili, modello **senza** ancoraggio — quello con un'opinione propria:
+
+| dove il modello si dava… | resa | prese contro promesse |
+|---|---|---|
+| −10% o meno | −5.9% | 44.6% contro 39.0% |
+| fra −10% e 0 | −1.9% | 42.7% contro 41.4% |
+| fra 0 e +5% | −8.0% | 40.3% contro 43.8% |
+| fra +5% e +10% | −11.1% | 36.0% contro 42.6% |
+| fra +10% e +20% | −14.8% | 27.9% contro 36.3% |
+| **più di +20%** | **−35.3%** | **14.0% contro 26.6%** |
+
+Più il modello si credeva in vantaggio, peggio andava. Non è sfortuna: dove
+dissente di più dal mercato non è perché ha visto qualcosa, è perché lì sta
+sbagliando di più. Un filtro "gioca dove hai vantaggio" non pesca le occasioni —
+pesca gli errori peggiori del modello, uno per uno.
+
+È il motivo per cui l'app **usa** le quote invece di scommetterci contro.
+Ancorata al mercato, il dissenso sparisce (5466 giocate su 5800 finiscono nella
+fascia −10%/0) e le probabilità diventano oneste: 47.7% promesso, 47.7% uscito.
+Con il dissenso sparisce anche ogni vantaggio, e va bene così — meglio numeri
+veri senza vantaggio che numeri gonfi con un vantaggio che non esiste.
+
+### Non c'è una soglia migliore: c'è una frontiera
+
+L'app propone di ogni partita una giocata sola. Per sceglierla scarta le troppo
+probabili — sopra una certa soglia la quota non paga niente — e fra le rimaste
+prende quella col pavimento più alto. Quella soglia è stata 0.78 per mesi,
+scelta a occhio.
+
+`tools/ottimizza_regola.js` la mette alla prova: tre criteri × sei soglie,
+scelti su 46 giornate e **misurati su 47 mai viste**, così la vincitrice non può
+esserlo per caso. Due risultati.
+
+**Non esiste una soglia migliore.** Non può esistere: il modello è calibrato e
+senza vantaggio, quindi ogni soglia ha lo stesso valore atteso. Cambia il
+profilo, misurato sulle giornate mai viste:
+
+| soglia | ne prende | quota di tutte e dieci | almeno 8 su 10 |
+|---|---|---|---|
+| 0.74 | 71% | ~43 | 34% |
+| 0.78 | 75% | ~30 | 40% |
+| 0.82 | 78% | ~15 | 55% |
+| 0.86 | 79% | ~10 | 65% |
+
+Non è un ottimo da trovare, è una frontiera da scegliere — quindi è diventata
+una **manopola** in Giornata, con questi numeri accanto a ogni posizione.
+
+**Un difetto vero, però, c'era.** A 0.78 il modello prometteva meno di quanto
+manteneva: 71.1% contro 75.4% uscito, +4.4 punti (z = +2.1), e lo stesso segno
+sulla metà di scelta. È un errore a favore di chi gioca, ma resta un errore, e
+sporcava la distribuzione "quante ne prendi" e tutto quello che ci sta sopra.
+Dallo 0.82 in su i conti tornano: per questo il valore di partenza ora è quello.
+
+Il criterio di ordinamento, invece, conta quasi niente: pavimento e probabilità
+danno lo stesso risultato a ogni soglia.
 
 ### Quante ne prendi, e come le impacchetti
 
@@ -291,7 +355,7 @@ una accettata: senza il conto scritto, fra sei mesi qualcuno la riprova.
 | `worker.js` | fa girare il motore fuori dal thread dell'interfaccia, così lo schermo non si blocca |
 | `scripts/build_data.py` | scarica e normalizza i dati da sei fonti (solo libreria standard) |
 | `.github/workflows/aggiorna-dati.yml` | il robot: quattro giri al giorno |
-| `tools/` | generatore di dati sintetici, le tre prove (79 sulle fonti, 59 sul motore, 15 sul backtest), la verifica di una giornata a posteriori e le due misure (arbitri, indipendenza) |
+| `tools/` | generatore di dati sintetici, le tre prove (79 sulle fonti, 72 sul motore, 15 sul backtest), la verifica di una giornata a posteriori e le quattro misure (arbitri, indipendenza, valore, regola di selezione) |
 | `data/` | riempita dalla Action: `serie-a.json` e `meta.json` |
 
 ## Una nota sul senso di tutto questo

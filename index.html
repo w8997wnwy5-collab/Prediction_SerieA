@@ -269,6 +269,25 @@ select{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:1
 .specr i.su{color:var(--ok);background:var(--ok-soft);}
 .specr i.giu{color:var(--amber);background:var(--amber-soft);}
 
+/* ── la maledizione del vincitore ── */
+.curse{display:flex;flex-direction:column;gap:5px;margin:2px 0 10px;}
+.curser{display:grid;grid-template-columns:1fr 84px 56px;align-items:center;gap:8px;font-size:12px;}
+.curser .cn{color:var(--mute);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.curser .cb{height:9px;border-radius:5px;background:var(--card2);overflow:hidden;}
+.curser .cb i{display:block;height:100%;border-radius:5px;background:var(--warn);}
+.curser .cv{font-family:var(--mono);font-size:12.5px;font-weight:700;text-align:right;color:var(--warn);}
+
+/* ── quanto prudente: la manopola ── */
+.prud{display:flex;gap:6px;margin:2px 0 10px;}
+.prudb{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:2px;
+  padding:9px 4px;border-radius:10px;border:1px solid var(--line2);background:var(--card2);
+  cursor:pointer;font:inherit;color:inherit;transition:background .12s,border-color .12s;}
+.prudb b{font-size:11.5px;font-weight:700;letter-spacing:-.1px;line-height:1.2;text-align:center;}
+.prudb em{font-style:normal;font-family:var(--mono);font-size:9.5px;color:var(--mute);}
+.prudb.on{background:var(--accent-soft);border-color:var(--accent);}
+.prudb.on b{color:var(--accent);}
+.prudb.on em{color:var(--accent);}
+
 /* ── quante ne prendi: istogramma ── */
 .dist{display:flex;align-items:flex-end;gap:4px;height:132px;margin:2px 0 10px;}
 .distc{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;min-width:0;height:100%;}
@@ -934,6 +953,76 @@ function mediaGiornata(partite){
   return media;
 }
 
+/* ══════════════════════════════════════════════════════════════
+   QUANTO PRUDENTE
+
+   L'app propone, di ogni partita, una giocata sola. Per sceglierla scarta
+   quelle troppo probabili — sopra una certa soglia la quota non paga più
+   niente, "Almeno un gol" al 93% è una constatazione, non una scommessa — e
+   fra le rimaste prende quella col pavimento più alto.
+
+   Quella soglia è stata 0.78 per mesi, scelta a occhio. L'ho messa alla prova
+   (tools/ottimizza_regola.js): si sceglie la regola su 46 giornate e la si
+   misura su 47 mai viste, così la vincitrice non può esserlo per caso.
+
+   Due cose sono venute fuori.
+
+   La prima: NON esiste una soglia migliore delle altre. Non può esistere — il
+   modello è calibrato e non ha vantaggio sul mercato, quindi ogni soglia ha lo
+   stesso valore atteso. Quello che cambia è il profilo: in basso si paga tanto
+   e si prende di rado, in alto il contrario. Non è un ottimo da trovare, è una
+   frontiera da scegliere, e chi sceglie sei tu.
+
+   La seconda, che è un difetto vero: a 0.78 il modello promette MENO di quanto
+   mantiene — 71.1% promesso contro 75.4% uscito, quattro punti e mezzo. È un
+   errore a favore di chi gioca, ma resta un errore, e sporca la distribuzione
+   "quante ne prendi" e tutto quello che ci sta sopra. Dallo 0.82 in su i conti
+   tornano. Per questo il valore di partenza adesso è 0.82 e non 0.78.
+
+   I numeri qui sotto sono misurati sulle 47 giornate mai viste, non stimati.
+   ══════════════════════════════════════════════════════════════ */
+var PRUDENZE = [
+  {id:'massima', soglia:0.74, nome:'Quota massima', quota:43, prese:71, alm8:34,
+   testo:'Le giocate più pagate fra quelle sensate. Una giornata su tre ne porta a casa almeno otto.'},
+  {id:'alta',    soglia:0.78, nome:'Quota alta',    quota:30, prese:75, alm8:40,
+   testo:'Come è stata l\'app finora. Paga bene, ma qui il modello promette qualche punto meno di quanto mantiene.'},
+  {id:'equi',    soglia:0.82, nome:'Equilibrata',   quota:15, prese:78, alm8:55,
+   testo:'Il punto in cui le probabilità scritte sono quelle vere, e più di una giornata su due ne porta almeno otto.'},
+  {id:'prudente',soglia:0.86, nome:'Prudente',      quota:10, prese:79, alm8:65,
+   testo:'Due giornate su tre ne portano almeno otto. La quota totale però scende a dieci.'}
+];
+var CHIAVE_PRUDENZA = 'seriea_prudenza_v1';
+
+function prudenza(){
+  if(S.prudenza) return S.prudenza;
+  var id = null;
+  try{ id = localStorage.getItem(CHIAVE_PRUDENZA); }catch(e){}
+  S.prudenza = PRUDENZE.filter(function(x){ return x.id === id; })[0] || PRUDENZE[2];
+  return S.prudenza;
+}
+function impostaPrudenza(id){
+  var p = PRUDENZE.filter(function(x){ return x.id === id; })[0];
+  if(!p) return;
+  S.prudenza = p;
+  try{ localStorage.setItem(CHIAVE_PRUDENZA, id); }catch(e){}
+  _mediaGiornata = null; _chiaveMedia = null;
+  render(); window.scrollTo(0,0);
+}
+function sceltaPrudenza(){
+  var att = prudenza();
+  return '<div class="h2">Quanto prudente</div><div class="card">'+
+    '<div class="prud">'+PRUDENZE.map(function(x){
+      return '<button class="prudb'+(x.id===att.id?' on':'')+'" onclick="impostaPrudenza(\''+x.id+'\')">'+
+        '<b>'+esc(x.nome)+'</b><em>quota ~'+x.quota+'</em></button>';
+    }).join('')+'</div>'+
+    '<div class="note" style="margin-top:2px">'+esc(att.testo)+'<br><br>'+
+    'Su 47 giornate che il modello non aveva mai visto: ne ha prese <b>'+att.prese+'%</b>, '+
+    'la quota di tutte e dieci insieme era <b>~'+att.quota+'</b>, e almeno otto su dieci sono '+
+    'uscite <b>'+att.alm8+'%</b> delle volte. Nessuna di queste quattro guadagna più delle altre '+
+    '— non può, il modello non ha vantaggio sul mercato: cambia solo quanto paghi e quanto spesso '+
+    'esce. Scegli tu il punto.</div></div>';
+}
+
 /* Le selezioni di UNA partita, in un posto solo.
 
    Prima questa decisione era presa in due punti diversi con due filtri diversi
@@ -974,9 +1063,10 @@ function sceltePartita(p, quante){
      Non è il primo della classifica per probabilità: quello è sempre "Almeno
      un gol" al 93%, in ogni partita di ogni giornata, e a quota 1.08 non è una
      giocata, è una constatazione. Si prende la più solida FRA QUELLE CHE
-     PAGANO QUALCOSA — sotto il 78% di probabilità, cioè sopra 1.28 di quota
-     equa. Sono le stesse da cui è uscita la schedina da dieci su dieci. */
-  var pagante = perSolidita.filter(function(m){ return m.p <= 0.78; });
+     PAGANO QUALCOSA, e dove sta quel confine lo decide la manopola qui sopra:
+     più in basso si paga di più e si prende di rado, più in alto il contrario.
+     Nessuna delle due è migliore — vedi il commento a PRUDENZE. */
+  var pagante = perSolidita.filter(function(m){ return m.p <= prudenza().soglia; });
   return {
     tutte: voci, sim: mk.sim,
     speciali: perScarto.slice(0, quante || 3),
@@ -1025,7 +1115,7 @@ function segnaPronostici(){
     if(!sc || !sc.solide.length) return;
     var m = sc.solide[0];
     p.push({d: par.d, c: par.c, v: par.v, mercato: m.id, nome: m.nome,
-            p: Math.round(m.p * 1000) / 1000, esito: null});
+            p: Math.round(m.p * 1000) / 1000, prud: prudenza().id, esito: null});
     nuovo = true;
   });
   /* non cresce all'infinito: due stagioni di pronostici bastano e avanzano */
@@ -1438,6 +1528,7 @@ function tabGiornata(){
     '. Su ogni partita trovi <b>la più solida</b>: la giocata più sicura fra quelle che pagano '+
     'qualcosa. Tocca la partita per tutte le altre.</p>';
   h += g.partite.map(function(p){ return schedaPartita(p, prossime.indexOf(p)); }).join('');
+  h += sceltaPrudenza();
   if(gruppi.length > 1){
     var dopo = gruppi.slice(1, 4);
     h += '<div class="h2">Più avanti</div><div class="card">'+
@@ -1944,6 +2035,38 @@ function tabPrecisione(){
       'chiusura contengono formazioni e infortuni dell\'ultimo minuto, che a un modello statistico '+
       'mancano. Batterle stabilmente non riesce quasi a nessuno, e chi dice di farlo di solito ha '+
       'sbagliato i conti.</p></div></div>';
+
+    /* La domanda che viene dopo, e che nessuno si fa perche' sembra ovvia:
+       se sono alla pari col mercato, giocare dove DISSENTO da lui non
+       dovrebbe pagare? La risposta e' no, e all'incontrario. */
+    h += '<div class="h2">E se giocassi dove non sono d\'accordo col banco?</div><div class="card">'+
+      '<p class="lede" style="margin:0 0 12px">È la domanda giusta da fare a un modello, e la '+
+      'risposta mi ha sorpreso. L\'ho misurata sulle quote vere di chiusura, su 5800 giocate '+
+      'possibili: ho preso il modello <b>senza</b> ancoraggio — quello con un\'opinione propria — '+
+      'e ho guardato quanto avrebbe reso scommettere dove si dava più vantaggio.</p>'+
+      '<div class="curse">'+
+      [['dove si dava −10% o meno','−5.9%',0.30],
+       ['dove si dava fra −10% e 0','−1.9%',0.12],
+       ['dove si dava fra 0 e +5%','−8.0%',0.40],
+       ['dove si dava fra +5% e +10%','−11.1%',0.55],
+       ['dove si dava fra +10% e +20%','−14.8%',0.72],
+       ['dove si dava più di +20%','−35.3%',1.00]].map(function(r){
+        return '<div class="curser"><span class="cn">'+r[0]+'</span>'+
+          '<span class="cb"><i style="width:'+Math.round(100*r[2])+'%"></i></span>'+
+          '<span class="cv">'+r[1]+'</span></div>';
+      }).join('')+'</div>'+
+      '<div class="note"><b>Più il modello si credeva in vantaggio, peggio andava.</b> '+
+      'Dove si dava più del 20% di margine ha portato a casa il 14% delle giocate contro il 26.6% '+
+      'che prometteva, e perso il 35% del giocato.<br><br>'+
+      'Non è sfortuna, ed è un fenomeno con un nome: la <b>maledizione del vincitore</b>. Dove il '+
+      'modello dissente di più dal mercato non è perché ha visto qualcosa che il mercato non vede — '+
+      'è perché proprio lì sta sbagliando di più. Un filtro del tipo "gioca solo dove hai vantaggio" '+
+      'non pesca le occasioni: pesca i miei errori peggiori, uno per uno.<br><br>'+
+      'È il motivo per cui questa app <b>usa</b> le quote invece di scommetterci contro. Ancorato al '+
+      'mercato il dissenso sparisce quasi del tutto e le probabilità diventano oneste — insieme al '+
+      'dissenso sparisce anche ogni vantaggio, e va bene così: meglio numeri veri senza vantaggio '+
+      'che numeri gonfi con un vantaggio che non esiste.<br><br>'+
+      'Il conto si rifà con <code>node tools/misura_valore.js</code>.</div></div>';
   }
 
   /* ── i pronostici che l'app ha segnato da sola ── */
