@@ -449,7 +449,7 @@ def prendi_thesportsdb(stagione, esiti):
 FONTI_NOTIZIE = (
     ('Gazzetta', 'https://www.gazzetta.it/rss/calcio.xml'),
     ('ANSA', 'https://www.ansa.it/sito/notizie/sport/calcio/calcio_rss.xml'),
-    ('Sky Sport', 'https://xml2.corriereobjects.it/rss/sport.xml'),
+    ('Corriere', 'https://xml2.corriereobjects.it/rss/sport.xml'),
     ('Football Italia', 'https://football-italia.net/feed/'),
 )
 
@@ -572,18 +572,21 @@ def prendi_notizie(squadre, esiti):
             esiti['notizie %s' % etichetta] = 'non disponibile: %s' % str(e)[:60]
             continue
         voci = _voci_rss(testo)
-        prese = 0
+        prese, scarti = 0, {'doppio': 0, 'nessuna squadra': 0, 'vecchio': 0}
         for voce in voci:
             titolo = re.sub(r'\s+', ' ', voce['title']).strip()
             if not titolo or titolo.lower() in viste:
+                scarti['doppio'] += 1
                 continue
             basso = titolo.lower()
             citate = sorted(sq for sq, nomi in per_squadra.items()
                             if any(re.search(r'\b%s\b' % re.escape(n), basso) for n in nomi))
             if not citate:
+                scarti['nessuna squadra'] += 1
                 continue
             quando = _quando(voce)
             if quando and quando < limite:
+                scarti['vecchio'] += 1
                 continue
             link = (voce.get('link') or '').strip()
             if not link.startswith(('http://', 'https://')):
@@ -594,17 +597,20 @@ def prendi_notizie(squadre, esiti):
                           'ass': any(k in basso for k in PAROLE_ASSENZA),
                           'pan': any(k in basso for k in PAROLE_PANCHINA)})
             prese += 1
+        motivi = ', '.join('%d %s' % (n, k) for k, n in scarti.items() if n)
         if prese or not voci:
-            esiti['notizie %s' % etichetta] = '%d titoli su %d nominano una squadra di A' % (
-                prese, len(voci))
+            esiti['notizie %s' % etichetta] = '%d titoli tenuti su %d%s' % (
+                prese, len(voci), ' (scartati: %s)' % motivi if motivi else '')
         else:
-            # Zero su novantanove e' un numero che non spiega niente: o il feed
-            # parla d'altro, o i titoli chiamano le squadre in un modo che non
-            # riconosco. Un paio di titoli veri lo dicono in un colpo d'occhio.
-            campione = ' | '.join(re.sub(r'\s+', ' ', v['title'])[:60] for v in voci[:2])
+            # Zero su novantanove non e' un numero, e' una domanda. Il motivo
+            # dello scarto e un paio di titoli veri rispondono in un colpo
+            # d'occhio: se il feed parla di fantacalcio non c'e' niente da
+            # aggiustare, se invece nomina le squadre e io non le vedo, il
+            # difetto e' mio. La prima volta ho dovuto indovinarlo.
+            campione = ' // '.join(re.sub(r'\s+', ' ', v['title'])[:70] for v in voci[:2])
             esiti['notizie %s' % etichetta] = (
-                'nessuno dei %d titoli nomina una squadra di A. Per esempio: %s'
-                % (len(voci), campione))
+                'nessuno dei %d titoli tenuto (%s). Per esempio: %s'
+                % (len(voci), motivi or 'nessun motivo registrato', campione))
         time.sleep(1.5)
     fuori.sort(key=lambda x: (x['d'] or '', x['ass'] or x['pan']), reverse=True)
     fuori = fuori[:MAX_NOTIZIE]

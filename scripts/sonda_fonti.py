@@ -125,9 +125,24 @@ def candidate():
                   ['player', 'type'], 'com e fatto un infortunio, quando il piano lo concede'))
 
     # ── notizie: RSS di testate italiane ──
+    # Il feed "calcio" della Gazzetta ha dato 99 titoli e zero riconosciuti: sono
+    # rubriche e fantacalcio, non cronaca. Si provano gli altri suoi indirizzi.
     L += [
-        ('RSS Gazzetta calcio', 'https://www.gazzetta.it/rss/calcio.xml', None,
-         ['<item', 'title'], 'notizie in italiano'),
+        ('RSS Gazzetta serie-a', 'https://www.gazzetta.it/rss/serie-a.xml', None,
+         ['<item'], 'forse questo e cronaca invece che rubriche'),
+        ('RSS Gazzetta home', 'https://www.gazzetta.it/rss/home.xml', None,
+         ['<item'], 'tutto, da filtrare'),
+        ('RSS Sky Sport vero', 'https://sport.sky.it/rss/calcio.xml', None,
+         ['<item'], 'quello che avevo etichettato Sky era del Corriere'),
+        ('RSS Repubblica calcio',
+         'https://www.repubblica.it/rss/sport/calcio/rss2.0.xml', None,
+         ['<item'], 'altra agenzia'),
+        ('RSS Corriere dello Sport',
+         'https://www.corrieredellosport.it/rss/calcio.xml', None,
+         ['<item'], 'molto puntuale sulle formazioni'),
+        ('RSS Gazzetta calcio (quello di adesso)',
+         'https://www.gazzetta.it/rss/calcio.xml', None,
+         ['<item', 'title'], 'per confronto'),
         ('RSS ANSA calcio',
          'https://www.ansa.it/sito/notizie/sport/calcio/calcio_rss.xml', None,
          ['<item', 'title'], 'agenzia, asciutta e affidabile'),
