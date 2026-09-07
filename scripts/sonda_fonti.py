@@ -47,12 +47,13 @@ def prova(nome, url, intestazioni=None, cerca=None, nota=''):
             if not trovati:
                 esito = 'risponde ma non e quello che cerco'
         return {'nome': nome, 'esito': esito, 'dettaglio': extra, 'nota': nota,
-                'assaggio': re.sub(r'\s+', ' ', testo[:300])}
+                'assaggio': re.sub(r'\s+', ' ', testo[:300]),
+                'titoli': re.findall(r'<title>(?:<!\\[CDATA\\[)?(.{5,110}?)(?:\\]\\]>)?</title>', testo)[1:7]}
     except urllib.error.HTTPError as e:
-        return {'nome': nome, 'esito': 'HTTP %d' % e.code, 'dettaglio': str(e.reason)[:60],
+        return {'nome': nome, 'esito': 'HTTP %d' % e.code, 'titoli': [], 'dettaglio': str(e.reason)[:60],
                 'nota': nota, 'assaggio': ''}
     except Exception as e:                     # noqa: BLE001
-        return {'nome': nome, 'esito': 'irraggiungibile', 'dettaglio': str(e)[:80],
+        return {'nome': nome, 'esito': 'irraggiungibile', 'titoli': [], 'dettaglio': str(e)[:80],
                 'nota': nota, 'assaggio': ''}
 
 
@@ -108,6 +109,21 @@ def candidate():
          ['children'], 'discussione, non dati'),
     ]
 
+    # ── secondo giro: la forma esatta di quello che serve ──
+    L += [
+        ('TheSportsDB: ci sono i punteggi?',
+         'https://www.thesportsdb.com/api/v1/json/3/eventspastleague.php?id=4332', None,
+         ['intHomeScore', 'intAwayScore', 'strTimestamp'],
+         'se ci sono, e una terza fonte di risultati piu veloce delle altre due'),
+        ('TheSportsDB: dettaglio di una squadra',
+         'https://www.thesportsdb.com/api/v1/json/3/searchteams.php?t=Roma', None,
+         ['strTeam'], 'anagrafica e descrizione'),
+    ]
+    if af:
+        L.append(('API-Football infortuni 2024 (per vedere la forma del dato)',
+                  'https://v3.football.api-sports.io/injuries?league=135&season=2024', af,
+                  ['player', 'type'], 'com e fatto un infortunio, quando il piano lo concede'))
+
     # ── notizie: RSS di testate italiane ──
     L += [
         ('RSS Gazzetta calcio', 'https://www.gazzetta.it/rss/calcio.xml', None,
@@ -138,7 +154,10 @@ def main():
         esiti.append(r)
         print('  %-16s %s' % (r['esito'][:16], r['nome']))
         print('                   %s' % r['dettaglio'])
-        if r['assaggio']:
+        if r.get('titoli'):
+            for t in r['titoli'][:5]:
+                print('                   · %s' % t[:110])
+        elif r['assaggio']:
             print('                   « %s »' % r['assaggio'][:150])
         time.sleep(1.2)
 
