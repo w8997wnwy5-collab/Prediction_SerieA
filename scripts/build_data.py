@@ -446,10 +446,18 @@ def prendi_thesportsdb(stagione, esiti):
 # Il contenuto e' scritto da altri: non si esegue, non si interpreta, non
 # cambia un numero. Si mostra, con la fonte accanto.
 
+# Quali feed, e perche' proprio questi. Il primo giro vero ha bocciato due
+# scelte fatte a occhio: il feed "calcio" della Gazzetta e' rubriche e
+# fantacalcio (99 titoli, zero riconosciuti) e quello che avevo etichettato
+# Sky Sport era di corriereobjects (8 titoli, zero). Adesso ci sono gli
+# indirizzi che la sonda ha visto rispondere davvero, e il riepilogo dice per
+# ognuno quanti titoli tiene e quanti ne scarta, cosi la prossima potatura si
+# fa sui numeri invece che a naso.
 FONTI_NOTIZIE = (
-    ('Gazzetta', 'https://www.gazzetta.it/rss/calcio.xml'),
+    ('Gazzetta', 'https://www.gazzetta.it/rss/serie-a.xml'),
     ('ANSA', 'https://www.ansa.it/sito/notizie/sport/calcio/calcio_rss.xml'),
-    ('Corriere', 'https://xml2.corriereobjects.it/rss/sport.xml'),
+    ('Sky Sport', 'https://sport.sky.it/rss/calcio.xml'),
+    ('Repubblica', 'https://www.repubblica.it/rss/sport/calcio/rss2.0.xml'),
     ('Football Italia', 'https://football-italia.net/feed/'),
 )
 
