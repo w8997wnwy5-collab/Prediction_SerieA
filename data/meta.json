@@ -1,5 +1,5 @@
 {
- "aggiornato": "2026-09-07T09:53:03+00:00",
+ "aggiornato": "2026-09-07T09:55:08+00:00",
  "esito": "ok",
  "ultima_partita": "2026-09-06",
  "partite_totali": 1921,
@@ -14,7 +14,7 @@
  "in_arrivo_con_orario": 30,
  "marcatori": 0,
  "notizie": 60,
- "notizie_assenze": 3,
+ "notizie_assenze": 2,
  "stagioni": [
   "2021-22",
   "2022-23",
@@ -37,8 +37,8 @@
   "calendario stagione": "ok da openfootball: 360 partite",
   "calendario": "360 partite in tutto, 10 con le quote (10 scaricate adesso, 0 tenute da prima)",
   "TheSportsDB risultati": "1 risultati accolti",
-  "Understat 2026-27": "fallita: nella pagina non compare mai datesData (18714 byte): o è cambiato il nome, o quella servita non è la pagina della lega",
-  "Understat 2025-26": "fallita: nella pagina non compare mai datesData (18714 byte): o è cambiato il nome, o quella servita non è la pagina della lega",
+  "Understat 2026-27": "fallita: nella pagina non compare mai datesData (18704 byte): o è cambiato il nome, o quella servita non è la pagina della lega",
+  "Understat 2025-26": "fallita: nella pagina non compare mai datesData (18704 byte): o è cambiato il nome, o quella servita non è la pagina della lega",
   "Understat": "fermato dopo 2 tentativi: understat.com risponde sempre con la stessa pagina, la stessa per tutte le stagioni. Non è un formato cambiato, è un blocco — probabilmente sull'indirizzo da cui gira la Action. Gli xG restano dedotti dai tiri.",
   "ESPN calendario": "non disponibile: HTTP Error 403: Forbidden",
   "football-data.org arbitri": "saltati: nessuna chiave FOOTBALL_DATA_TOKEN",
@@ -51,10 +51,11 @@
   "API-Football 2021-22": "non disponibile: API-Football dice: {\"plan\": \"Free plans do not have access to this season, try from 2022 to 2024.\"}",
   "API-Football richieste": "6 usate su 70 disponibili",
   "marcatori": "saltati: nessuna chiave FOOTBALL_DATA_TOKEN",
-  "notizie Gazzetta": "nessuno dei 99 titoli tenuto (38 nessuna squadra, 61 vecchio). Per esempio: 5 NOMI SU CUI PUNTARE AL FANTACALCIO PER IL RUSH FINALE: da Diao a Vla // Viviano sbotta dopo Fiorentina-Inter: \"Ma come caz... si fa a dare rig",
+  "notizie Gazzetta": "nessuno dei 100 titoli tenuto (35 nessuna squadra, 65 vecchio). Per esempio: Lazio, Sarri: \"Kamada fondamentale per noi, ma tornerà tardi dalla naz // Napoli in crisi, Lo Monaco: \"Le responsabilità sono della proprietà\"",
   "notizie ANSA": "44 titoli tenuti su 65 (scartati: 21 nessuna squadra)",
-  "notizie Corriere": "nessuno dei 8 titoli tenuto (6 nessuna squadra, 2 vecchio). Per esempio: Ragazzine, nonni, maglie di ogni epoca: la festa dell’Inter che unisce // Sinner-Kotov, dove vedere in tv il match Masters 1000 di Madrid",
+  "notizie Sky Sport": "non disponibile: HTTP Error 404: Not Found",
+  "notizie Repubblica": "11 titoli tenuti su 25 (scartati: 4 doppio, 10 nessuna squadra)",
   "notizie Football Italia": "19 titoli tenuti su 20 (scartati: 1 nessuna squadra)",
-  "notizie": "60 titoli tenuti, 3 segnalano un'assenza, 1 la panchina"
+  "notizie": "60 titoli tenuti, 2 segnalano un'assenza, 3 la panchina"
  }
 }
