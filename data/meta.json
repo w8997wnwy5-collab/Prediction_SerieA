@@ -1,5 +1,5 @@
 {
- "aggiornato": "2026-09-07T09:55:08+00:00",
+ "aggiornato": "2026-09-07T09:58:31+00:00",
  "esito": "ok",
  "ultima_partita": "2026-09-06",
  "partite_totali": 1921,
@@ -51,11 +51,9 @@
   "API-Football 2021-22": "non disponibile: API-Football dice: {\"plan\": \"Free plans do not have access to this season, try from 2022 to 2024.\"}",
   "API-Football richieste": "6 usate su 70 disponibili",
   "marcatori": "saltati: nessuna chiave FOOTBALL_DATA_TOKEN",
-  "notizie Gazzetta": "nessuno dei 100 titoli tenuto (35 nessuna squadra, 65 vecchio). Per esempio: Lazio, Sarri: \"Kamada fondamentale per noi, ma tornerà tardi dalla naz // Napoli in crisi, Lo Monaco: \"Le responsabilità sono della proprietà\"",
   "notizie ANSA": "44 titoli tenuti su 65 (scartati: 21 nessuna squadra)",
-  "notizie Sky Sport": "non disponibile: HTTP Error 404: Not Found",
-  "notizie Repubblica": "11 titoli tenuti su 25 (scartati: 4 doppio, 10 nessuna squadra)",
   "notizie Football Italia": "19 titoli tenuti su 20 (scartati: 1 nessuna squadra)",
+  "notizie Repubblica": "13 titoli tenuti su 25 (scartati: 3 doppio, 9 nessuna squadra)",
   "notizie": "60 titoli tenuti, 2 segnalano un'assenza, 3 la panchina"
  }
 }
