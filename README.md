@@ -211,7 +211,37 @@ punteggio sarebbe un complimento che ci si fa da soli.
 ```bash
 node tools/verifica_giornata.js                     # l'ultima giornata giocata
 node tools/verifica_giornata.js 2026-09-04 2026-09-07
+node tools/misura_arbitri.js                        # l'arbitro sposta i gol? (no)
 ```
+
+### Un'idea buona che i dati hanno bocciato
+
+Un arbitro che fischia tanto spezzetta la partita; una partita spezzettata ha
+meno gioco effettivo; con meno gioco si fanno meno gol. L'ipotesi è sensata, e
+le designazioni escono due o tre giorni prima — cioè in tempo per giocarci.
+Meritava di essere provata invece che dichiarata. `tools/misura_arbitri.js` la
+prova in tre modi, dal più indulgente al più severo:
+
+| | |
+|---|---|
+| dispersione dei residui per arbitro | **1.07** (se l'arbitro non conta vale 1.00) |
+| quanto è severo di suo ↔ gol in più/meno | **r = −0.10**, intervallo (−0.48, +0.31) |
+| errore di previsione senza l'arbitro | **0.19246** su 680 partite mai viste |
+| errore di previsione con l'arbitro | **0.19274** — peggiora, z = −2.1 |
+
+Il segno torna: viene negativo dovunque lo si guardi, esattamente come dice
+l'ipotesi. Ma è troppo piccolo per distinguersi dal caso, e dandolo in pasto al
+modello l'errore **sale**. Un dato vero ma debole non è informazione in più: è
+rumore in più — e il rumore è tanto più insidioso quanto più la storia che lo
+accompagna è convincente.
+
+Dove l'arbitro conta davvero è sui cartellini: dal più mite al più severo si
+passa da 3.1 a 5.8 gialli a partita, quasi il doppio. Quella tabella è rimasta
+in **Squadre**, come fatto sulla Serie A e non come previsione da giocare.
+
+È lo stesso esito dei giorni di riposo, misurati e scartati per lo stesso
+motivo. Le due misure sono qui perché un'idea provata e bocciata vale quanto
+una accettata: senza il conto scritto, fra sei mesi qualcuno la riprova.
 
 ## Struttura
 
@@ -222,7 +252,7 @@ node tools/verifica_giornata.js 2026-09-04 2026-09-07
 | `worker.js` | fa girare il motore fuori dal thread dell'interfaccia, così lo schermo non si blocca |
 | `scripts/build_data.py` | scarica e normalizza i dati da sei fonti (solo libreria standard) |
 | `.github/workflows/aggiorna-dati.yml` | il robot: quattro giri al giorno |
-| `tools/` | generatore di dati sintetici, le tre prove (88 sulle fonti, 43 sul motore, 15 sul backtest) e la verifica di una giornata a posteriori |
+| `tools/` | generatore di dati sintetici, le tre prove (79 sulle fonti, 43 sul motore, 15 sul backtest), la verifica di una giornata a posteriori e la misura sugli arbitri |
 | `data/` | riempita dalla Action: `serie-a.json` e `meta.json` |
 
 ## Una nota sul senso di tutto questo

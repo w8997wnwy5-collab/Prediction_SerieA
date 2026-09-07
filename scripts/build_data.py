@@ -966,239 +966,6 @@ def unisci_calendario(base, extra):
     return fuori
 
 
-# ────────────────────────────── giocatori: chi prende i cartellini ──────────────────────────────
-
-FILE_GIOCATORI = os.path.join(DATA, 'giocatori.json')
-MAX_PAGINE_GIOCATORI = 34      # una lega intera sta in una trentina di pagine
-GIORNI_FRESCHEZZA = 6          # le statistiche dei giocatori non cambiano ogni ora
-VERSIONE_GIOCATORI = 4         # cambiala quando il modo di raccoglierli cambia:
-                               # un archivio raccolto male non deve sopravvivere
-                               # alla correzione solo perché è recente
-
-
-def carica_giocatori():
-    try:
-        with open(FILE_GIOCATORI, encoding='utf-8') as f:
-            return json.load(f)
-    except Exception:                 # noqa: BLE001
-        return None
-
-
-def _eta_in_giorni(iso):
-    try:
-        d = datetime.fromisoformat(iso.replace('Z', '+00:00'))
-        return (datetime.now(timezone.utc) - d).total_seconds() / 86400
-    except Exception:                 # noqa: BLE001
-        return 999
-
-
-def prendi_rose(chiave_api, esiti, conteggio, anni):
-    """Chi gioca DOVE ADESSO. Le statistiche disciplinari di un giocatore
-    cambiano poco da un anno all'altro; la maglia che indossa cambia parecchio,
-    e senza la rosa aggiornata si finisce per far ammonire un difensore in una
-    partita che gioca dall'altra parte d'Europa."""
-    squadre = None
-    for anno in anni:
-        try:
-            d = api_football('teams', {'league': LEGA_APIFOOTBALL, 'season': anno},
-                             chiave_api, conteggio)
-        except Exception as e:        # noqa: BLE001
-            esiti['rose %d' % anno] = 'elenco squadre non disponibile: %s' % e
-            continue
-        risposte = d.get('response') or []
-        if risposte:
-            squadre = [(x['team']['id'], nome(x['team'].get('name'))) for x in risposte
-                       if (x.get('team') or {}).get('id')]
-            esiti['rose'] = 'elenco squadre dalla stagione %d: %d squadre' % (anno, len(squadre))
-            break
-    if not squadre:
-        esiti['rose'] = 'nessun elenco squadre raggiungibile'
-        return [], {}
-
-    rose, falliti = {}, []
-    for tid, nome_sq in squadre:
-        if conteggio[0] >= MAX_RICHIESTE_API:
-            esiti['rose quota'] = 'fermato a %d richieste: mancano %d rose' % (
-                conteggio[0], len(squadre) - len(rose))
-            break
-        try:
-            d = api_football('players/squads', {'team': tid}, chiave_api, conteggio)
-        except Exception as e:        # noqa: BLE001
-            falliti.append('%s (%s)' % (nome_sq, str(e)[:60]))
-            continue
-        for blocco in (d.get('response') or []):
-            for g in (blocco.get('players') or []):
-                if g.get('name'):
-                    rose.setdefault(nome_sq, []).append({
-                        'n': g['name'],
-                        'r': (g.get('position') or '')[:1] or None,
-                        'id': g.get('id')})
-    esiti['rose caricate'] = '%d squadre su %d, %d giocatori' % (
-        len(rose), len(squadre), sum(len(v) for v in rose.values()))
-    if falliti:
-        esiti['rose fallite'] = '; '.join(falliti[:3]) + (' e altre %d' % (len(falliti)-3)
-                                                         if len(falliti) > 3 else '')
-    return squadre, rose
-
-
-def prendi_statistiche_giocatori(chiave_api, esiti, conteggio, anno, squadre, gia_fatte):
-    """Presenze, minuti e cartellini, UNA SQUADRA ALLA VOLTA.
-
-    Chiedendoli per lega — players?league=135 — ne tornano quarantatré e la
-    paginazione dichiara di essere finita. Non è il limite di velocità: lo
-    stesso numero usciva anche prima di mettere il freno. L'endpoint per lega,
-    sul piano gratuito, restituisce una fetta e basta, senza dirlo.
-
-    Per squadra invece tornano tutti. Costa venti giri invece di uno, che è più
-    di quanto la quota giornaliera regga insieme alle rose: perciò si tiene il
-    conto di quali squadre sono già state prese e la volta dopo si riparte da
-    dove ci si era fermati. Nel frattempo l'archivio è parziale ma vero, che è
-    meglio di completo e finto."""
-    lista, fatte = [], list(gia_fatte or [])
-    fermato, esaurita = None, False
-    for tid, nome_sq in squadre:
-        if nome_sq in fatte:
-            continue
-        if conteggio[0] >= MAX_RICHIESTE_API - 2 or esaurita:
-            fermato = nome_sq
-            break
-        pagina, totale, presi = 1, None, 0
-        while pagina <= 6:
-            try:
-                d = api_football('players', {'team': tid, 'season': anno, 'page': pagina},
-                                 chiave_api, conteggio)
-            except Exception as e:        # noqa: BLE001
-                # La quota giornaliera finita non è un intoppo di quella squadra:
-                # è finita per tutte, e continuare a bussare venti volte serve
-                # solo a riempire il riepilogo di righe rosse identiche.
-                if 'request limit' in str(e).lower() or 'requests' in str(e).lower():
-                    esaurita = True
-                    esiti['giocatori quota giornaliera'] = (
-                        'esaurita dopo %d richieste: la fonte ne dà cento al giorno e si '
-                        'azzerano a mezzanotte. Riprende domani da %s.' % (conteggio[0], nome_sq))
-                else:
-                    esiti['giocatori %s' % nome_sq] = 'fallita: %s' % str(e)[:70]
-                break
-            presi += 1
-            for r in (d.get('response') or []):
-                p = r.get('player') or {}
-                for st in (r.get('statistics') or []):
-                    if ((st.get('league') or {}).get('id')) != LEGA_APIFOOTBALL:
-                        continue
-                    g = st.get('games') or {}
-                    c = st.get('cards') or {}
-                    minuti = intero(g.get('minutes')) or 0
-                    if minuti < 200:          # sotto i duecento minuti è rumore
-                        continue
-                    lista.append({
-                        'n': p.get('name'), 'id': p.get('id'),
-                        's': nome((st.get('team') or {}).get('name')) or nome_sq,
-                        'r': (g.get('position') or '')[:1] or None,
-                        'p': intero(g.get('appearences')) or 0,
-                        'm': minuti,
-                        'g': (intero(c.get('yellow')) or 0) + (intero(c.get('yellowred')) or 0),
-                        'x': intero(c.get('red')) or 0})
-            totale = ((d.get('paging') or {}).get('total')) or 1
-            if pagina >= totale or conteggio[0] >= MAX_RICHIESTE_API - 1:
-                break
-            pagina += 1
-        # Una squadra si segna come fatta SOLO se qualcosa è tornato davvero.
-        # Segnarla comunque è il modo di trasformare un errore di oggi in un buco
-        # permanente: domani il codice la salta, convinto di averla già presa.
-        if presi:
-            fatte.append(nome_sq)
-        elif not esaurita:
-            fermato = fermato or nome_sq
-    if esaurita:
-        pass
-    elif fermato:
-        esiti['giocatori quota'] = ('fermato a %d richieste su %s: mancano %d squadre, '
-                                    'le prende al prossimo giro'
-                                    % (conteggio[0], fermato, len(squadre) - len(fatte)))
-    return lista, fatte
-
-
-def aggiorna_giocatori(esiti, stagioni):
-    """Un file a parte: le statistiche dei giocatori sono grosse e cambiano con
-    un ritmo diverso da quello delle partite."""
-    chiave_api = os.environ.get('APIFOOTBALL_KEY', '').strip()
-    if not chiave_api:
-        esiti['giocatori'] = 'saltati: nessuna chiave APIFOOTBALL_KEY'
-        return None
-    vecchio = carica_giocatori()
-    aggiornato = (vecchio or {}).get('versione') == VERSIONE_GIOCATORI
-    # Una raccolta ferma a tredici squadre su venti non è "fresca": è a metà.
-    # Il controllo sull'età serve a non ripescare ogni giorno quello che c'è
-    # già, non a dichiarare finito un lavoro che si è interrotto per la quota.
-    quante = len((vecchio or {}).get('squadre') or [])
-    completa = quante and len((vecchio or {}).get('fatte') or []) >= quante
-    if vecchio and aggiornato and completa and \
-            _eta_in_giorni(vecchio.get('aggiornato', '')) < GIORNI_FRESCHEZZA:
-        esiti['giocatori'] = 'già freschi (%.1f giorni) e completi: non li ricarico' % _eta_in_giorni(
-            vecchio.get('aggiornato', ''))
-        return vecchio
-    if vecchio and aggiornato and not completa:
-        esiti['giocatori ripresa'] = 'raccolta ferma a %d squadre su %d: riprendo da dove ero' % (
-            len((vecchio or {}).get('fatte') or []), quante or 20)
-    if vecchio and not aggiornato:
-        esiti['giocatori rifatti'] = 'raccolti con la versione %s, li riprendo da capo' % (
-            vecchio.get('versione', 1))
-
-    conteggio = [0]
-    anni = [int(e[:4]) for _, e in stagioni]        # dalla più recente all'indietro
-
-    # Prima le rose: servono gli identificativi delle squadre per chiedere i
-    # giocatori uno stadio alla volta, e servono comunque per sapere chi gioca
-    # dove adesso. Se ce le abbiamo già, non si rifanno.
-    rose = (vecchio or {}).get('rose') or {}
-    squadre = (vecchio or {}).get('squadre') or []
-    if not rose or not squadre or not aggiornato:
-        squadre, rose = prendi_rose(chiave_api, esiti, conteggio, anni)
-    else:
-        esiti['rose'] = 'già in archivio: %d squadre, non le rifaccio' % len(rose)
-
-    anno = (vecchio or {}).get('stagione')
-    if anno is None:
-        for a in anni:
-            anno = a
-            break
-    fatte = (vecchio or {}).get('fatte') or []
-    if not aggiornato:
-        fatte = []                              # versione nuova: si ricomincia
-    lista_vecchia = [] if not aggiornato else ((vecchio or {}).get('lista') or [])
-
-    lista_nuova, fatte = ([], fatte) if not squadre else prendi_statistiche_giocatori(
-        chiave_api, esiti, conteggio, anno, squadre, fatte)
-    esiti['giocatori richieste'] = '%d usate su %d' % (conteggio[0], MAX_RICHIESTE_API)
-
-    # si somma a quello che c'era: le squadre già prese non si ributtano via
-    per_nome = {}
-    for x in lista_vecchia + lista_nuova:
-        if x.get('n'):
-            per_nome[x['n'] + '|' + str(x.get('s'))] = x
-    lista = list(per_nome.values())
-
-    if not lista and not rose:
-        if vecchio:
-            esiti['giocatori'] = 'niente di nuovo: tengo quelli di %s' % vecchio.get('aggiornato', '')[:10]
-        return vecchio
-
-    doc = {
-        'aggiornato': datetime.now(timezone.utc).isoformat(timespec='seconds'),
-        'versione': VERSIONE_GIOCATORI,
-        'fonte': 'API-Football',
-        'stagione': anno,
-        'lista': lista,
-        'rose': rose,
-        'squadre': squadre,
-        'fatte': fatte,
-    }
-    with open(FILE_GIOCATORI, 'w', encoding='utf-8') as f:
-        json.dump(doc, f, ensure_ascii=False, separators=(',', ':'))
-    esiti['giocatori'] = 'scritti: %d giocatori (stagione %s), %d rose, %d squadre su %d complete' % (
-        len(doc['lista']), doc['stagione'], len(doc['rose']), len(fatte), len(squadre) or 20)
-    return doc
-
 
 # ────────────────────────────── unione e controlli ──────────────────────────────
 
@@ -1313,7 +1080,6 @@ ETICHETTE = {'aggiornato': 'Aggiornato', 'esito': 'Esito', 'ultima_partita': 'Ul
              'con_tiri': 'Con tiri', 'con_xg': 'Con xG veri', 'con_quote': 'Con quote',
              'in_arrivo_con_quote': 'In arrivo con quote',
              'in_arrivo_con_orario': 'In arrivo con orario', 'marcatori': 'Marcatori',
-             'giocatori': 'Giocatori con cartellini', 'rose': 'Rose attuali',
              'stagioni': 'Stagioni', 'dettaglio': 'Dettaglio per fonte', 'problemi': 'Problemi',
              'nota': 'Nota', 'nuove_oggi': 'Partite nuove oggi'}
 
@@ -1471,10 +1237,6 @@ def main():
         log('· API-Football: %d arbitri e %d partite di statistiche aggiunti' % (agg_arb, agg_stat))
     agg_arb += agg_arb_fd + agg_arb_espn
 
-    giocatori = aggiorna_giocatori(esiti, stagioni) if not leggero else carica_giocatori()
-    if leggero and giocatori:
-        esiti['giocatori'] = 'giro leggero: %d giocatori e %d rose già in archivio' % (
-            len(giocatori.get('lista') or []), len(giocatori.get('rose') or {}))
 
     partite = sorted(indice.values(), key=lambda p: (p['d'], p.get('c', '')))
     problemi = controlla(partite)
@@ -1520,8 +1282,6 @@ def main():
         'in_arrivo_con_quote': len([p for p in calendario if p.get('q')]),
         'in_arrivo_con_orario': len([p for p in calendario if p.get('o')]),
         'marcatori': len((marcatori or {}).get('lista', [])),
-        'giocatori': len((giocatori or {}).get('lista', [])),
-        'rose': len((giocatori or {}).get('rose', {})),
         'stagioni': doc['stagioni'], 'dettaglio': esiti,
     })
     log('Scritte %d partite (%d giocate, ultima il %s), %d in calendario, %.0f KB'

@@ -227,82 +227,6 @@ def test_calendario():
 
 # ── giocatori: una squadra alla volta, e si ricorda dov'era ─────────────────
 
-def test_giocatori():
-    """Chiedendoli per lega ne tornano quarantatré e la paginazione dichiara di
-    aver finito: il piano gratuito serve una fetta e non lo dice. Per squadra
-    tornano tutti, ma non ci stanno in una quota giornaliera sola — quindi la
-    parte che conta è che si fermi e riprenda da dove era."""
-    squadre = [(1, 'Inter'), (2, 'Milan'), (3, 'Roma')]
-
-    def finta(url, **kw):
-        if 'players' not in url or 'team=' not in url:
-            raise RuntimeError('endpoint non previsto: %s' % url)
-        tid = int(url.split('team=')[1].split('&')[0])
-        pag = int(url.split('page=')[1].split('&')[0]) if 'page=' in url else 1
-        gio = [{'player': {'id': tid*100+pag*10+k, 'name': 'Gioc%d-%d-%d' % (tid, pag, k)},
-                'statistics': [{'league': {'id': 135}, 'team': {'name': squadre[tid-1][1]},
-                                'games': {'appearences': 20, 'minutes': 1500, 'position': 'Defender'},
-                                'cards': {'yellow': 6, 'yellowred': 0, 'red': 0}}]}
-               for k in range(2)]
-        return json.dumps({'response': gio, 'paging': {'current': pag, 'total': 2}}).encode()
-
-    vero_scarica, vera_pausa, vera_quota = B.scarica, B.PAUSA_API_FOOTBALL, B.MAX_RICHIESTE_API
-    try:
-        B.scarica, B.PAUSA_API_FOOTBALL = finta, 0
-        esiti, c = {}, [0]
-        B.MAX_RICHIESTE_API = 4
-        lista1, fatte1 = B.prendi_statistiche_giocatori('k', esiti, c, 2024, squadre, [])
-        prova('con poca quota si ferma invece di andare avanti a vuoto',
-              len(fatte1) < 3 and bool(esiti.get('giocatori quota')), str(fatte1))
-
-        c2 = [0]
-        B.MAX_RICHIESTE_API = 70
-        lista2, fatte2 = B.prendi_statistiche_giocatori('k', esiti, c2, 2024, squadre, fatte1)
-        prova('al giro dopo riprende da dove era', len(fatte2) == 3, str(fatte2))
-        prova('e non rifà le squadre già prese',
-              all(x['s'] not in fatte1 for x in lista2),
-              ', '.join(sorted({x['s'] for x in lista2})))
-
-        distinti = {x['n'] for x in lista1 + lista2}
-        prova('messi insieme i due giri non manca nessuno', len(distinti) == 12, str(len(distinti)))
-        uno = (lista1 + lista2)[0]
-        prova('legge gialli, minuti e presenze',
-              uno['g'] == 6 and uno['m'] == 1500 and uno['p'] == 20, str(uno))
-
-        # chi gioca pochissimo è rumore, non un dato
-        def poco(url, **kw):
-            return json.dumps({'response': [{'player': {'id': 9, 'name': 'Panchinaro'},
-                'statistics': [{'league': {'id': 135}, 'team': {'name': 'Inter'},
-                                'games': {'appearences': 3, 'minutes': 40},
-                                'cards': {'yellow': 1}}]}],
-                'paging': {'current': 1, 'total': 1}}).encode()
-        B.scarica = poco
-        c3 = [0]
-        lista3, _ = B.prendi_statistiche_giocatori('k', {}, c3, 2024, [(1, 'Inter')], [])
-        prova('chi ha giocato quaranta minuti viene lasciato fuori', len(lista3) == 0, str(lista3))
-        # una squadra che fallisce NON deve risultare fatta: domani verrebbe saltata
-        def rotta(url, **kw):
-            raise RuntimeError('boom')
-        B.scarica = rotta
-        c4 = [0]
-        l4, f4 = B.prendi_statistiche_giocatori('k', {}, c4, 2024, [(1, 'Inter')], [])
-        prova('una squadra che fallisce non viene segnata come fatta',
-              f4 == [] and l4 == [], str(f4))
-
-        # quota giornaliera finita: si ferma subito invece di bussare venti volte
-        def quota(url, **kw):
-            raise RuntimeError('API-Football dice: {"requests": "You have reached the request limit for the day"}')
-        B.scarica = quota
-        esiti5, c5 = {}, [0]
-        l5, f5 = B.prendi_statistiche_giocatori('k', esiti5, c5, 2024, squadre, [])
-        prova('con la quota giornaliera finita smette di bussare',
-              c5[0] <= 1 and bool(esiti5.get('giocatori quota giornaliera')),
-              'richieste=%d esiti=%s' % (c5[0], list(esiti5)))
-        prova('e non segna nessuna squadra come fatta', f5 == [], str(f5))
-    finally:
-        B.scarica, B.PAUSA_API_FOOTBALL, B.MAX_RICHIESTE_API = vero_scarica, vera_pausa, vera_quota
-
-
 def test_freno_api():
     """Il piano gratuito accetta dieci richieste al minuto. Senza freno le prime
     dieci passano e le altre vengono rifiutate: tre rose su venti e nessun
@@ -499,7 +423,6 @@ def main():
     test_espn()
     test_innesto()
     test_calendario()
-    test_giocatori()
     test_quote_tenute()
     test_freno_api()
     test_punteggi_openfootball()
