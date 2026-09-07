@@ -973,10 +973,19 @@ def aggiorna_giocatori(esiti, stagioni):
         return None
     vecchio = carica_giocatori()
     aggiornato = (vecchio or {}).get('versione') == VERSIONE_GIOCATORI
-    if vecchio and aggiornato and _eta_in_giorni(vecchio.get('aggiornato', '')) < GIORNI_FRESCHEZZA:
-        esiti['giocatori'] = 'già freschi (%.1f giorni): non li ricarico' % _eta_in_giorni(
+    # Una raccolta ferma a tredici squadre su venti non è "fresca": è a metà.
+    # Il controllo sull'età serve a non ripescare ogni giorno quello che c'è
+    # già, non a dichiarare finito un lavoro che si è interrotto per la quota.
+    quante = len((vecchio or {}).get('squadre') or [])
+    completa = quante and len((vecchio or {}).get('fatte') or []) >= quante
+    if vecchio and aggiornato and completa and \
+            _eta_in_giorni(vecchio.get('aggiornato', '')) < GIORNI_FRESCHEZZA:
+        esiti['giocatori'] = 'già freschi (%.1f giorni) e completi: non li ricarico' % _eta_in_giorni(
             vecchio.get('aggiornato', ''))
         return vecchio
+    if vecchio and aggiornato and not completa:
+        esiti['giocatori ripresa'] = 'raccolta ferma a %d squadre su %d: riprendo da dove ero' % (
+            len((vecchio or {}).get('fatte') or []), quante or 20)
     if vecchio and not aggiornato:
         esiti['giocatori rifatti'] = 'raccolti con la versione %s, li riprendo da capo' % (
             vecchio.get('versione', 1))
@@ -1202,6 +1211,7 @@ def main():
     # danno, ma solo per la settimana in arrivo. Prendere solo il secondo perché
     # ha risposto — che è quello che succedeva finché il primo era l'unico a
     # funzionare — vuol dire passare da trecentosettanta partite a dieci.
+    vecchio = carica_esistente()
     ravvicinato = prendi_calendario(stagioni, esiti)
     stagionale = list(calendario_riserva)
     if not stagionale:
@@ -1211,12 +1221,26 @@ def main():
             esiti['calendario stagione'] = 'ok da openfootball: %d partite' % len(future)
         except Exception as e:        # noqa: BLE001
             esiti['calendario stagione'] = 'fallito: %s' % e
-    # base = la stagione intera, sopra = orari e quote di chi ce li ha
-    calendario = unisci_calendario(stagionale, ravvicinato)
-    esiti['calendario'] = '%d partite in tutto, %d con le quote' % (
-        len(calendario), len([p for p in calendario if p.get('q')]))
+    # base = la stagione intera, sopra quello che si sapeva ieri, sopra ancora
+    # quello che si e' scaricato oggi.
+    #
+    # Il pezzo di mezzo e' quello che mancava, e si e' visto: football-data.co.uk
+    # ha risposto 503 per giorni e le partite in arrivo sono rimaste SENZA QUOTE
+    # per una settimana intera, con l'ancoraggio al mercato spento e nessuno che
+    # se ne accorgeva. Le quote di ieri sono vecchie di un giorno; nessuna quota
+    # e' vecchia di sempre. In testa al file c'e' scritto che quello che e' stato
+    # scaricato non si perde: valeva per le partite giocate e non per il
+    # calendario, che e' esattamente dove serviva di piu'.
+    vecchio_cal = (vecchio or {}).get('calendario') or []
+    oggi_iso = datetime.now(timezone.utc).date().isoformat()
+    tenuto = [p for p in vecchio_cal if p.get('d', '') >= oggi_iso and (p.get('q') or p.get('o'))]
+    calendario = unisci_calendario(stagionale, tenuto)
+    calendario = unisci_calendario(calendario, ravvicinato)
+    con_quote = len([p for p in calendario if p.get('q')])
+    freschi = len([p for p in ravvicinato if p.get('q')])
+    esiti['calendario'] = '%d partite in tutto, %d con le quote (%d scaricate adesso, %d tenute da prima)' % (
+        len(calendario), con_quote, freschi, max(0, con_quote - freschi))
 
-    vecchio = carica_esistente()
     prima = len((vecchio or {}).get('partite') or [])
     indice = unisci((vecchio or {}).get('partite'), nuove)
 
@@ -1245,7 +1269,10 @@ def main():
         log('· API-Football: %d arbitri e %d partite di statistiche aggiunti' % (agg_arb, agg_stat))
     agg_arb += agg_arb_fd + agg_arb_espn
 
-    giocatori = None if leggero else aggiorna_giocatori(esiti, stagioni)
+    giocatori = aggiorna_giocatori(esiti, stagioni) if not leggero else carica_giocatori()
+    if leggero and giocatori:
+        esiti['giocatori'] = 'giro leggero: %d giocatori e %d rose già in archivio' % (
+            len(giocatori.get('lista') or []), len(giocatori.get('rose') or {}))
 
     partite = sorted(indice.values(), key=lambda p: (p['d'], p.get('c', '')))
     problemi = controlla(partite)

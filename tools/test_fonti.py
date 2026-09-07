@@ -325,6 +325,41 @@ def test_freno_api():
         B.scarica, B.PAUSA_API_FOOTBALL = vero_scarica, vera_pausa
 
 
+# ── le quote non si buttano via quando la fonte è giù ───────────────────────
+
+def test_quote_tenute():
+    """football-data.co.uk ha risposto 503 per giorni e le partite in arrivo
+    sono rimaste senza quote per una settimana, con l'ancoraggio al mercato
+    spento e nessuno che se ne accorgeva. Le quote di ieri sono vecchie di un
+    giorno; nessuna quota è vecchia di sempre."""
+    from datetime import datetime as _dt, timezone as _tz, timedelta as _td
+    oggi = _dt.now(_tz.utc).date()
+    dopo = (oggi + _td(days=2)).isoformat()
+    prima = (oggi - _td(days=5)).isoformat()
+    oggi_iso = oggi.isoformat()
+
+    stagionale = [{'d': dopo, 'c': 'Inter', 'v': 'Milan'},
+                  {'d': dopo, 'c': 'Roma', 'v': 'Lazio'}]
+    archiviato = [{'d': dopo, 'c': 'Inter', 'v': 'Milan', 'o': '20:45', 'q': [2.0, 3.4, 3.8]},
+                  {'d': prima, 'c': 'Como', 'v': 'Genoa', 'o': '18:00', 'q': [1.9, 3.5, 4.0]}]
+    tenuto = [p for p in archiviato if p.get('d', '') >= oggi_iso and (p.get('q') or p.get('o'))]
+
+    cal = B.unisci_calendario(stagionale, tenuto)
+    cal = B.unisci_calendario(cal, [])            # la fonte delle quote è giù
+    inter = [p for p in cal if p['c'] == 'Inter'][0]
+    prova('con la fonte giù le quote di ieri restano', inter.get('q') == [2.0, 3.4, 3.8], str(inter))
+    prova('e con loro l\'orario', inter.get('o') == '20:45')
+    prova('una partita già giocata non torna in calendario', len(cal) == 2, str(len(cal)))
+    prova('le partite senza quote note restano senza',
+          [p for p in cal if p['c'] == 'Roma'][0].get('q') is None)
+
+    # quando la fonte torna, i prezzi nuovi devono avere la meglio
+    fresco = [{'d': dopo, 'c': 'Inter', 'v': 'Milan', 'q': [2.2, 3.3, 3.5]}]
+    cal2 = B.unisci_calendario(B.unisci_calendario(stagionale, tenuto), fresco)
+    prova('quando la fonte torna, la quota nuova sostituisce quella tenuta',
+          [p for p in cal2 if p['c'] == 'Inter'][0].get('q') == [2.2, 3.3, 3.5])
+
+
 def main():
     test_validatori()
     test_quote()
@@ -333,6 +368,7 @@ def main():
     test_innesto()
     test_calendario()
     test_giocatori()
+    test_quote_tenute()
     test_freno_api()
 
     larghezza = max(len(n) for n, _, _ in ESITI)
