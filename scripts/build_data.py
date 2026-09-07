@@ -446,19 +446,30 @@ def prendi_thesportsdb(stagione, esiti):
 # Il contenuto e' scritto da altri: non si esegue, non si interpreta, non
 # cambia un numero. Si mostra, con la fonte accanto.
 
-# Quali feed, e perche' proprio questi. Il primo giro vero ha bocciato due
-# scelte fatte a occhio: il feed "calcio" della Gazzetta e' rubriche e
-# fantacalcio (99 titoli, zero riconosciuti) e quello che avevo etichettato
-# Sky Sport era di corriereobjects (8 titoli, zero). Adesso ci sono gli
-# indirizzi che la sonda ha visto rispondere davvero, e il riepilogo dice per
-# ognuno quanti titoli tiene e quanti ne scarta, cosi la prossima potatura si
-# fa sui numeri invece che a naso.
+# Quali feed, e perche' proprio questi tre. Non e' una scelta di gusto: sono
+# rimasti in piedi da soli, dopo che i contatori hanno bocciato tutti gli altri.
+#
+#   ANSA               44 titoli tenuti su 65 — l'agenzia, asciutta e puntuale
+#   Football Italia    19 su 20 — in inglese, ma il piu' pulito di tutti
+#   Repubblica         11 su 25
+#
+# Bocciati, con il motivo scritto dai numeri e non dall'impressione:
+#
+#   Gazzetta /calcio     99 titoli, zero: e' fantacalcio e rubriche
+#   Gazzetta /serie-a   100 titoli, zero: 65 piu' vecchi di dieci giorni. Non e'
+#                       un flusso, e' un archivio — l'esempio nel riepilogo
+#                       citava Sarri alla Lazio, cioe' due stagioni fa
+#   corriereobjects       8 titoli, zero
+#   Sky sport.sky.it    ha risposto alla sonda e poi 404 al giro vero
+#   Corriere dello Sport risponde con un feed senza nemmeno un <item>
+#   Tuttomercatoweb      403
+#
+# Sessanta titoli e' gia' il tetto (MAX_NOTIZIE) e queste tre lo riempiono:
+# aggiungerne altre non porterebbe notizie, porterebbe doppioni e attesa.
 FONTI_NOTIZIE = (
-    ('Gazzetta', 'https://www.gazzetta.it/rss/serie-a.xml'),
     ('ANSA', 'https://www.ansa.it/sito/notizie/sport/calcio/calcio_rss.xml'),
-    ('Sky Sport', 'https://sport.sky.it/rss/calcio.xml'),
-    ('Repubblica', 'https://www.repubblica.it/rss/sport/calcio/rss2.0.xml'),
     ('Football Italia', 'https://football-italia.net/feed/'),
+    ('Repubblica', 'https://www.repubblica.it/rss/sport/calcio/rss2.0.xml'),
 )
 
 # Parole che segnalano un'assenza. Non e' un modello di linguaggio: e' un
