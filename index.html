@@ -699,22 +699,79 @@ function squadreAttive(){
   }
   return out.sort();
 }
+/* Una partita è "in arrivo" finché non è cominciata, non finché non è finito
+   il giorno in cui si gioca.
+
+   Sembra un dettaglio e non lo è: il lunedì sera alle nove, con il posticipo
+   già in campo, l'app metteva in copertina due partite che nessuno può più
+   giocare e teneva nascoste le dieci della giornata dopo — cioè esattamente
+   quelle per cui uno l'ha aperta. Finché l'orario del calcio d'inizio non
+   c'era, "il giorno" era la sola cosa che si potesse guardare. Adesso c'è.
+
+   Mezz'ora di margine perché gli orari cambiano all'ultimo e perché il
+   quotista chiude i banchi qualche minuto prima, non dopo. */
+function iniziata(p){
+  if(!p.o) return p.d < oggiISO();
+  var ora = new Date();
+  var scarto = (ora.getTime() - Date.parse(p.d + 'T' + p.o + ':00')) / 60000;
+  return scarto > 30;
+}
 function prossimePartite(){
   var oggi = oggiISO();
-  var cal = (S.doc.calendario||[]).filter(function(p){ return p.d >= oggi && p.c && p.v; });
-  cal.sort(function(a,b){ return a.d < b.d ? -1 : (a.d > b.d ? 1 : 0); });
+  var cal = (S.doc.calendario||[]).filter(function(p){
+    return p.d >= oggi && p.c && p.v && !iniziata(p);
+  });
+  /* Ordinate per giorno E per ora. Finché l'orario non c'era, ordinare per
+     data era tutto quello che si poteva fare; adesso che c'è, una domenica
+     mostrata come 20:45, 15:00, 18:00 sarebbe una svista che si vede. */
+  cal.sort(function(a,b){
+    if(a.d !== b.d) return a.d < b.d ? -1 : 1;
+    var oa = a.o || '99:99', ob = b.o || '99:99';
+    return oa < ob ? -1 : (oa > ob ? 1 : 0);
+  });
   return cal;
 }
+/* Le giornate, e una giornata vuol dire una giornata di campionato.
+
+   Prima si tirava a indovinare dalle date: partite a meno di cinque giorni
+   l'una dall'altra = stessa giornata. Funziona quasi sempre e sbaglia proprio
+   quando conta. Il lunedì 7 settembre le due partite che chiudono la terza
+   giornata distano quattro giorni dall'anticipo della quarta, e finivano tutte
+   e tre nella stessa scheda: un miscuglio di due giornate diverse, con la media
+   della "giornata" calcolata su un insieme che non esiste — e quella media è
+   il metro con cui si dice cosa ha di diverso una partita dalle altre.
+
+   Il numero della giornata c'è su tutte e trecentosessanta le partite in
+   calendario. Era lì da sempre: bastava leggerlo invece di dedurlo. Il conto
+   sulle date resta come rete di sicurezza per quando non c'è. */
+/* Le partite della PROSSIMA giornata, che non sono "le prime dieci in
+   calendario". Sono la stessa cosa quasi sempre, e non lo sono proprio nei
+   giorni in cui uno apre l'app per decidere: il lunedì di un posticipo, con la
+   giornata dopo che comincia il venerdì. Lì "le prime dieci" sono un miscuglio
+   di due giornate, e tutto quello che si costruisce sopra — la media con cui
+   si dice cosa ha di diverso una partita, le schedine, i pronostici che l'app
+   segna a se stessa — eredita il miscuglio. */
+function partiteGiornata(){
+  var tutte = (S._prossime && S._prossime.length) ? S._prossime : prossimePartite();
+  var g = raggruppaGiornate(tutte)[0];
+  return g ? g.partite : [];
+}
+
 function raggruppaGiornate(lista){
   var gruppi = [], i;
   for(i=0;i<lista.length;i++){
     var p = lista[i];
     var g = gruppi[gruppi.length-1];
-    if(!g || M.giorni(g.inizio, p.d) > 4 || g.partite.length >= 10){
+    var nuova;
+    if(!g) nuova = true;
+    else if(g.giornata && p.giornata) nuova = g.giornata !== p.giornata;
+    else nuova = M.giorni(g.inizio, p.d) > 4 || g.partite.length >= 10;
+    if(nuova){
       g = {inizio:p.d, fine:p.d, partite:[], giornata:p.giornata||null};
       gruppi.push(g);
     }
-    g.partite.push(p); g.fine = p.d;
+    g.partite.push(p);
+    if(p.d > g.fine) g.fine = p.d;
   }
   return gruppi;
 }
@@ -861,7 +918,7 @@ function mediaGiornata(partite){
 function sceltePartita(p, quante){
   var mk = mercatiDi(p, 1500, true);
   if(!mk) return null;
-  var media = mediaGiornata((S._prossime || []).slice(0, 10));
+  var media = mediaGiornata(partiteGiornata());
   var voci = mk.voci.filter(function(m){
     if(!mercatoAttivo(m.id)) return false;
     /* Sotto il 12% è una lotteria, sopra l'88% è una constatazione: in mezzo
@@ -932,7 +989,7 @@ function salvaPronostici(){
 
 /* Segna il pronostico di oggi su ogni partita in arrivo, se non c'è già. */
 function segnaPronostici(){
-  var prossime = (S._prossime && S._prossime.length ? S._prossime : prossimePartite()).slice(0, 10);
+  var prossime = partiteGiornata();
   if(!prossime.length) return;
   var p = pronostici(), visti = {}, nuovo = false;
   p.forEach(function(g){ visti[g.d + '|' + g.c + '|' + g.v] = 1; });
@@ -1616,7 +1673,7 @@ function migliora(scelte, candidati, min, max){
   return attuale;
 }
 function candidatiGiornata(){
-  var partite = (S._prossime||[]).slice(0, 10);
+  var partite = partiteGiornata();
   var fuori = [];
   partite.forEach(function(p, i){
     var sc = sceltePartita(p, 3);
@@ -1672,7 +1729,7 @@ function schedaSchedina(profilo, scelte){
 }
 
 function elencoSchedine(){
-  var partite = (S._prossime||[]).slice(0,10);
+  var partite = partiteGiornata();
   var cand = candidatiGiornata();
   if(!cand.length){
     return '<div class="card"><div class="empty"><b>Nessun mercato attivo</b>'+
@@ -1706,7 +1763,7 @@ function elencoSchedine(){
 
 function tabSchedine(){
   if(!(S._prossime||[]).length) S._prossime = prossimePartite();
-  var partite = (S._prossime||[]).slice(0,10);
+  var partite = partiteGiornata();
   if(!partite.length){
     return '<div class="card"><div class="empty"><b>Nessuna partita in calendario</b>'+
       'Le schedine si costruiscono sulle partite in arrivo.</div></div>';
