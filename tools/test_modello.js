@@ -227,6 +227,63 @@ if (co) {
         ca.oltre75 > ca.oltre85 && ca.oltre85 > ca.oltre95 && ca.oltre95 > ca.oltre105);
 }
 
+/* ─── quante ne prendi, e come le impacchetti ─── */
+var d10 = M.distribuzioneEsiti([0.75, 0.75, 0.75, 0.75, 0.75, 0.75, 0.75, 0.75, 0.75, 0.75]);
+prova('la distribuzione ha n+1 caselle', d10.length === 11, d10.length);
+prova('e somma a uno', Math.abs(d10.reduce(function (a, b) { return a + b; }, 0) - 1) < 1e-12);
+prova('dieci su dieci coincide col prodotto',
+      Math.abs(d10[10] - Math.pow(0.75, 10)) < 1e-12);
+prova('zero su dieci coincide col prodotto dei mancati',
+      Math.abs(d10[0] - Math.pow(0.25, 10)) < 1e-12);
+prova('con dieci al 75% il caso piu probabile e 8, non 10',
+      d10.indexOf(Math.max.apply(null, d10)) === 8, d10.indexOf(Math.max.apply(null, d10)));
+/* probabilita diverse: la media resta la somma delle probabilita */
+var mix = [0.9, 0.8, 0.7, 0.6, 0.5];
+var dm = M.distribuzioneEsiti(mix);
+var mediaAttesa = mix.reduce(function (a, b) { return a + b; }, 0);
+var mediaCalc = dm.reduce(function (s, p, k) { return s + k * p; }, 0);
+prova('la media della distribuzione e la somma delle probabilita',
+      Math.abs(mediaCalc - mediaAttesa) < 1e-12, mediaCalc.toFixed(6));
+prova('caso limite: nessuna selezione', M.distribuzioneEsiti([]).length === 1);
+
+var sel3 = [{p: 0.5, quota: 2}, {p: 0.5, quota: 2}, {p: 0.5, quota: 2}];
+var acc = M.profiloGiocata(sel3, [[0, 1, 2]], 30);
+prova('l\'accumulata paga solo se escono tutte',
+      Math.abs(acc.pZero - 0.875) < 1e-9, acc.pZero.toFixed(6));
+prova('e a quote eque il ritorno atteso e la puntata',
+      Math.abs(acc.atteso - 30) < 1e-9, acc.atteso.toFixed(6));
+var sing = M.profiloGiocata(sel3, [[0], [1], [2]], 30);
+prova('le singole hanno lo stesso atteso dell\'accumulata, a quote eque',
+      Math.abs(sing.atteso - acc.atteso) < 1e-9);
+prova('ma perdono tutto molto piu di rado',
+      sing.pZero < acc.pZero, sing.pZero.toFixed(3) + ' contro ' + acc.pZero.toFixed(3));
+prova('e vincono molto meno quando va bene',
+      sing.massimo < acc.massimo, sing.massimo + ' contro ' + acc.massimo);
+
+/* il punto che conta: col ricarico del banco l'accumulata NON e' neutra */
+var conRicarico = sel3.map(function (x) { return {p: x.p, quota: x.quota / 1.065}; });
+var accR = M.profiloGiocata(conRicarico, [[0, 1, 2]], 30);
+var singR = M.profiloGiocata(conRicarico, [[0], [1], [2]], 30);
+prova('col ricarico l\'accumulata rende meno delle singole',
+      accR.atteso < singR.atteso - 0.5,
+      accR.atteso.toFixed(2) + ' contro ' + singR.atteso.toFixed(2));
+prova('e la differenza e il ricarico composto',
+      Math.abs(accR.atteso - 30 / Math.pow(1.065, 3)) < 1e-9, accR.atteso.toFixed(4));
+
+var st = M.struttureGiocata(10);
+prova('le strutture coprono tutte le selezioni, sempre',
+      st.every(function (x) {
+        var visti = {};
+        x.gruppi.forEach(function (g) { g.forEach(function (i) { visti[i] = 1; }); });
+        return Object.keys(visti).length === 10;
+      }));
+prova('e nessuna selezione finisce in due schedine',
+      st.every(function (x) {
+        var n = 0;
+        x.gruppi.forEach(function (g) { n += g.length; });
+        return n === 10;
+      }));
+
 var largh = esiti.reduce(function (a, e) { return Math.max(a, e[0].length); }, 0);
 var falliti = 0;
 esiti.forEach(function (e) {

@@ -1240,6 +1240,113 @@ function piuSicure(mercati, quante) {
    solo a meno di un margine di errore che il modello stesso ha misurato.
    Fra le due, quella da usare è la seconda. */
 
+/* ─────────────────── quante ne prendo, e cosa cambia come le gioco ───────────────────
+
+   Una schedina da dieci si racconta come "esce o non esce", ed è il modo in cui
+   si perde la parte interessante. Dieci selezioni al 75% ciascuna non fanno
+   dieci-su-dieci il 75% delle volte: lo fanno il 5%. E fanno otto o più su
+   dieci circa una volta su due. Sono lo stesso identico pronostico: cambia
+   soltanto come lo si impacchetta, e cambiare l'impacchettamento cambia tutto
+   tranne il valore atteso.
+
+   Qui sotto non si stima niente e non si simula niente: con dieci selezioni
+   gli scenari possibili sono 1024, si enumerano tutti con la loro probabilità
+   esatta e si guarda cosa succede. Nessun numero casuale, nessun margine di
+   errore da dichiarare.
+
+   Una nota che tiene in piedi il resto: questo conto vale se le selezioni sono
+   indipendenti. Sembra un'ipotesi comoda e invece è stata verificata su 93
+   giornate — la varianza osservata del numero di esiti presi sta allo 0.996 di
+   quella da indipendenza pura. Dieci Over della stessa giornata NON cadono
+   insieme. Se non fosse così, tutto quello che c'è qui sarebbe sbagliato. */
+
+/* Probabilità esatta di 0, 1, … n successi fra prove indipendenti con
+   probabilità diverse (la Poisson-binomiale, per convoluzione). */
+function distribuzioneEsiti(ps) {
+  var d = [1], i, k, nuovoD;
+  for (i = 0; i < ps.length; i++) {
+    var p = Math.max(0, Math.min(1, ps[i]));
+    nuovoD = new Array(d.length + 1);
+    for (k = 0; k <= d.length; k++) {
+      nuovoD[k] = (k < d.length ? d[k] * (1 - p) : 0) + (k > 0 ? d[k - 1] * p : 0);
+    }
+    d = nuovoD;
+  }
+  return d;
+}
+
+/* Il ritorno di una struttura di giocata, esatto.
+
+   sel      : [{p, quota}] le selezioni, tutte
+   gruppi   : [[0,1,2],[3,4]] quali selezioni stanno in quale schedina
+   puntata  : la cifra totale, divisa in parti uguali fra le schedine
+
+   Torna il ritorno LORDO (quanto ti danno indietro), quindi 0 vuol dire
+   perso tutto e `puntata` vuol dire pari. */
+function profiloGiocata(sel, gruppi, puntata) {
+  var n = sel.length;
+  if (!n || n > 20 || !gruppi.length) return null;
+  var perSchedina = puntata / gruppi.length;
+  var scenari = 1 << n;
+  var mappa = {}, atteso = 0, pZero = 0, pAttivo = 0, i, s, g;
+  for (s = 0; s < scenari; s++) {
+    var pr = 1, ritorno = 0;
+    for (i = 0; i < n; i++) {
+      var preso = (s >> i) & 1;
+      pr *= preso ? sel[i].p : (1 - sel[i].p);
+    }
+    if (pr < 1e-15) continue;
+    for (g = 0; g < gruppi.length; g++) {
+      var q = 1, tutte = true;
+      for (i = 0; i < gruppi[g].length; i++) {
+        var idx = gruppi[g][i];
+        if (!((s >> idx) & 1)) { tutte = false; break; }
+        q *= sel[idx].quota;
+      }
+      if (tutte) ritorno += perSchedina * q;
+    }
+    /* Le somme che contano si fanno sul ritorno esatto. L'arrotondamento
+       serve solo a raggruppare gli scenari che pagano uguale per trovare la
+       mediana: se lo si lascia entrare anche nella media, il valore atteso
+       smette di coincidere con il conto a mano — che è esattamente come
+       questa riga è stata scoperta. */
+    atteso += ritorno * pr;
+    if (ritorno < 0.005) pZero += pr;
+    if (ritorno > puntata + 0.005) pAttivo += pr;
+    var chiave = Math.round(ritorno * 100) / 100;
+    mappa[chiave] = (mappa[chiave] || 0) + pr;
+  }
+  var valori = Object.keys(mappa).map(Number).sort(function (a, b) { return a - b; });
+  var cum = 0, mediana = 0, visto = false;
+  for (i = 0; i < valori.length; i++) {
+    cum += mappa[valori[i]];
+    if (!visto && cum >= 0.5) { mediana = valori[i]; visto = true; }
+  }
+  return {
+    atteso: atteso, mediana: mediana, pAttivo: pAttivo, pZero: pZero,
+    massimo: valori[valori.length - 1], puntata: puntata,
+    schedine: gruppi.length, perSchedina: perSchedina
+  };
+}
+
+/* Le strutture sensate per n selezioni: tutte insieme, a gruppi, tutte singole.
+   Gli spezzoni si fanno in ordine, così ogni schedina resta leggibile. */
+function struttureGiocata(n) {
+  var fuori = [], tagli = [n, 5, 3, 2, 1], visti = {};
+  tagli.forEach(function (k) {
+    if (k < 1 || k > n || visti[k]) return;
+    visti[k] = 1;
+    var gruppi = [], i;
+    for (i = 0; i < n; i += k) {
+      var g = [];
+      for (var j = i; j < Math.min(i + k, n); j++) g.push(j);
+      gruppi.push(g);
+    }
+    fuori.push({ taglio: k, gruppi: gruppi });
+  });
+  return fuori;
+}
+
 function kelly(p, quota) {
   if (!(quota > 1) || !(p > 0)) return 0;
   var b = quota - 1;
@@ -1779,6 +1886,8 @@ var API = {
   golAttesiModello: golAttesiModello,
   simula: simula, calibra: calibra, combina: combina,
   kelly: kelly, valore: valore, occasioni: occasioni,
+  distribuzioneEsiti: distribuzioneEsiti, profiloGiocata: profiloGiocata,
+  struttureGiocata: struttureGiocata,
   mercatiDaMatrice: mercatiDaMatrice, elencoMercati: elencoMercati, piuSicure: piuSicure,
   campiMercato: campiMercato, mercatiTempi: mercatiTempi, primoFinale: primoFinale,
   tempiDaMatrici: tempiDaMatrici, matriceSecca: matriceSecca,

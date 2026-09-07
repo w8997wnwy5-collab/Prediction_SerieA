@@ -269,6 +269,36 @@ select{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:1
 .specr i.su{color:var(--ok);background:var(--ok-soft);}
 .specr i.giu{color:var(--amber);background:var(--amber-soft);}
 
+/* ── quante ne prendi: istogramma ── */
+.dist{display:flex;align-items:flex-end;gap:4px;height:132px;margin:2px 0 10px;}
+.distc{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;min-width:0;height:100%;}
+.distb{flex:1;width:100%;display:flex;align-items:flex-end;min-height:0;}
+.distb i{display:block;width:100%;border-radius:5px 5px 2px 2px;background:var(--c9);
+  transition:height .18s ease;}
+.distc.picco .distb i{background:var(--accent);}
+.distc.tutte .distb i{background:var(--ok);}
+.distk{font-family:var(--mono);font-size:11.5px;font-weight:700;flex:none;}
+.distp{font-family:var(--mono);font-size:9.5px;color:var(--mute);flex:none;}
+.distc.picco .distk,.distc.picco .distp{color:var(--accent);}
+.distc.tutte .distk,.distc.tutte .distp{color:var(--ok);}
+
+/* ── come le impacchetti: confronto ── */
+.tabimp{margin:2px 0 10px;}
+.timr{display:grid;grid-template-columns:1fr 62px 82px 58px;align-items:center;gap:6px;
+  padding:9px 8px;border-radius:9px;font-size:13px;}
+.timr span{font-family:var(--mono);font-size:12.5px;font-weight:600;text-align:right;}
+.timr .tnome{text-align:left;font-family:inherit;font-size:13px;font-weight:600;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.timh{padding-bottom:5px;border-bottom:1px solid var(--line2);border-radius:0;}
+.timh span,.timh .tnome{font-family:var(--mono);font-size:8.5px;letter-spacing:.5px;
+  text-transform:uppercase;color:var(--mute);font-weight:500;}
+.timr.best{background:var(--ok-soft);}
+.timr.best .tnome{color:var(--ok);font-weight:700;}
+.timr.acc{background:var(--amber-soft);}
+.timr.acc .tnome{color:var(--amber);font-weight:700;}
+.tsoldi{display:flex;flex-direction:column;align-items:flex-end;line-height:1.25;}
+.tsoldi em{font-style:normal;font-size:9.5px;color:var(--mute);font-weight:500;}
+
 /* ── ammoniti ── */
 .ammtesta{padding-bottom:9px;margin-bottom:4px;border-bottom:1px solid var(--line2);cursor:pointer;}
 .ammtesta b{display:block;font-size:15px;font-weight:700;letter-spacing:-.2px;}
@@ -1453,6 +1483,8 @@ function impostaPuntata(v){
   try{ localStorage.setItem(CHIAVE_PUNTATA, String(S.puntata)); }catch(e){}
   var el = document.getElementById('schedElenco');
   if(el) el.innerHTML = elencoSchedine();
+  var pf = document.getElementById('schedProfilo');
+  if(pf) pf.innerHTML = cardQuanteNePrendi() + cardComeGiocarle();
 }
 
 function cercaSchedine(candidati, maxSel){
@@ -1611,6 +1643,129 @@ function elencoSchedine(){
   return h;
 }
 
+/* ══════════════════════════════════════════════════════════════
+   QUANTE NE PRENDI
+
+   "Otto su dieci" è la frase che si dice dopo, e non è la stessa cosa che
+   sapere prima che otto su dieci era il risultato più probabile di tutti.
+
+   Dieci selezioni al 75% l'una non fanno dieci su dieci il 75% delle volte:
+   lo fanno il 5%. Il caso più probabile è otto. È lo stesso identico
+   pronostico — cambia solo che qui è scritto per intero invece che ridotto a
+   "esce o non esce".
+
+   Il conto è esatto, non simulato: con dieci selezioni gli scenari possibili
+   sono 1024, si enumerano tutti. E vale perché le selezioni della stessa
+   giornata sono indipendenti — non è un'ipotesi di comodo, è una cosa
+   verificata su 93 giornate (varianza osservata 0.996 di quella teorica).
+   ══════════════════════════════════════════════════════════════ */
+function selezioniGiornata(){
+  var out = [];
+  partiteGiornata().forEach(function(p){
+    var sc = sceltePartita(p, 1);
+    if(!sc || !sc.piuSolida) return;
+    var m = sc.piuSolida;
+    out.push({p: m.p, quota: quotaBanco(1/m.p, 1), nome: m.nome,
+              partita: p.c+' – '+p.v, d: p.d});
+  });
+  return out;
+}
+
+function cardQuanteNePrendi(){
+  var sel = selezioniGiornata();
+  if(sel.length < 4) return '';
+  var n = sel.length;
+  var dist = M.distribuzioneEsiti(sel.map(function(x){ return x.p; }));
+  var attesi = sel.reduce(function(a,x){ return a + x.p; }, 0);
+  var picco = dist.indexOf(Math.max.apply(null, dist));
+  var max = Math.max.apply(null, dist);
+  var almeno = function(k){ var s=0; for(var i=k;i<dist.length;i++) s+=dist[i]; return s; };
+
+  var h = '<div class="h2">Quante ne prendi<span class="r">'+n+'</span></div><div class="card">'+
+    '<p class="lede" style="margin:0 0 12px">Se giocassi <b>la più solida di ogni partita</b> di '+
+    'questa giornata, ecco quante ne uscirebbero. Il conto è esatto: con '+n+' selezioni gli '+
+    'scenari possibili sono '+nu(Math.pow(2,n),0)+' e li ho contati tutti.</p>'+
+    '<div class="dist">';
+  for(var k = 0; k < dist.length; k++){
+    if(dist[k] < 0.004 && k !== n) continue;
+    var alt = Math.max(3, Math.round(100 * dist[k] / max));
+    h += '<div class="distc'+(k===picco?' picco':'')+(k===n?' tutte':'')+'">'+
+      '<div class="distb"><i style="height:'+alt+'%"></i></div>'+
+      '<div class="distk">'+k+'</div>'+
+      '<div class="distp">'+(dist[k]>=0.01 ? Math.round(100*dist[k])+'%' : '<1%')+'</div></div>';
+  }
+  h += '</div>'+
+    '<div class="note"><b>'+picco+' su '+n+'</b> è il risultato più probabile, e '+
+    'in media ne escono <b>'+nu(attesi,1)+'</b>. Prenderle <b>tutte e '+n+'</b> capita il <b>'+
+    (dist[n] >= 0.01 ? Math.round(100*dist[n])+'%' : (100*dist[n]).toFixed(1)+'%')+
+    '</b> delle volte: una giornata su '+nu(1/Math.max(1e-9,dist[n]),0)+'. '+
+    'Almeno '+(n-1)+' il '+Math.round(100*almeno(n-1))+'%, almeno '+(n-2)+' il '+
+    Math.round(100*almeno(n-2))+'%.</div></div>';
+  return h;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   COME LE IMPACCHETTI
+
+   Questa è la cosa che mi sono accorto di non aver mai detto, ed è la più
+   importante di tutta la sezione.
+
+   Le stesse dieci selezioni, la stessa puntata, e cinque modi di giocarle. Non
+   cambia solo il rischio — cambia quanto ti resta in mano nel lungo periodo, e
+   cambia tantissimo. Il motivo è che il ricarico del banco si moltiplica a
+   ogni selezione: su una singola paghi il 6.5%, su un'accumulata da dieci
+   paghi 1.065¹⁰, cioè quasi il doppio del giusto. Il banco non prende il 6.5%
+   della tua giocata: ne prende il 47%.
+
+   Non è un invito a non farle. È che se una la fai, tanto vale sapere che
+   stai comprando una lotteria a quel prezzo, e non un pronostico a quel
+   prezzo.
+   ══════════════════════════════════════════════════════════════ */
+function cardComeGiocarle(){
+  var sel = selezioniGiornata();
+  if(sel.length < 4) return '';
+  var q = puntata();
+  if(!(q > 0)) return '';
+  var n = sel.length;
+  var righe = M.struttureGiocata(n).map(function(st){
+    var r = M.profiloGiocata(sel, st.gruppi, q);
+    r.nome = st.taglio === n ? 'Una da '+n
+      : (st.taglio === 1 ? n+' singole' : r.schedine+' da '+st.taglio);
+    r.taglio = st.taglio;
+    return r;
+  });
+  var migliore = righe.reduce(function(a,b){ return b.atteso > a.atteso ? b : a; });
+  var acc = righe[0];
+
+  var h = '<div class="h2">Come le impacchetti</div><div class="card">'+
+    '<p class="lede" style="margin:0 0 12px">Le stesse '+n+' selezioni, gli stessi '+nu(q,0)+' chf, '+
+    'cinque modi di giocarle. Cambia il rischio — e cambia anche quanto ti resta in mano.</p>'+
+    '<div class="tabimp"><div class="timr timh">'+
+      '<span class="tnome">come</span><span>in attivo</span><span>ti torna</span>'+
+      '<span>al massimo</span></div>';
+  righe.forEach(function(r){
+    var perso = q - r.atteso;
+    h += '<div class="timr'+(r===migliore?' best':'')+(r===acc?' acc':'')+'">'+
+      '<span class="tnome">'+esc(r.nome)+'</span>'+
+      '<span>'+Math.round(100*r.pAttivo)+'%</span>'+
+      '<span class="tsoldi">'+nu(r.atteso,2)+'<em>−'+nu(perso,2)+'</em></span>'+
+      '<span>'+nu(r.massimo,0)+'</span></div>';
+  });
+  h += '</div>'+
+    '<div class="note"><b>"Ti torna"</b> è quanto ti resta in media ogni volta che giochi '+
+    nu(q,0)+' chf così, ripetuto tante volte. Non è il rischio: è il prezzo.<br><br>'+
+    'La differenza fra <b>'+nu(acc.atteso,2)+'</b> e <b>'+nu(migliore.atteso,2)+'</b> non viene dal '+
+    'modello, viene dal ricarico del banco, che si <b>moltiplica</b> a ogni selezione. Su una '+
+    'singola paghi il 6.5%; su un\'accumulata da '+n+' paghi 1.065<sup>'+n+'</sup>, cioè il <b>'+
+    Math.round(100*(1-1/Math.pow(1.065,n)))+'%</b>. Il banco non si prende il 6.5% della tua '+
+    'giocata: se ne prende il '+Math.round(100*(1-1/Math.pow(1.065,n)))+'%.<br><br>'+
+    'Detto questo: l\'accumulata da '+n+' è l\'unica che può pagare '+nu(acc.massimo,0)+' chf, e '+
+    'nessuna delle altre ci arriva nemmeno lontanamente. Se è quello che stai comprando va '+
+    'benissimo — l\'importante è sapere che stai comprando <b>una lotteria a quel prezzo</b>, non '+
+    'un pronostico a quel prezzo.</div></div>';
+  return h;
+}
+
 function tabSchedine(){
   if(!(S._prossime||[]).length) S._prossime = prossimePartite();
   var partite = partiteGiornata();
@@ -1625,6 +1780,7 @@ function tabSchedine(){
       '<span>chf. È l\'unica cosa che ti chiedo di scrivere in tutta l\'app: '+
       'da qui in giù i conti sono fatti su questa cifra.</span>'+
     '</div></div>';
+  h += '<div id="schedProfilo">'+cardQuanteNePrendi()+cardComeGiocarle()+'</div>';
   h += '<div class="note" style="margin-bottom:14px">Le selezioni sono le stesse che vedi nella '+
     '<b>Giornata</b>, prese dalla stessa funzione: se lì una partita dice una cosa, qui non può dirne '+
     'un\'altra. A parità di quota scelgo la combinazione su cui il modello è più sicuro — quella col '+

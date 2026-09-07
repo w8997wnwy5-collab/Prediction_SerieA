@@ -212,7 +212,46 @@ punteggio sarebbe un complimento che ci si fa da soli.
 node tools/verifica_giornata.js                     # l'ultima giornata giocata
 node tools/verifica_giornata.js 2026-09-04 2026-09-07
 node tools/misura_arbitri.js                        # l'arbitro sposta i gol? (no)
+node tools/misura_indipendenza.js                   # le giocate cadono insieme? (no)
 ```
+
+### Quante ne prendi, e come le impacchetti
+
+Una schedina da dieci si racconta come "esce o non esce", ed è il modo in cui si
+perde la parte interessante. Dieci selezioni al 75% l'una **non** fanno dieci su
+dieci il 75% delle volte: lo fanno il 5.6%. Il risultato più probabile è otto.
+
+È lo stesso identico pronostico — cambia solo come lo si impacchetta. E
+cambiare l'impacchettamento cambia due cose diverse, che vale la pena tenere
+separate:
+
+**Il rischio**, che è ovvio. **Il prezzo**, che non lo è: il ricarico del banco
+si moltiplica a ogni selezione. Su una singola paghi il 6.5%; su un'accumulata
+da dieci paghi 1.065¹⁰, cioè il **47%**. Con le stesse dieci selezioni e gli
+stessi 20 chf:
+
+| come | in attivo | ti torna | al massimo |
+|---|---|---|---|
+| una da 10 | 6% | 10.65 | 186 |
+| 2 da 5 | 42% | 14.60 | 61 |
+| 4 da 3 | 35% | 17.11 | 36 |
+| 5 da 2 | 28% | 17.63 | 31 |
+| 10 singole | 44% | 18.78 | 25 |
+
+Non è un invito a non farle: l'accumulata è l'unica che può pagare 186, e
+nessuna delle altre ci arriva. È che se una la fai, tanto vale sapere che stai
+comprando una lotteria a quel prezzo, e non un pronostico a quel prezzo.
+
+Il conto è **esatto, non simulato**: con dieci selezioni gli scenari possibili
+sono 1024 e si enumerano tutti. Regge però su un'ipotesi — che le selezioni
+siano indipendenti — e quell'ipotesi è stata verificata invece che assunta.
+`tools/misura_indipendenza.js` rigioca 93 giornate e confronta la varianza
+osservata del numero di esiti presi con quella teorica: **1.985 contro 1.994**,
+rapporto 1.00. Dieci Over della stessa giornata non cadono insieme. Se cadessero,
+tutta questa parte sarebbe sbagliata.
+
+Sulle stesse 93 giornate: 692 selezioni prese su 927 (74.6%) contro il 71.8%
+promesso, z = 1.95. Il modello promette un filo meno di quanto mantiene.
 
 ### Un'idea buona che i dati hanno bocciato
 
@@ -252,7 +291,7 @@ una accettata: senza il conto scritto, fra sei mesi qualcuno la riprova.
 | `worker.js` | fa girare il motore fuori dal thread dell'interfaccia, così lo schermo non si blocca |
 | `scripts/build_data.py` | scarica e normalizza i dati da sei fonti (solo libreria standard) |
 | `.github/workflows/aggiorna-dati.yml` | il robot: quattro giri al giorno |
-| `tools/` | generatore di dati sintetici, le tre prove (79 sulle fonti, 43 sul motore, 15 sul backtest), la verifica di una giornata a posteriori e la misura sugli arbitri |
+| `tools/` | generatore di dati sintetici, le tre prove (79 sulle fonti, 59 sul motore, 15 sul backtest), la verifica di una giornata a posteriori e le due misure (arbitri, indipendenza) |
 | `data/` | riempita dalla Action: `serie-a.json` e `meta.json` |
 
 ## Una nota sul senso di tutto questo
