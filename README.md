@@ -217,6 +217,50 @@ node tools/misura_valore.js                         # si batte il mercato? (no, 
 node tools/ottimizza_regola.js                      # quale soglia conviene? (nessuna, e va bene così)
 ```
 
+### Le notizie, e cosa possono fare
+
+Le fonti raggiungibili dalla Action sono state provate una per una
+(`scripts/sonda_fonti.py`, che gira su richiesta): rispondono 14 su 19. Quello
+che ne è venuto fuori, in ordine di valore reale:
+
+**TheSportsDB** pubblica partita per partita invece che a giornata chiusa. È
+l'unica che il lunedì mattina ha i risultati del venerdì — le altre due
+aspettano il posticipo. Non ha tiri né arbitro, quindi non basterebbe da sola,
+ma il risultato ce l'ha per primo, ed è quello che serve per non restare fermi.
+Entra come terza fonte, con un filtro: si accettano solo sfide fra squadre che
+l'archivio già conosce, perché una partita inventata è molto peggio di una
+partita mancante.
+
+**Gli infortuni no.** `API-Football` li ha, ma il piano gratuito risponde
+`"Free plans do not have access to this season, try from 2022 to 2024"`. Il
+dato che sarebbe servito di più è l'unico negato.
+
+**Quattro RSS** rispondono: Gazzetta, ANSA, Sky Sport, Football Italia. I titoli
+vengono raccolti, attaccati alle squadre che nominano, e mostrati **accanto**
+alla partita — mai dentro il calcolo.
+
+Perché fuori dal calcolo, e non è pigrizia. "La Roma ha nove punti su nove" è
+informazione che il mercato ha già, e il mercato lo usiamo come ancora: quella
+notizia è già dentro le probabilità, arrivata per la porta giusta. E la tabella
+qui sotto mostra cosa succede quando il modello si fa un'opinione propria
+contro il mercato.
+
+Quello che il mercato ha e noi no sono le **assenze**. Quelle non si sanno
+pesare senza i dati sui singoli, che la fonte gratuita non concede per la
+stagione in corso. Quindi si mettono davanti a chi gioca: un elenco di parole
+(`infortun`, `squalific`, `out`, `forfait`, …) marca i titoli che sembrano
+segnalare un'assenza. Non capisce la frase — sbaglia in entrambe le direzioni,
+ed è scritto nell'app.
+
+Con le notizie sono spariti gli ultimi due cursori dell'app, quelli con cui
+bisognava dire a mano chi mancava. Chiedevano proprio il dato che nessuno sa a
+memoria.
+
+**Il "gran momento" invece era già dentro.** La forma recente — punti, gol
+fatti e subiti nelle ultime 3, 5 e 8 partite — è stata confrontata con quello
+che il modello sbaglia: tutte le correlazioni comprendono lo zero (la più
+grande è r = −0.067). Il decadimento temporale del modello la cattura già.
+
 ### La maledizione del vincitore
 
 La domanda giusta da fare a un modello di scommesse: **se sono alla pari col
@@ -355,7 +399,7 @@ una accettata: senza il conto scritto, fra sei mesi qualcuno la riprova.
 | `worker.js` | fa girare il motore fuori dal thread dell'interfaccia, così lo schermo non si blocca |
 | `scripts/build_data.py` | scarica e normalizza i dati da sei fonti (solo libreria standard) |
 | `.github/workflows/aggiorna-dati.yml` | il robot: quattro giri al giorno |
-| `tools/` | generatore di dati sintetici, le tre prove (79 sulle fonti, 72 sul motore, 15 sul backtest), la verifica di una giornata a posteriori e le quattro misure (arbitri, indipendenza, valore, regola di selezione) |
+| `tools/` | generatore di dati sintetici, le tre prove (96 sulle fonti, 72 sul motore, 15 sul backtest), la verifica di una giornata a posteriori e le quattro misure (arbitri, indipendenza, valore, regola di selezione) |
 | `data/` | riempita dalla Action: `serie-a.json` e `meta.json` |
 
 ## Una nota sul senso di tutto questo

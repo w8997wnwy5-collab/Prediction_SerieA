@@ -416,6 +416,115 @@ def test_nessun_orario_grezzo():
           not grezzi_espn, ' / '.join(x.strip()[:70] for x in grezzi_espn))
 
 
+def test_thesportsdb():
+    """La fonte piu svelta: pubblica partita per partita invece che a giornata
+    chiusa, ed e' l'unica che il lunedi mattina ha i risultati del venerdi."""
+    risposta = json.dumps({'events': [
+        {'idEvent': '1', 'strTimestamp': '2026-09-06T18:45:00', 'dateEvent': '2026-09-06',
+         'strHomeTeam': 'Juventus', 'strAwayTeam': 'AC Milan',
+         'intHomeScore': '2', 'intAwayScore': '1', 'intRound': '3'},
+        {'idEvent': '2', 'strTimestamp': '2026-09-07T16:30:00', 'dateEvent': '2026-09-07',
+         'strHomeTeam': 'Cagliari', 'strAwayTeam': 'US Lecce',
+         'intHomeScore': None, 'intAwayScore': None, 'intRound': '3'},
+        {'idEvent': '3', 'dateEvent': None, 'strHomeTeam': 'Boh', 'strAwayTeam': 'Mah'},
+    ]}).encode('utf-8')
+    vero = B.scarica
+    B.scarica = lambda *a, **k: risposta
+    vera_pausa = B.time.sleep
+    B.time.sleep = lambda *a: None
+    try:
+        esiti = {}
+        giocate, future = B.prendi_thesportsdb('2026-27', esiti)
+    finally:
+        B.scarica = vero
+        B.time.sleep = vera_pausa
+    # Delle tre righe finte una sola ha il punteggio: le altre sono una partita
+    # da giocare e una riga senza data. Fra le "giocate" deve restare quella.
+    prova('fra le giocate finisce solo quella col risultato', len(giocate) == 1,
+          '%d invece di 1' % len(giocate))
+    prova('e quella da giocare finisce fra le prossime',
+          any(x['c'] == 'Cagliari' for x in future))
+    j = giocate[0]
+    prova('i nomi passano dal normalizzatore', j['c'] == 'Juventus' and j['v'] == 'Milan',
+          '%s / %s' % (j['c'], j['v']))
+    prova('il risultato arriva come numero', j['gc'] == 2 and j['gv'] == 1)
+    prova('la giornata arriva con lo stesso nome delle altre fonti',
+          j.get('giornata') == 'Matchday 3', j.get('giornata'))
+    # 18:45 a Greenwich il 6 settembre = 20:45 a Roma
+    prova("l'orario arriva convertito, non copiato", j.get('o') == '20:45', j.get('o'))
+    prova('una riga senza data viene lasciata perdere',
+          all(x['c'] != 'Boh' for x in giocate + future))
+
+    B.scarica = lambda *a, **k: b'non sono json'
+    B.time.sleep = lambda *a: None
+    try:
+        esiti2 = {}
+        g2, f2 = B.prendi_thesportsdb('2026-27', esiti2)
+    finally:
+        B.scarica = vero
+        B.time.sleep = vera_pausa
+    prova('se la fonte risponde male non si porta giu il giro',
+          g2 == [] and f2 == [] and any('fallita' in v for v in esiti2.values()))
+
+
+def test_notizie():
+    """I titoli non entrano nel modello, quindi le prove non riguardano la
+    previsione: riguardano che si legga il formato giusto, che si riconosca la
+    squadra, e soprattutto che roba scritta da altri non finisca dritta
+    nell'app."""
+    rss = b'''<?xml version="1.0"?><rss version="2.0"><channel>
+<item><title><![CDATA[Roma, Dybala out: lesione al flessore, salta l&apos;Atalanta]]></title>
+<link>https://esempio.it/1</link><pubDate>Mon, 07 Sep 2026 08:00:00 +0200</pubDate></item>
+<item><title>Inter-Napoli 2-1: decide Lautaro nel finale</title>
+<link>https://esempio.it/2</link><pubDate>Sun, 06 Sep 2026 22:30:00 +0200</pubDate></item>
+<item><title>Calciomercato: il Bayern piomba su un big</title>
+<link>https://esempio.it/3</link><pubDate>Mon, 07 Sep 2026 09:00:00 +0200</pubDate></item>
+<item><title>Milan, il tecnico rassicura</title>
+<link>javascript:alert(1)</link><pubDate>Mon, 07 Sep 2026 07:00:00 +0200</pubDate></item>
+</channel></rss>'''
+    vero, vera_pausa, vere_fonti = B.scarica, B.time.sleep, B.FONTI_NOTIZIE
+    B.scarica = lambda *a, **k: rss
+    B.time.sleep = lambda *a: None
+    B.FONTI_NOTIZIE = (('Prova', 'http://x'),)
+    try:
+        esiti = {}
+        out = B.prendi_notizie(['Roma', 'Inter', 'Napoli', 'Atalanta', 'Milan'], esiti)
+    finally:
+        B.scarica, B.time.sleep, B.FONTI_NOTIZIE = vero, vera_pausa, vere_fonti
+
+    per_titolo = {n['t'][:20]: n for n in out}
+    prova('legge il CDATA senza inciamparci',
+          any('Dybala' in n['t'] for n in out), [n['t'][:40] for n in out])
+    dyb = [n for n in out if 'Dybala' in n['t']][0]
+    prova('riconosce tutte le squadre nominate nel titolo',
+          dyb['sq'] == ['Atalanta', 'Roma'], dyb['sq'])
+    prova('riconosce che e un\'assenza', dyb['ass'] is True)
+    prova('un titolo di cronaca non viene scambiato per un\'assenza',
+          [n for n in out if 'Lautaro' in n['t']][0]['ass'] is False)
+    prova('un titolo che non nomina nessuna squadra di A viene lasciato fuori',
+          not any('Bayern' in n['t'] for n in out))
+
+    # La parte che conta: il contenuto lo scrive qualcun altro.
+    mil = [n for n in out if n['t'].startswith('Milan')]
+    prova('un link che non e http viene buttato, la notizia resta',
+          len(mil) == 1 and mil[0]['l'] == '', mil[0]['l'] if mil else 'notizia persa')
+    prova('nessun titolo tenuto porta con se un link non http',
+          all(n['l'] == '' or n['l'].startswith(('http://', 'https://')) for n in out))
+    prova('i titoli sono tagliati, cosi un feed non puo occupare tutto',
+          all(len(n['t']) <= 180 for n in out))
+
+    # una fonte rotta non deve portarsi giu il resto
+    B.scarica = lambda *a, **k: b'<html>non sono un rss</html>'
+    B.time.sleep = lambda *a: None
+    B.FONTI_NOTIZIE = (('Rotta', 'http://x'),)
+    try:
+        esiti2 = {}
+        out2 = B.prendi_notizie(['Roma'], esiti2)
+    finally:
+        B.scarica, B.time.sleep, B.FONTI_NOTIZIE = vero, vera_pausa, vere_fonti
+    prova('un feed che non e un feed non fa saltare niente', out2 == [], out2)
+
+
 def main():
     test_validatori()
     test_quote()
@@ -429,6 +538,8 @@ def main():
     test_orari()
     test_porta_football_data()
     test_nessun_orario_grezzo()
+    test_thesportsdb()
+    test_notizie()
 
     larghezza = max(len(n) for n, _, _ in ESITI)
     falliti = 0

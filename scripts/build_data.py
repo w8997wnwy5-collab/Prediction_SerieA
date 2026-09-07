@@ -366,6 +366,199 @@ def prendi_football_data(stagioni):
     return partite, esiti
 
 
+# ────────────────────────────── TheSportsDB (la piu svelta) ──────────────────────────────
+#
+# Le altre due fonti pubblicano a giornata chiusa: finche' non si e' giocato il
+# posticipo del lunedi, i risultati del venerdi non ci sono. Per giorni l'app ha
+# detto "mancano 8 risultati" ed era vero — solo che non era colpa di nessuno,
+# era il calendario delle fonti.
+#
+# TheSportsDB pubblica partita per partita, ed e' aperta senza chiave. Non ha
+# tiri, ne' falli, ne' arbitro: da sola non basterebbe. Ma il risultato ce l'ha
+# per prima, e il risultato e' quello che serve per non restare fermi.
+
+ID_SERIEA_TSDB = 4332
+BASE_TSDB = 'https://www.thesportsdb.com/api/v1/json/3'
+
+
+def _partita_tsdb(ev, stagione):
+    casa, via = nome(ev.get('strHomeTeam')), nome(ev.get('strAwayTeam'))
+    data = data_iso((ev.get('dateEvent') or (ev.get('strTimestamp') or '')[:10]))
+    if not (casa and via and data):
+        return None
+    fuori = {'s': stagione, 'd': data, 'c': casa, 'v': via}
+    # L'ora e' quella di Greenwich, come dice il nome del campo accanto.
+    ts = ev.get('strTimestamp') or ''
+    if len(ts) >= 16:
+        ora = ora_da_greenwich(ts[11:16], data)
+        if ora:
+            fuori['o'] = ora
+    gc, gv = intero(ev.get('intHomeScore')), intero(ev.get('intAwayScore'))
+    if gc is not None and gv is not None:
+        fuori['gc'], fuori['gv'] = gc, gv
+    giornata = intero(ev.get('intRound'))
+    if giornata:
+        fuori['giornata'] = 'Matchday %d' % giornata
+    return fuori
+
+
+def prendi_thesportsdb(stagione, esiti):
+    """Le ultime giocate e le prossime in programma. Due richieste in tutto."""
+    giocate, future = [], []
+    for pezzo, dove in (('eventspastleague', giocate), ('eventsnextleague', future)):
+        try:
+            grezzo = scarica('%s/%s.php?id=%d' % (BASE_TSDB, pezzo, ID_SERIEA_TSDB),
+                             tentativi=2, attesa=4)
+            d = json.loads(grezzo.decode('utf-8'))
+        except Exception as e:            # noqa: BLE001
+            esiti['TheSportsDB %s' % pezzo] = 'fallita: %s' % e
+            continue
+        for ev in (d.get('events') or []):
+            p = _partita_tsdb(ev, stagione)
+            if p:
+                dove.append(p)
+        time.sleep(1.5)
+    con_risultato = [p for p in giocate if p.get('gc') is not None]
+    esiti['TheSportsDB'] = 'ok: %d giocate (%d col risultato), %d in arrivo' % (
+        len(giocate), len(con_risultato), len(future))
+    return con_risultato, future
+
+
+# ────────────────────────────── le notizie ──────────────────────────────
+#
+# Cosa ci fanno qui, visto che tutto il resto di questo progetto e' numeri.
+#
+# Non entrano nel modello, e non e' pigrizia: e' una decisione presa dopo
+# averla misurata. "La Roma ha nove punti su nove" e' informazione che il
+# mercato ha gia', e il mercato lo usiamo come ancora — quindi ce l'abbiamo
+# gia' dentro, meglio di come la ricaveremmo noi. E tools/misura_valore.js
+# mostra cosa succede quando il modello si fa un'opinione propria contro il
+# mercato: dove si dava piu' del 20% di vantaggio ha reso il -35%.
+#
+# Servono a un'altra cosa, che i numeri non fanno. Il modello sa quanto forte
+# e' la Roma; non sa che oggi mancano tre titolari. Quella notizia il mercato
+# ce l'ha e noi no, e non c'e' modo di darla in pasto a un Dixon-Coles senza i
+# dati sui singoli — che il piano gratuito non concede per la stagione in
+# corso. Quindi la si mette davanti a chi gioca, e decide lui.
+#
+# Il contenuto e' scritto da altri: non si esegue, non si interpreta, non
+# cambia un numero. Si mostra, con la fonte accanto.
+
+FONTI_NOTIZIE = (
+    ('Gazzetta', 'https://www.gazzetta.it/rss/calcio.xml'),
+    ('ANSA', 'https://www.ansa.it/sito/notizie/sport/calcio/calcio_rss.xml'),
+    ('Sky Sport', 'https://xml2.corriereobjects.it/rss/sport.xml'),
+    ('Football Italia', 'https://football-italia.net/feed/'),
+)
+
+# Parole che segnalano un'assenza. Non e' un modello di linguaggio: e' un
+# elenco, e come tale sbaglia in entrambe le direzioni. Serve a far risaltare
+# le notizie che contano davvero, non a decidere niente.
+PAROLE_ASSENZA = ('infortun', 'squalific', 'lesion', 'stiramento', 'distorsion',
+                  'operaz', 'out ', ' ko', 'salta la', 'salterà', 'salta il',
+                  'indisponibil', 'forfait', 'in dubbio', 'injur', 'suspend',
+                  'doubt', 'sidelin', 'ruled out')
+MAX_NOTIZIE = 60
+
+
+def _voci_rss(testo):
+    """I pezzi di un RSS, senza librerie e senza fidarsi del formato.
+
+    Si usa xml.etree e non un'espressione regolare perche' i titoli contengono
+    virgolette, ampersand e CDATA, e prima o poi uno di quelli rompe la regex —
+    di solito il giorno in cui serve."""
+    import xml.etree.ElementTree as ET
+    try:
+        radice = ET.fromstring(testo)
+    except ET.ParseError:
+        return []
+    fuori = []
+    for item in radice.iter():
+        if not item.tag.endswith('item') and not item.tag.endswith('entry'):
+            continue
+        voce = {}
+        for figlio in item:
+            etichetta = figlio.tag.split('}')[-1]
+            if etichetta in ('title', 'link', 'pubDate', 'updated', 'published'):
+                valore = (figlio.text or figlio.get('href') or '').strip()
+                if valore:
+                    voce.setdefault(etichetta, valore)
+        if voce.get('title'):
+            fuori.append(voce)
+    return fuori
+
+
+def _quando(voce):
+    grezzo = voce.get('pubDate') or voce.get('published') or voce.get('updated') or ''
+    m = re.search(r'(\d{1,2})\s+(\w{3})\s+(\d{4})', grezzo)
+    mesi = {'jan': 1, 'feb': 2, 'mar': 3, 'apr': 4, 'may': 5, 'jun': 6,
+            'jul': 7, 'aug': 8, 'sep': 9, 'oct': 10, 'nov': 11, 'dec': 12}
+    if m and m.group(2)[:3].lower() in mesi:
+        try:
+            return '%04d-%02d-%02d' % (int(m.group(3)), mesi[m.group(2)[:3].lower()],
+                                       int(m.group(1)))
+        except ValueError:
+            pass
+    m = re.match(r'^(\d{4}-\d{2}-\d{2})', grezzo)
+    return m.group(1) if m else None
+
+
+def prendi_notizie(squadre, esiti):
+    """Titoli recenti, attaccati alle squadre che nominano."""
+    if not squadre:
+        return []
+    # Per riconoscere una squadra in un titolo servono anche i suoi altri nomi:
+    # "Inter" e "Internazionale", "Milan" e "AC Milan". ALIAS ce li ha gia'.
+    per_squadra = {}
+    for sq in squadre:
+        per_squadra.setdefault(sq, set()).add(sq.lower())
+    for lungo, corto in ALIAS.items():
+        if corto in per_squadra:
+            per_squadra[corto].add(lungo.lower())
+
+    oggi = datetime.now(timezone.utc).date()
+    limite = (oggi - timedelta(days=10)).isoformat()
+    viste, fuori = set(), []
+    for etichetta, url in FONTI_NOTIZIE:
+        try:
+            grezzo = scarica(url, tentativi=2, attesa=3)
+            testo = grezzo.decode('utf-8', 'replace')
+        except Exception as e:        # noqa: BLE001
+            esiti['notizie %s' % etichetta] = 'non disponibile: %s' % str(e)[:60]
+            continue
+        voci = _voci_rss(testo)
+        prese = 0
+        for voce in voci:
+            titolo = re.sub(r'\s+', ' ', voce['title']).strip()
+            if not titolo or titolo.lower() in viste:
+                continue
+            basso = titolo.lower()
+            citate = sorted(sq for sq, nomi in per_squadra.items()
+                            if any(re.search(r'\b%s\b' % re.escape(n), basso) for n in nomi))
+            if not citate:
+                continue
+            quando = _quando(voce)
+            if quando and quando < limite:
+                continue
+            link = (voce.get('link') or '').strip()
+            if not link.startswith(('http://', 'https://')):
+                link = ''
+            viste.add(basso)
+            fuori.append({'t': titolo[:180], 'f': etichetta, 'd': quando,
+                          'sq': citate, 'l': link,
+                          'ass': any(k in basso for k in PAROLE_ASSENZA)})
+            prese += 1
+        esiti['notizie %s' % etichetta] = '%d titoli su %d nominano una squadra di A' % (
+            prese, len(voci))
+        time.sleep(1.5)
+    fuori.sort(key=lambda x: (x['d'] or '', x['ass']), reverse=True)
+    fuori = fuori[:MAX_NOTIZIE]
+    quante = len([x for x in fuori if x['ass']])
+    esiti['notizie'] = '%d titoli tenuti, %d %s un\'assenza' % (
+        len(fuori), quante, 'segnala' if quante == 1 else 'segnalano')
+    return fuori
+
+
 # ────────────────────────────── openfootball (riserva) ──────────────────────────────
 
 def _coppia(v):
@@ -1080,6 +1273,7 @@ ETICHETTE = {'aggiornato': 'Aggiornato', 'esito': 'Esito', 'ultima_partita': 'Ul
              'con_tiri': 'Con tiri', 'con_xg': 'Con xG veri', 'con_quote': 'Con quote',
              'in_arrivo_con_quote': 'In arrivo con quote',
              'in_arrivo_con_orario': 'In arrivo con orario', 'marcatori': 'Marcatori',
+             'notizie': 'Titoli raccolti', 'notizie_assenze': 'Titoli che segnalano assenze',
              'stagioni': 'Stagioni', 'dettaglio': 'Dettaglio per fonte', 'problemi': 'Problemi',
              'nota': 'Nota', 'nuove_oggi': 'Partite nuove oggi'}
 
@@ -1157,6 +1351,18 @@ def main():
         except Exception as e:        # noqa: BLE001
             esiti['riserva %s' % etichetta] = 'fallita: %s' % e
 
+    # TheSportsDB per ultimo, sui risultati appena arrivati. Le altre due
+    # pubblicano a giornata chiusa e per giorni l'app dice "manca il risultato"
+    # senza che sia colpa di nessuno: questa pubblica partita per partita.
+    # Arriva senza tiri e senza arbitro, quindi non puo' creare una partita da
+    # sola — riempie il risultato dove manca, e basta. Vedi `innesta`.
+    log('· TheSportsDB')
+    try:
+        tsdb_giocate, tsdb_future = prendi_thesportsdb(stagioni[0][1], esiti)
+    except Exception as e:            # noqa: BLE001
+        esiti['TheSportsDB'] = 'fallita: %s' % e
+        tsdb_giocate, tsdb_future = [], []
+
     # Due calendari, e servono tutti e due. openfootball sa QUALI partite si
     # giocano fino a maggio; football-data.co.uk sa a che ora e a quanto le
     # danno, ma solo per la settimana in arrivo. Prendere solo il secondo perché
@@ -1192,6 +1398,8 @@ def main():
     tenuto = da_tenere(vecchio_cal, oggi_iso)
     calendario = unisci_calendario(stagionale, tenuto)
     calendario = unisci_calendario(calendario, ravvicinato)
+    if tsdb_future:
+        calendario = unisci_calendario(calendario, tsdb_future)
     # Una partita che si e' giocata non e' piu' in calendario. Quando una fonte
     # non ne pubblica mai il risultato — succede: dieci partite dell'ultima
     # giornata 2024-25 sono rimaste senza — quella riga resta li' per sempre e
@@ -1210,6 +1418,24 @@ def main():
         len(calendario), con_quote, freschi, max(0, con_quote - freschi))
 
     prima = len((vecchio or {}).get('partite') or [])
+    # I risultati di TheSportsDB entrano come partite vere, non come innesto:
+    # se le altre due fonti non hanno ancora pubblicato la giornata, quella
+    # partita nell'archivio non esiste ancora e non c'e' niente da riempire.
+    #
+    # Il filtro che tiene: si accettano solo sfide fra squadre che l'archivio
+    # gia' conosce. Una fonte che non riconosciamo bene puo' sbagliare un nome,
+    # e una partita inventata e' molto peggio di una partita mancante — il
+    # modello non ha modo di accorgersene.
+    note = {p.get('c') for p in ((vecchio or {}).get('partite') or [])}
+    note |= {p.get('v') for p in ((vecchio or {}).get('partite') or [])}
+    note |= {p.get('c') for p in nuove} | {p.get('v') for p in nuove}
+    buone = [p for p in tsdb_giocate if p['c'] in note and p['v'] in note]
+    scartate = len(tsdb_giocate) - len(buone)
+    if buone:
+        nuove.extend(buone)
+    esiti['TheSportsDB risultati'] = '%d risultati accolti%s' % (
+        len(buone), ', %d scartati (squadre mai viste)' % scartate if scartate else '')
+
     indice = unisci((vecchio or {}).get('partite'), nuove)
 
     # xG veri: l'unica statistica pubblica che aggiunge informazione ai tiri
@@ -1256,6 +1482,20 @@ def main():
                         key=lambda p: (p['d'], p.get('c', '')))
     marcatori = prendi_marcatori(esiti)
 
+    # Le notizie: non entrano nel modello, stanno accanto alla partita. Il
+    # perche' e' scritto in testa a prendi_notizie, e non e' una scorciatoia.
+    squadre_attive = sorted({p['c'] for p in partite if p.get('s') == stagioni[0][1]} |
+                            {p['v'] for p in partite if p.get('s') == stagioni[0][1]} |
+                            {p.get('c') for p in calendario if p.get('c')} |
+                            {p.get('v') for p in calendario if p.get('v')})
+    try:
+        notizie = [] if leggero else prendi_notizie(squadre_attive, esiti)
+    except Exception as e:            # noqa: BLE001
+        esiti['notizie'] = 'fallite: %s' % e
+        notizie = []
+    if leggero:
+        notizie = ((vecchio or {}).get('notizie') or [])
+
     doc = {'lega': 'Serie A', 'aggiornato': adesso,
            'versione_orari': VERSIONE_ORARI,
            'fonte': ' + '.join(['football-data.co.uk', 'openfootball']
@@ -1266,6 +1506,8 @@ def main():
            'partite': partite, 'calendario': calendario}
     if marcatori:
         doc['marcatori'] = marcatori
+    if notizie:
+        doc['notizie'] = notizie
     with open(FILE_DATI, 'w', encoding='utf-8') as f:
         json.dump(doc, f, ensure_ascii=False, separators=(',', ':'))
 
@@ -1282,6 +1524,8 @@ def main():
         'in_arrivo_con_quote': len([p for p in calendario if p.get('q')]),
         'in_arrivo_con_orario': len([p for p in calendario if p.get('o')]),
         'marcatori': len((marcatori or {}).get('lista', [])),
+        'notizie': len(notizie),
+        'notizie_assenze': len([x for x in notizie if x.get('ass')]),
         'stagioni': doc['stagioni'], 'dettaglio': esiti,
     })
     log('Scritte %d partite (%d giocate, ultima il %s), %d in calendario, %.0f KB'
