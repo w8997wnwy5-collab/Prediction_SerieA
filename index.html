@@ -2158,12 +2158,14 @@ function tabPrecisione(){
       '<div class="note"><p>Contro chi indovina con le frequenze storiche sono <b>'+nu(vsCaso,0)+
       '% più preciso</b>. Contro le quote di chiusura sono <b>'+
       (Math.abs(vsMerc)<1?'alla pari':nu(Math.abs(vsMerc),1)+'% '+(vsMerc>0?'avanti':'dietro'))+'</b>.</p>'+
-      '<p><b>Una cautela su questo numero.</b> Nello storico mi ancoro a Betfair Exchange, che ha '+
-      'un margine dello 0.5% invece del 5.5% dei bookmaker ed è quindi una probabilità molto più '+
-      'pulita. Ma il file delle partite in arrivo non porta le quote dell\'exchange: quando gioco '+
-      'davvero mi ancoro ai bookmaker, che sono un filo peggiori. La differenza misurata è dello '+
-      '0.28%, quindi <b>questo numero è ottimista di circa quel tanto</b> rispetto a come mi '+
-      'comporto sulla giornata che devi giocare.</p>'+
+      '<p><b>Una cautela che era diventata sbagliata.</b> Qui c\'era scritto che nello storico mi '+
+      'ancoro a Betfair Exchange — margine 0.5% invece del 5.5% dei bookmaker, quindi una '+
+      'probabilità molto più pulita — ma che il file delle partite in arrivo non porta le quote '+
+      'dell\'exchange, e che quando giochi davvero mi accontento dei bookmaker. Le porta eccome: '+
+      'era lo script che le leggeva solo per le partite già giocate, e per settimane il miglior '+
+      'guadagno misurato della stagione non è mai arrivato su una giornata da giocare. '+
+      'Adesso ci arriva, e <b>questo numero non è più ottimista</b>: è lo stesso ancoraggio da '+
+      'tutte e due le parti.</p>'+
       '<p>Il secondo numero è quello che conta, ed è alla pari per un motivo preciso: quando le quote '+
       'ci sono, <b>le uso</b>. Da solo starei '+nu(Math.abs(soloModello),1)+'% dietro — le quote di '+
       'chiusura contengono formazioni e infortuni dell\'ultimo minuto, che a un modello statistico '+

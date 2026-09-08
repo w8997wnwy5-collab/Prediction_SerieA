@@ -219,6 +219,7 @@ node tools/misura_handicap.js                       # l'handicap dice qualcosa i
 node tools/misura_campo.js                          # il campo pesa diverso per squadra? (no)
 node tools/misura_neopromosse.js                    # serve l'archivio di Serie B? (no)
 node tools/tara_memoria.js                          # i parametri a occhio erano sbagliati? (no)
+node tools/misura_ancora_ou.js                      # l'Over/Under a ricarico zero aiuta? (no)
 ```
 
 ### Le notizie, e cosa possono fare
@@ -330,10 +331,30 @@ grosso.
 L'exchange vale +0.28% (z = 2.01) e batte i bookmaker anche da solo. Poco, ma
 gratis e nella direzione giusta.
 
-**Il limite, dichiarato:** il file delle partite in arrivo non porta le quote
-dell'exchange. Nello storico mi ancoro a Betfair, quando gioco ai bookmaker —
-quindi il backtest è ottimista di circa quello 0.28%. È scritto anche in
-Precisione, dentro l'app.
+**E poi il limite dichiarato che non esisteva.** Per settimane qui c'è stato
+scritto: *"il file delle partite in arrivo non porta le quote dell'exchange,
+quindi nello storico mi ancoro a Betfair e quando gioco ai bookmaker."* Era
+onesto come dichiarazione e falso come fatto. Il file delle partite in arrivo le
+porta eccome — è la funzione che lo legge che chiamava `quote_da_riga` e non
+`quote_extra_da_riga`, due parole di differenza in una riga sola.
+
+Il risultato: `qex` c'era su tutte e 1930 le partite già giocate e su **zero**
+delle 360 in calendario. Cioè il miglior guadagno della stagione, misurato e
+verificato, esisteva in ogni backtest e in nessuna giocata — e proprio nel
+momento in cui serve la stima più pulita il modello si ancorava alla quota media
+col 5% di ricarico dentro.
+
+Vale la pena dire come non è stato trovato: non da una prova. Le 111 prove
+guardavano tutte una riga di CSV **già giocata**, che quel percorso ce l'aveva.
+È saltato fuori aprendo il file pubblicato e contando i campi. Adesso c'è una
+prova che legge il *sorgente* e pretende che dove si chiama `quote_da_riga` si
+chiami anche `quote_extra_da_riga`, così la prossima famiglia di quote non può
+entrare da una porta sola.
+
+La morale, che vale più del bug: **un limite dichiarato è comodo.** Scriverlo
+sembra rigore, e intanto chiude la questione — nessuno va più a controllare se
+era vero. Questo era lì da settimane, in un README che si vanta di misurare
+tutto.
 
 ### La maledizione del vincitore
 
@@ -594,7 +615,25 @@ Il risultato utile non è il numero: è che quei tre parametri stanno in una zon
 piatta, e quindi *smanettarli non è il modo di migliorare il modello*. Una
 mattina risparmiata, e la certezza di non aver lasciato un guadagno sul tavolo.
 
-Con i giorni di riposo fanno sei idee sensate, sei conti, sei no. Il modello è
+**L'Over/Under alla quota migliore del mercato.** Se togliere il ricarico dal
+primo asse dell'ancoraggio ha reso lo 0.28%, il secondo asse — quanti gol si
+faranno, letto dall'Over/Under 2.5 — usa ancora la quota media, che di ricarico
+ne porta il 5.20%. La migliore del mercato ne porta lo 0.57%. Stessa medicina,
+stesso guadagno atteso.
+
+| | errore 1X2 | errore Over/Under |
+|---|---|---|
+| con la quota media (5.20% di ricarico) | 0.19130 | 0.24823 |
+| con la migliore del mercato (0.57%) | 0.19129 | 0.24831 |
+
+Niente, in nessuna delle due direzioni. E il motivo è aritmetico, non
+statistico: togliere il ricarico dividendo per la somma delle probabilità
+implicite è un'approssimazione che sbaglia tanto più quanti sono gli esiti fra
+cui distribuire l'errore. Su **due** esiti c'è un grado di libertà solo, e
+l'approssimazione è quasi esatta anche con il 5% dentro. Su tre no — ed è lì che
+Betfair aveva fatto la differenza. `tools/misura_ancora_ou.js`.
+
+Con i giorni di riposo fanno sette idee sensate, sette conti, sette no. Il modello è
 quello che è rimasto in piedi — e il fatto che tante idee ragionevoli non
 attacchino è, di per sé, l'informazione più utile di tutta questa sezione: vuol
 dire che quello che resta da guadagnare non sta nel modello, sta nel **prezzo**
@@ -609,7 +648,7 @@ dire che quello che resta da guadagnare non sta nel modello, sta nel **prezzo**
 | `worker.js` | fa girare il motore fuori dal thread dell'interfaccia, così lo schermo non si blocca |
 | `scripts/build_data.py` | scarica e normalizza i dati da sei fonti (solo libreria standard) |
 | `.github/workflows/aggiorna-dati.yml` | il robot: quattro giri al giorno |
-| `tools/` | generatore di dati sintetici, le tre prove (107 sulle fonti, 88 sul motore, 15 sul backtest), la verifica di una giornata a posteriori e le otto misure (arbitri, indipendenza, valore, regola di selezione, handicap, vantaggio del campo, neopromosse, taratura dei parametri) |
+| `tools/` | generatore di dati sintetici, le tre prove (116 sulle fonti, 88 sul motore, 15 sul backtest), la verifica di una giornata a posteriori e le nove misure (arbitri, indipendenza, valore, regola di selezione, handicap, vantaggio del campo, neopromosse, taratura dei parametri, ancoraggio Over/Under) |
 | `data/` | riempita dalla Action: `serie-a.json` e `meta.json` |
 
 ## Una nota sul senso di tutto questo
