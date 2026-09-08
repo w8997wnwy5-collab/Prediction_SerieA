@@ -217,6 +217,8 @@ node tools/misura_valore.js                         # si batte il mercato? (no, 
 node tools/ottimizza_regola.js                      # quale soglia conviene? (nessuna, e va bene così)
 node tools/misura_handicap.js                       # l'handicap dice qualcosa in più? (no)
 node tools/misura_campo.js                          # il campo pesa diverso per squadra? (no)
+node tools/misura_neopromosse.js                    # serve l'archivio di Serie B? (no)
+node tools/tara_memoria.js                          # i parametri a occhio erano sbagliati? (no)
 ```
 
 ### Le notizie, e cosa possono fare
@@ -474,12 +476,12 @@ rende 12.40 al 4.9% e 7.04 all'11%, perché il ricarico si compone a ogni
 selezione. Un parametro inventato che sposta il risultato del 43% è peggio di
 un parametro mancante, perché non si vede.
 
-### Tre idee buone che i dati hanno bocciato
+### Le idee buone che i dati hanno bocciato
 
-Tutte e tre erano ragionevoli, tutte e tre avevano un meccanismo credibile
-dietro, e tutte e tre sono state misurate invece che dichiarate. Sono qui
-perché un'idea provata e bocciata vale quanto una accettata: senza il conto
-scritto, fra sei mesi qualcuno la riprova.
+Erano tutte ragionevoli, tutte avevano un meccanismo credibile dietro, e tutte
+sono state misurate invece che dichiarate. Sono qui perché un'idea provata e
+bocciata vale quanto una accettata: senza il conto scritto, fra sei mesi
+qualcuno la riprova.
 
 **L'arbitro.** Un arbitro che fischia tanto spezzetta la partita; una partita
 spezzettata ha meno gioco effettivo; con meno gioco si fanno meno gol. Le
@@ -550,9 +552,53 @@ l'effetto che si stava misurando non c'era.** La Roma a +0.5 in casa è vera sul
 passato e non si ripete: con venti squadre, il massimo di venti numeri casuali è
 sempre notevole.
 
-È lo stesso esito dei giorni di riposo, misurati e scartati per lo stesso
-motivo. Quattro idee sensate, quattro conti, quattro no. Il modello è quello che
-è rimasto in piedi.
+**Le neopromosse.** Ogni estate tre squadre salgono dalla Serie B senza storia
+in Serie A: 218 partite su 784, il 28% del calendario, in cui il modello parte
+quasi a mani vuote. Sembrava il buco più grosso che ci fosse, e riempirlo
+avrebbe voluto dire andare a prendere un secondo archivio. Prima però conviene
+sapere se il buco c'è, e la domanda giusta non è "sbaglio di più?" ma **"perdo
+di più dal mercato?"** — perché se sbagliano anche i bookmaker, che di dati ne
+hanno molti più di me, allora non è ignoranza mia: è che una squadra al primo
+anno è davvero meno prevedibile, e nessun archivio la renderebbe prevedibile.
+
+| | modello | mercato | quanto sto dietro |
+|---|---|---|---|
+| con una neopromossa | 0.19501 | 0.18860 | **+0.00641** |
+| fra due squadre note | 0.19557 | 0.18946 | **+0.00611** |
+
+Le due righe sono la stessa riga (z = 0.08). Il modello, sulle neopromosse, sta
+dietro al mercato esattamente quanto sta dietro dappertutto — e in valore
+assoluto sbaglia perfino un filo *meno*, perché una neopromossa è quasi sempre
+prevedibilmente debole. La Serie B non serve. `tools/misura_neopromosse.js`.
+
+**I tre numeri scelti a occhio dentro il motore.** Dopo il ricarico del banco
+era lecito il sospetto che ce ne fossero altri: `xi` (quanto svaniscono i
+risultati vecchi), `xiTiri` (lo stesso per i tiri) e `ridge` (quanto le forze
+vengono tirate verso la media) sono costanti che ho scritto io, e governano se
+il modello ricorda la stagione scorsa o solo l'ultimo mese.
+`tools/tara_memoria.js` le spazza in griglia, ma con una precauzione: **sceglie
+su una stagione e verifica su un'altra**, perché con venti combinazioni provate
+sullo stesso archivio la migliore vince anche quando sono tutte uguali.
+
+```
+sulla metà dove sceglie   il guadagno è  +0.35%
+sulla metà che non ha mai visto          −0.10%   z = −0.22
+```
+
+Cioè: zero. Due dei tre valori "migliori" erano caduti sul **bordo** della
+griglia, che è il segno che non si è trovato un massimo ma una direzione senza
+fondo. Il terzo, `xiTiri`, aveva un minimo vero in mezzo — e messo alla prova da
+solo sull'altra metà fa −0.16%, z = −0.38. Piatto anche lui.
+
+Il risultato utile non è il numero: è che quei tre parametri stanno in una zona
+piatta, e quindi *smanettarli non è il modo di migliorare il modello*. Una
+mattina risparmiata, e la certezza di non aver lasciato un guadagno sul tavolo.
+
+Con i giorni di riposo fanno sei idee sensate, sei conti, sei no. Il modello è
+quello che è rimasto in piedi — e il fatto che tante idee ragionevoli non
+attacchino è, di per sé, l'informazione più utile di tutta questa sezione: vuol
+dire che quello che resta da guadagnare non sta nel modello, sta nel **prezzo**
+(quali quote uso, quanto ricarico pago, come impacchetto la giocata).
 
 ## Struttura
 
@@ -563,7 +609,7 @@ motivo. Quattro idee sensate, quattro conti, quattro no. Il modello è quello ch
 | `worker.js` | fa girare il motore fuori dal thread dell'interfaccia, così lo schermo non si blocca |
 | `scripts/build_data.py` | scarica e normalizza i dati da sei fonti (solo libreria standard) |
 | `.github/workflows/aggiorna-dati.yml` | il robot: quattro giri al giorno |
-| `tools/` | generatore di dati sintetici, le tre prove (107 sulle fonti, 88 sul motore, 15 sul backtest), la verifica di una giornata a posteriori e le sei misure (arbitri, indipendenza, valore, regola di selezione, handicap, vantaggio del campo) |
+| `tools/` | generatore di dati sintetici, le tre prove (107 sulle fonti, 88 sul motore, 15 sul backtest), la verifica di una giornata a posteriori e le otto misure (arbitri, indipendenza, valore, regola di selezione, handicap, vantaggio del campo, neopromosse, taratura dei parametri) |
 | `data/` | riempita dalla Action: `serie-a.json` e `meta.json` |
 
 ## Una nota sul senso di tutto questo
