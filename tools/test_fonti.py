@@ -586,9 +586,44 @@ def test_notizie_a_ogni_giro():
           '[] if leggero else' in testo)
 
 
+def test_xg_e_quote_di_chiusura():
+    """Due cose che erano nel file da sempre e che non guardavo.
+
+    Gli xG veri stanno nelle colonne HxG e AxG, piene al cento per cento. Per
+    mesi il modello li ha dedotti dai tiri mentre provava a scaricarli da
+    Understat, che blocca l'indirizzo della Action: erano gia' arrivati, in un
+    file che scarico tutti i giorni.
+
+    E le quote: la C in mezzo al nome vuol dire CHIUSURA, cioe' il prezzo con
+    cui la partita e' andata in campo, dopo formazioni e infortuni. E' la stima
+    migliore che esista. Usavo quelle di apertura."""
+    riga = ('Div,Date,Time,HomeTeam,AwayTeam,FTHG,FTAG,HTHG,HTAG,Referee,'
+            'HS,AS,HST,AST,HF,AF,HC,AC,HY,AY,HR,AR,HxG,AxG,'
+            'AvgH,AvgD,AvgA,AvgCH,AvgCD,AvgCA,Avg>2.5,Avg<2.5,AvgC>2.5,AvgC<2.5\n'
+            'I1,31/08/2026,17:30,Lecce,Roma,0,4,0,3,X,7,15,3,8,9,8,2,1,1,1,0,0,0.85,2.31,'
+            '7.00,4.00,1.50,7.28,4.05,1.46,2.10,1.80,2.04,1.73\n')
+    p = B.leggi_csv(riga, '2026-27')[0]
+    prova('gli xG veri arrivano dal CSV, non dai tiri',
+          p.get('xgc') == 0.85 and p.get('xgv') == 2.31, (p.get('xgc'), p.get('xgv')))
+    prova('e le quote sono quelle di CHIUSURA, non di apertura',
+          p.get('q') == [7.28, 4.05, 1.46], p.get('q'))
+    prova('anche per over e under', p.get('qou') == [2.04, 1.73], p.get('qou'))
+
+    # Le partite in ARRIVO non hanno una chiusura: non e' ancora avvenuta.
+    # Li' si deve scendere fino all'apertura, se no restano senza quote.
+    solo_apertura = ('Div,Date,HomeTeam,AwayTeam,FTHG,FTAG,AvgH,AvgD,AvgA,Avg>2.5,Avg<2.5\n'
+                     'I1,12/09/2026,Lazio,Milan,1,1,2.50,3.40,2.80,1.90,1.95\n')
+    p2 = B.leggi_csv(solo_apertura, '2026-27')[0]
+    prova('senza chiusura si scende all\'apertura invece di restare senza',
+          p2.get('q') == [2.5, 3.4, 2.8], p2.get('q'))
+    prova('e la chiusura, quando c\'e, viene prima nell\'elenco',
+          B.COLONNE_1X2[0] == ('AvgCH', 'AvgCD', 'AvgCA'), B.COLONNE_1X2[0])
+
+
 def main():
     test_validatori()
     test_quote()
+    test_xg_e_quote_di_chiusura()
     test_understat()
     test_espn()
     test_innesto()

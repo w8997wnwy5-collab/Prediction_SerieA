@@ -243,12 +243,27 @@ def stagioni_da_prendere(oggi=None):
 
 # ────────────────────────────── football-data.co.uk ──────────────────────────────
 
-COLONNE_1X2 = (('AvgH', 'AvgD', 'AvgA'), ('BbAvH', 'BbAvD', 'BbAvA'),
-               ('PSCH', 'PSCD', 'PSCA'), ('PSH', 'PSD', 'PSA'),
-               ('B365H', 'B365D', 'B365A'), ('BWH', 'BWD', 'BWA'),
-               ('IWH', 'IWD', 'IWA'), ('WHH', 'WHD', 'WHA'))
-COLONNE_OU = (('Avg>2.5', 'Avg<2.5'), ('BbAv>2.5', 'BbAv<2.5'),
-              ('P>2.5', 'P<2.5'), ('B365>2.5', 'B365<2.5'))
+# Le quote, in ordine di preferenza. La "C" in mezzo al nome vuol dire
+# CHIUSURA: il prezzo con cui la partita e' andata in campo, dopo che il mercato
+# ha assorbito formazioni, infortuni e tutto quello che si e' saputo fino
+# all'ultimo. E' la stima migliore che esista, ed e' quella contro cui ha senso
+# misurarsi. Le colonne senza C sono di apertura, e per mesi ho usato quelle:
+# non per una scelta, ma perche' AvgH viene prima di AvgCH in ordine alfabetico
+# nella mia testa.
+#
+# Le partite in ARRIVO hanno solo l'apertura, per forza — la chiusura non e'
+# ancora avvenuta. Per quelle si scende nell'elenco fino a trovare qualcosa, ed
+# e' giusto cosi': quando si gioca si ha il prezzo di adesso, non quello finale.
+COLONNE_1X2 = (('AvgCH', 'AvgCD', 'AvgCA'), ('PSCH', 'PSCD', 'PSCA'),
+               ('B365CH', 'B365CD', 'B365CA'), ('MaxCH', 'MaxCD', 'MaxCA'),
+               ('AvgH', 'AvgD', 'AvgA'), ('BbAvH', 'BbAvD', 'BbAvA'),
+               ('PSH', 'PSD', 'PSA'), ('B365H', 'B365D', 'B365A'),
+               ('BWH', 'BWD', 'BWA'), ('IWH', 'IWD', 'IWA'),
+               ('WHH', 'WHD', 'WHA'))
+COLONNE_OU = (('AvgC>2.5', 'AvgC<2.5'), ('B365C>2.5', 'B365C<2.5'),
+              ('MaxC>2.5', 'MaxC<2.5'), ('Avg>2.5', 'Avg<2.5'),
+              ('BbAv>2.5', 'BbAv<2.5'), ('P>2.5', 'P<2.5'),
+              ('B365>2.5', 'B365<2.5'))
 
 
 def quote_da_riga(r):
@@ -296,7 +311,14 @@ def leggi_csv(testo, stagione):
              'fc': intero(r.get('HF')), 'fv': intero(r.get('AF')),
              'ac': intero(r.get('HC')), 'av': intero(r.get('AC')),
              'gic': intero(r.get('HY')), 'giv': intero(r.get('AY')),
-             'rc': intero(r.get('HR')), 'rv': intero(r.get('AR'))}
+             'rc': intero(r.get('HR')), 'rv': intero(r.get('AR')),
+             # Gli xG VERI. Erano in questo file da sempre, nelle colonne HxG e
+             # AxG, piene al cento per cento — e per mesi il modello li ha
+             # dedotti dai tiri mentre provava a scaricarli da Understat, che
+             # blocca l'indirizzo della Action. Non li cercavo qui perche' non
+             # avevo mai guardato l'elenco delle colonne di un file che
+             # scaricavo tutti i giorni.
+             'xgc': num(r.get('HxG')), 'xgv': num(r.get('AxG'))}
         m.update(quote_da_riga(r))
         fuori.append({k: v for k, v in m.items() if v is not None})
     return fuori
