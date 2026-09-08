@@ -1724,8 +1724,49 @@ function impostaRicarico(id){
   try{ localStorage.setItem(CHIAVE_RICARICO, id); }catch(e){}
   render(); window.scrollTo(0,0);
 }
+/* Il ricarico misurato sulle quote di QUESTA giornata, invece che il 4.9%
+   dell'archivio. Non e' la stessa cosa: una giornata con due partite in
+   equilibrio e otto scontate ha un ricarico diverso dalla media di cinque
+   stagioni, e vederlo muoversi ogni settimana e' il modo piu' rapido di
+   capire che quel numero e' misurabile e non un'opinione. */
+function ricaricoMisurato(){
+  var l = partiteGiornata(), somma = {media:0, migliore:0, borsa:0},
+      n = {media:0, migliore:0, borsa:0}, i;
+  function eccedenza(q){
+    if(!q || q.length !== 3) return null;
+    if(!(q[0] > 1 && q[1] > 1 && q[2] > 1)) return null;
+    return (1/q[0] + 1/q[1] + 1/q[2]) - 1;
+  }
+  for(i=0;i<l.length;i++){
+    var e = eccedenza(l[i].q);      if(e != null){ somma.media    += e; n.media++; }
+    e = eccedenza(l[i].qmax);       if(e != null){ somma.migliore += e; n.migliore++; }
+    e = eccedenza(l[i].qex);        if(e != null){ somma.borsa    += e; n.borsa++; }
+  }
+  if(!n.media) return null;
+  return {
+    media:    somma.media / n.media,
+    migliore: n.migliore ? somma.migliore / n.migliore : null,
+    borsa:    n.borsa ? somma.borsa / n.borsa : null,
+    partite:  n.media
+  };
+}
+
 function sceltaRicarico(){
-  var a = ricarico();
+  var a = ricarico(), mis = ricaricoMisurato();
+  var righe = '';
+  if(mis){
+    function riga(nome, v, spiega){
+      if(v == null) return '';
+      return '<div class="row"><div class="n">'+esc(nome)+'<em>'+esc(spiega)+'</em></div>'+
+             '<div class="q">'+(100*v).toFixed(1)+'%</div></div>';
+    }
+    righe = '<div class="note" style="margin-top:10px">Sulle <b>'+mis.partite+'</b> partite di questa '+
+      'giornata, il ricarico che i bookmaker stanno chiedendo davvero è questo — misurato adesso, '+
+      'sulle quote che hai sotto gli occhi:</div>'+
+      riga('La media di tutti', mis.media, 'è la stessa che finisce nei conti dell\'archivio') +
+      riga('La migliore del mercato', mis.migliore, 'se per ogni esito prendessi il banco più generoso') +
+      riga('Betfair Exchange', mis.borsa, 'dove si scommette contro altra gente, non contro un banco');
+  }
   return '<div class="h2">Quanto ti ricarica il tuo operatore</div><div class="card">'+
     '<div class="prud">'+RICARICHI.map(function(x){
       return '<button class="prudb'+(x.id===a.id?' on':'')+'" onclick="impostaRicarico(\''+x.id+'\')">'+
@@ -1737,7 +1778,8 @@ function sceltaRicarico(){
     Math.round(100*(1-1/Math.pow(1+a.v,10)))+'%</b>, perché si moltiplica a ogni selezione.<br><br>'+
     'Come scoprire il tuo: prendi una partita, guarda la quota equa che scrivo io e quella che ti '+
     'offre il tuo operatore. Il rapporto fra le due <b>è</b> il ricarico. Con due o tre partite hai '+
-    'il numero, e da lì in poi i conti di quest\'app sono i tuoi invece che una media.</div></div>';
+    'il numero, e da lì in poi i conti di quest\'app sono i tuoi invece che una media.</div>'+
+    righe + '</div>';
 }
 
 function quotaBanco(quotaEqua, nSelezioni){

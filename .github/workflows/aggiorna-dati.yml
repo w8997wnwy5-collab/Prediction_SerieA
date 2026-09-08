@@ -45,30 +45,53 @@ jobs:
         run: python scripts/build_data.py
 
       - name: Committa se qualcosa è cambiato
+        env:
+          FOOTBALL_DATA_TOKEN: ${{ secrets.FOOTBALL_DATA_TOKEN }}
+          APIFOOTBALL_KEY: ${{ secrets.APIFOOTBALL_KEY }}
+          MODO: ${{ (github.event.schedule == '17 11,17,23 * * *') && 'leggero' || 'completo' }}
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/
-          if git diff --staged --quiet; then
-            echo "Niente di nuovo: nessun commit."
-            exit 0
-          fi
-          git commit -m "dati: aggiornamento automatico $(date -u '+%Y-%m-%d %H:%M UTC')"
+
           # Quattro giri al giorno più chi lavora sul repository: prima o poi due
           # push si incrociano e quello che arriva secondo viene rifiutato. Senza
           # questo, un giro che ha scaricato tutto correttamente finisce in rosso
-          # e i dati di quel ciclo si buttano. Si riprova rimettendo i propri
-          # commit sopra a quelli arrivati nel frattempo.
-          for tentativo in 1 2 3 4 5; do
+          # e i dati di quel ciclo si buttano.
+          #
+          # Prima qui c'era un `git pull --rebase`, e non poteva funzionare:
+          # data/serie-a.json viene RISCRITTO INTERO a ogni giro, quindi due
+          # versioni diverse sono un conflitto su tutto il file, e il rebase si
+          # ferma. È così che il giro 86 è finito in rosso in cinque secondi,
+          # senza nemmeno arrivare al secondo tentativo.
+          #
+          # E nemmeno si può imporre la propria versione: un giro leggero parte
+          # dal file su disco e ci aggiunge calendario e quote, quindi se il file
+          # da cui è partito era vecchio di un ciclo, imporlo cancellerebbe i
+          # risultati arrivati nel frattempo.
+          #
+          # Quello che si fa invece è l'unica cosa corretta: si butta la propria
+          # versione, si riparte dal file appena pubblicato dall'altro e si
+          # RIFÀ il conto. Costa un minuto e non può perdere niente.
+          for tentativo in 1 2 3; do
+            git add data/
+            if git diff --staged --quiet; then
+              echo "Niente di nuovo: nessun commit."
+              exit 0
+            fi
+            git commit -m "dati: aggiornamento automatico $(date -u '+%Y-%m-%d %H:%M UTC')"
             if git push; then
               echo "Dati aggiornati e pubblicati."
               exit 0
             fi
-            echo "Push rifiutato (tentativo $tentativo): qualcuno ha pubblicato prima. Riprovo."
-            sleep $((tentativo * 4))
-            git pull --rebase --autostash origin "${GITHUB_REF_NAME}" || exit 1
+            echo "Push rifiutato (tentativo $tentativo): qualcuno ha pubblicato prima."
+            if [ "$tentativo" = "3" ]; then break; fi
+            sleep $((tentativo * 5))
+            git fetch origin "${GITHUB_REF_NAME}" || exit 1
+            git reset --hard "origin/${GITHUB_REF_NAME}" || exit 1
+            echo "Riparto dal file appena pubblicato e rifaccio il conto."
+            python scripts/build_data.py || exit 1
           done
-          echo "Cinque tentativi di push falliti: mi fermo."
+          echo "Tre tentativi di push falliti: mi fermo."
           exit 1
 
       - name: Fallisci se i dati sono stati rifiutati
