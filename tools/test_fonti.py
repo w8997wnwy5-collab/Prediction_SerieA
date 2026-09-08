@@ -10,6 +10,8 @@ la rifiuti invece di trasformarla in dati.
     python3 tools/test_fonti.py
 """
 
+import csv
+import io
 import json
 import os
 import sys
@@ -636,9 +638,49 @@ def test_xg_e_quote_di_chiusura():
           B.COLONNE_1X2[0] == ('AvgCH', 'AvgCD', 'AvgCA'), B.COLONNE_1X2[0])
 
 
+def test_calendario_ha_le_stesse_quote():
+    """Il buco piu' costoso che ci sia stato in questo script.
+
+    Ancorarsi a Betfair invece che alla quota media e' stato MISURATO come il
+    miglior guadagno della stagione. Ma il calendario — cioe' le partite in
+    arrivo, le uniche su cui si scommette — leggeva soltanto quote_da_riga, e
+    quindi di Betfair non aveva niente: il guadagno arrivava solo alle partite
+    gia' giocate. Un miglioramento che non arriva dove serve non e' un
+    miglioramento, e nessuna prova se ne accorgeva.
+
+    Questa prova guarda il SORGENTE: dove si legge una riga di quote, si devono
+    leggere entrambe le famiglie."""
+    sorgente = io.open(os.path.join(QUI, 'scripts', 'build_data.py'),
+                       encoding='utf-8').read()
+    normali = sorgente.count('m.update(quote_da_riga(r))')
+    extra = sorgente.count('m.update(quote_extra_da_riga(r))')
+    prova('ovunque si leggano le quote si leggono anche quelle extra',
+          normali > 0 and normali == extra,
+          'quote_da_riga: %d, quote_extra_da_riga: %d' % (normali, extra))
+
+    riga = ('Div,Date,Time,HomeTeam,AwayTeam,AvgH,AvgD,AvgA,Avg>2.5,Avg<2.5,'
+            'BFEH,BFED,BFEA,MaxH,MaxD,MaxA,Max>2.5,Max<2.5\n'
+            'I1,12/09/2026,20:45,Lazio,Milan,2.50,3.40,2.80,1.90,1.95,'
+            '2.62,3.55,2.90,2.60,3.52,2.88,1.95,2.00\n')
+    fut = []
+    for r in csv.DictReader(io.StringIO(riga)):
+        m = {'d': '2026-09-12'}
+        m.update(B.quote_da_riga(r))
+        m.update(B.quote_extra_da_riga(r))
+        fut.append(m)
+    p = fut[0]
+    prova('una partita in arrivo porta Betfair', p.get('qex') == [2.62, 3.55, 2.9], p.get('qex'))
+    prova('e la migliore del mercato', p.get('qmax') == [2.6, 3.52, 2.88], p.get('qmax'))
+    prova('Betfair ha meno ricarico della media, anche in arrivo',
+          (1 / 2.62 + 1 / 3.55 + 1 / 2.9) < (1 / 2.5 + 1 / 3.4 + 1 / 2.8))
+    prova('e le quote in arrivo sopravvivono a una fonte irraggiungibile',
+          B.da_tenere([p], '2026-09-01')[0].get('qex') == [2.62, 3.55, 2.9])
+
+
 def main():
     test_validatori()
     test_quote()
+    test_calendario_ha_le_stesse_quote()
     test_xg_e_quote_di_chiusura()
     test_understat()
     test_espn()

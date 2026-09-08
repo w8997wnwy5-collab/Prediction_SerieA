@@ -802,6 +802,17 @@ def prendi_calendario(stagioni, esiti):
             m = {'d': d, 'o': ora_da_londra(r.get('Time')),
                  'c': nome(r.get('HomeTeam')), 'v': nome(r.get('AwayTeam'))}
             m.update(quote_da_riga(r))
+            # E anche Betfair, la migliore del mercato e l'handicap. Per mesi
+            # questa riga non c'era, ed era il buco piu' costoso di tutto lo
+            # script: ancorarsi a Betfair invece che alla quota media era stato
+            # MISURATO come il miglior guadagno della stagione (+0.28%, e il
+            # backtest da 0.18993 a 0.18945) — ma quel guadagno arrivava solo
+            # alle partite GIA' GIOCATE, cioe' a quelle su cui non si scommette.
+            # Le partite in arrivo, le uniche che contano quando si gioca,
+            # avevano soltanto la quota media dei bookmaker, perche' qui si
+            # chiamava quote_da_riga e non quote_extra_da_riga. Un miglioramento
+            # misurato che non arriva dove serve non e' un miglioramento.
+            m.update(quote_extra_da_riga(r))
             fut.append({k: v for k, v in m.items() if v is not None})
         esiti['calendario ravvicinato'] = 'ok: %d partite' % len(fut)
     except Exception as e:            # noqa: BLE001
