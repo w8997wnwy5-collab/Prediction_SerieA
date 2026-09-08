@@ -121,7 +121,10 @@ function prepara(partite, opzioni) {
       i: idx(p.c), j: idx(p.v), x: p.gc, y: p.gv, d: p.d,
       xgc: xg ? xg[0] : null, xgv: xg ? xg[1] : null, xgVeri: veri,
       ptc: p.ptc == null ? null : p.ptc, ptv: p.ptv == null ? null : p.ptv,
-      arb: p.arb || null, s: p.s || null, q: p.q || null, qou: p.qou || null, rif: p
+      arb: p.arb || null, s: p.s || null,
+      /* qex sono le quote di Betfair Exchange: margine 0.5% invece di 5.5%,
+         quindi togliendolo si sbaglia molto meno. Vedi quoteDi() nell'app. */
+      q: p.qex || p.q || null, qex: p.qex || null, qou: p.qou || null, rif: p
     });
   }
   return { squadre: squadre, indice: indice, righe: righe, calibrazioneTiri: cal,
@@ -1706,7 +1709,7 @@ function campionaBacktest(dati, opzioni, avanzamento) {
       d: r.d, s: r.s, casa: dati.squadre[r.i], via: dati.squadre[r.j],
       x: r.x, y: r.y, esito: esitoReale(r.x, r.y),
       lamG: g[0], muG: g[1], lamT: t ? t[0] : null, muT: t ? t[1] : null,
-      rho: parG.rho, q: r.q || null, qou: r.qou || null
+      rho: parG.rho, q: r.qex || r.q || null, qou: r.qou || null
     });
   }
   /* baseline: le frequenze storiche prima del periodo di prova */

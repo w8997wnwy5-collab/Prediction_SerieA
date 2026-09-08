@@ -842,8 +842,21 @@ function chiavePartita(p){ return p.d+'|'+p.c+'|'+p.v; }
    ══════════════════════════════════════════════════════════════ */
 /* Le quote della partita, quando la fonte le ha portate: sono l'ingrediente che
    fa scattare l'ancoraggio al mercato. Senza, il modello resta da solo. */
+/* Le quote a cui il modello si ancora, in ordine di pulizia.
+
+   Betfair Exchange non e' un bookmaker: la gente scommette contro altra gente e
+   la casa prende una commissione invece di caricare il margine sul prezzo. La
+   somma delle sue probabilita sta a 1.005 contro 1.055 dei bookmaker, misurato
+   su 770 partite. Conta perche' per usare una quota come probabilita bisogna
+   prima togliere il margine, e il modo con cui lo tolgo — dividere per la
+   somma — e' un'approssimazione tanto piu' storta quanto piu' il margine e'
+   grosso. Con lo 0.5% la storta quasi non c'e'.
+
+   Vale +0.28% di precisione (z=2.01): poco, ma gratis e nella direzione
+   giusta. E Betfair da solo batte i bookmaker da soli, 0.18938 contro
+   0.18992. */
 function quoteDi(p){
-  return {q: p.q || null, qou: p.qou || null};
+  return {q: p.qex || p.q || null, qou: p.qou || null};
 }
 function previsione(p){
   var qq = quoteDi(p);
@@ -1392,12 +1405,12 @@ function schedaPartita(p, indice){
   var pr = previsione(p);
   if(!pr) return '';
   var k = chiavePartita(p);
-  var mercato = p.q ? M.daQuote(p.q) : null;
+  var mercato = (p.qex || p.q) ? M.daQuote(p.qex || p.q) : null;
   var sc = sceltePartita(p, 3);
   var sol = sc ? sc.piuSolida : null;
   return '<div class="match" onclick="apriPartita('+indice+')">'+
     '<div class="quando"><span>'+esc(dataBreve(p.d))+(p.o?' · '+esc(p.o):'')+'</span>'+
-      (p.q?'<span class="gg">quote incluse</span>':'')+'</div>'+
+      ((p.qex||p.q)?'<span class="gg">quote incluse</span>':'')+'</div>'+
     '<div class="sfida"><div class="sq">'+esc(p.c)+'</div><div class="vs">—</div>'+
       '<div class="sq v">'+esc(p.v)+'</div></div>'+
     barraProb(pr)+
@@ -2033,6 +2046,12 @@ function tabPrecisione(){
       '<div class="note"><p>Contro chi indovina con le frequenze storiche sono <b>'+nu(vsCaso,0)+
       '% più preciso</b>. Contro le quote di chiusura sono <b>'+
       (Math.abs(vsMerc)<1?'alla pari':nu(Math.abs(vsMerc),1)+'% '+(vsMerc>0?'avanti':'dietro'))+'</b>.</p>'+
+      '<p><b>Una cautela su questo numero.</b> Nello storico mi ancoro a Betfair Exchange, che ha '+
+      'un margine dello 0.5% invece del 5.5% dei bookmaker ed è quindi una probabilità molto più '+
+      'pulita. Ma il file delle partite in arrivo non porta le quote dell\'exchange: quando gioco '+
+      'davvero mi ancoro ai bookmaker, che sono un filo peggiori. La differenza misurata è dello '+
+      '0.28%, quindi <b>questo numero è ottimista di circa quel tanto</b> rispetto a come mi '+
+      'comporto sulla giornata che devi giocare.</p>'+
       '<p>Il secondo numero è quello che conta, ed è alla pari per un motivo preciso: quando le quote '+
       'ci sono, <b>le uso</b>. Da solo starei '+nu(Math.abs(soloModello),1)+'% dietro — le quote di '+
       'chiusura contengono formazioni e infortuni dell\'ultimo minuto, che a un modello statistico '+

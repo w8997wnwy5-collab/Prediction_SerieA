@@ -291,6 +291,46 @@ fatti e subiti nelle ultime 3, 5 e 8 partite — è stata confrontata con quello
 che il modello sbaglia: tutte le correlazioni comprendono lo zero (la più
 grande è r = −0.067). Il decadimento temporale del modello la cattura già.
 
+### Due cose che erano nel file e non guardavo
+
+Ho sondato le colonne del CSV di football-data cercando informazione gratis.
+Ne sono uscite **77 che non usavo**, e due contavano.
+
+**Gli xG veri**, nelle colonne `HxG` e `AxG`, piene al 100%. Per mesi il modello
+li ha dedotti dai tiri mentre provavo a scaricarli da Understat — che blocca
+l'indirizzo della Action — e intanto arrivavano ogni giorno dentro un file che
+apro da sempre. Football-data li pubblica dalla stagione 2026-27: oggi sono 30
+partite, a fine stagione 380, e sono le più pesate dal modello.
+
+**Le quote di chiusura.** La `C` in mezzo al nome (`AvgCH` invece di `AvgH`)
+vuol dire chiusura: il prezzo con cui la partita è andata in campo, dopo che il
+mercato ha assorbito formazioni e infortuni. Usavo l'apertura, e non per una
+scelta — perché `AvgH` veniva prima nell'elenco che avevo scritto io.
+
+E una terza, cercata dopo aver visto le altre due: **Betfair Exchange**. Non è
+un bookmaker, è un mercato dove la gente scommette contro altra gente e la casa
+prende una commissione invece di caricare il margine sul prezzo. Misurato su
+770 partite: la somma delle sue probabilità sta a **1.005** contro **1.055** dei
+bookmaker. Conta perché per usare una quota come probabilità bisogna togliere il
+margine, e il modo con cui lo tolgo è tanto più storto quanto più il margine è
+grosso.
+
+| | RPS |
+|---|---|
+| modello senza ancoraggio | 0.19531 |
+| ancorato ai bookmaker | 0.19003 |
+| **ancorato a Betfair Exchange** | **0.18950** |
+| Betfair Exchange da solo | 0.18938 |
+| i bookmaker da soli | 0.18992 |
+
+L'exchange vale +0.28% (z = 2.01) e batte i bookmaker anche da solo. Poco, ma
+gratis e nella direzione giusta.
+
+**Il limite, dichiarato:** il file delle partite in arrivo non porta le quote
+dell'exchange. Nello storico mi ancoro a Betfair, quando gioco ai bookmaker —
+quindi il backtest è ottimista di circa quello 0.28%. È scritto anche in
+Precisione, dentro l'app.
+
 ### La maledizione del vincitore
 
 La domanda giusta da fare a un modello di scommesse: **se sono alla pari col
@@ -429,7 +469,7 @@ una accettata: senza il conto scritto, fra sei mesi qualcuno la riprova.
 | `worker.js` | fa girare il motore fuori dal thread dell'interfaccia, così lo schermo non si blocca |
 | `scripts/build_data.py` | scarica e normalizza i dati da sei fonti (solo libreria standard) |
 | `.github/workflows/aggiorna-dati.yml` | il robot: quattro giri al giorno |
-| `tools/` | generatore di dati sintetici, le tre prove (102 sulle fonti, 78 sul motore, 15 sul backtest), la verifica di una giornata a posteriori e le quattro misure (arbitri, indipendenza, valore, regola di selezione) |
+| `tools/` | generatore di dati sintetici, le tre prove (107 sulle fonti, 78 sul motore, 15 sul backtest), la verifica di una giornata a posteriori e le quattro misure (arbitri, indipendenza, valore, regola di selezione) |
 | `data/` | riempita dalla Action: `serie-a.json` e `meta.json` |
 
 ## Una nota sul senso di tutto questo
