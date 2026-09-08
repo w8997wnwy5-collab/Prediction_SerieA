@@ -266,6 +266,38 @@ COLONNE_OU = (('AvgC>2.5', 'AvgC<2.5'), ('B365C>2.5', 'B365C<2.5'),
               ('B365>2.5', 'B365<2.5'))
 
 
+# Betfair Exchange non e' un bookmaker: e' un mercato dove la gente scommette
+# contro altra gente, e la casa prende una commissione invece di caricare un
+# margine sul prezzo. Le sue quote sono la stima piu' pulita che esista — la
+# somma delle probabilita' sta intorno a 1.02 invece di 1.05 — e sono nel file
+# da sempre, nelle colonne BFEC*.
+COLONNE_EXCHANGE = (('BFECH', 'BFECD', 'BFECA'), ('BFEH', 'BFED', 'BFEA'))
+
+# L'handicap asiatico dice di quanti gol una squadra e' data favorita, ed e' il
+# mercato piu' liquido del mondo: la sua linea e' la misura piu' precisa della
+# supremazia attesa che si possa avere gratis. Oggi l'ancoraggio usa due assi
+# (chi vince, quanti gol); questo sarebbe un terzo modo di guardare il primo.
+COLONNE_HANDICAP = (('AHCh', 'AvgCAHH', 'AvgCAHA'), ('AHh', 'AvgAHH', 'AvgAHA'),
+                    ('AHCh', 'B365CAHH', 'B365CAHA'), ('AHh', 'B365AHH', 'B365AHA'))
+
+
+def quote_extra_da_riga(r):
+    """Exchange e handicap asiatico: due modi in piu' di leggere lo stesso
+    mercato, tenuti a parte finche' non si e' misurato se servono."""
+    fuori = {}
+    for a, b, c in COLONNE_EXCHANGE:
+        q = [num(r.get(a)), num(r.get(b)), num(r.get(c))]
+        if all(q) and min(q) > 1:
+            fuori['qex'] = [round(x, 3) for x in q]
+            break
+    for linea, ca, cv in COLONNE_HANDICAP:
+        h, qa, qv = num(r.get(linea)), num(r.get(ca)), num(r.get(cv))
+        if h is not None and qa and qv and min(qa, qv) > 1:
+            fuori['qah'] = [round(h, 2), round(qa, 3), round(qv, 3)]
+            break
+    return fuori
+
+
 def quote_da_riga(r):
     """Le stesse quote hanno nomi diversi a seconda della stagione e del file:
     la media di tutti i bookmaker quando c'è, il singolo bookmaker quando non
@@ -320,6 +352,7 @@ def leggi_csv(testo, stagione):
              # scaricavo tutti i giorni.
              'xgc': num(r.get('HxG')), 'xgv': num(r.get('AxG'))}
         m.update(quote_da_riga(r))
+        m.update(quote_extra_da_riga(r))
         fuori.append({k: v for k, v in m.items() if v is not None})
     return fuori
 
