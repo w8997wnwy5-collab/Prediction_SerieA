@@ -215,7 +215,6 @@ node tools/misura_arbitri.js                        # l'arbitro sposta i gol? (n
 node tools/misura_indipendenza.js                   # le giocate cadono insieme? (no)
 node tools/misura_valore.js                         # si batte il mercato? (no, e c'è di peggio)
 node tools/ottimizza_regola.js                      # quale soglia conviene? (nessuna, e va bene così)
-node tools/misura_champions.js                      # i ponti fra campionati servono? (sì, 11.5%)
 ```
 
 ### Le notizie, e cosa possono fare
@@ -291,62 +290,6 @@ memoria.
 fatti e subiti nelle ultime 3, 5 e 8 partite — è stata confrontata con quello
 che il modello sbaglia: tutte le correlazioni comprendono lo zero (la più
 grande è r = −0.067). Il decadimento temporale del modello la cattura già.
-
-### La Champions: dieci campionati sulla stessa scala
-
-Il modello stima attacco e difesa dal campionato di ogni squadra, dove tutte
-incontrano tutte. In Champions non si può: trentasei squadre di sedici paesi
-che si incontrano otto volte in tutto. E c'è un guaio più grosso, che si vede
-solo se lo si cerca: **un attacco di 0.5 in Eredivisie non vale un attacco di
-0.5 in Premier**, perché sono misurati contro difese diverse. Confrontarli è
-come sommare Celsius e Fahrenheit — e il bello è che il conto viene lo stesso,
-dà numeri plausibili, e sono sbagliati.
-
-La soluzione non è un fattore di conversione scritto a mano: è mettere
-campionati e coppe nella **stessa stima**. Le partite europee sono le uniche in
-cui leghe diverse si incontrano, e fanno da ponte. Su 140 partite di Champions
-previste senza sapere come erano finite:
-
-| | errore |
-|---|---|
-| con i ponti (coppe dentro la stima) | **0.20771** |
-| senza i ponti (solo campionati) | 0.23476 |
-| chi tira a indovinare | 0.23592 |
-
-I ponti valgono l'11.5% (z = 2.02). Il confronto che conta è fra le ultime due
-righe: **senza**, tutto il lavoro sui dieci campionati non serve a niente.
-
-Materia prima: dieci campionati da football-data.co.uk (6709 partite) più le
-coppe da openfootball, che accanto a ogni squadra scrive il paese fra parentesi
-— ed è proprio quel paese a rendere possibile il resto. Copertura: 30 squadre
-di Champions su 36 giocano in un campionato che football-data pubblica; delle
-altre sei l'app dice che non sa, invece di inventare.
-
-**Il pezzo che si rompe per primo sono i nomi.** football-data scrive "Man
-City", "Ath Madrid", "Inter"; openfootball "Manchester City FC", "Club
-Atlético de Madrid", "FC Internazionale Milano". Su 54 squadre di coppa, i nomi
-che coincidono alla lettera sono **uno**. L'accoppiamento va in tre passaggi —
-tabella a mano, uguaglianza senza fronzoli societari, contenimento — e ne
-prende 39.
-
-Due casi che nessuna regola poteva indovinare, e che sono in tabella con il
-motivo accanto:
-
-- **München / Munich** è una traduzione, non una regola: senza la riga scritta
-  a mano il Bayern sarebbe rimasto una squadra di cui non si sa niente.
-- **Paris Saint-Germain** contro **Paris FC**: a Parigi ci sono due squadre in
-  Ligue 1, "paris" sta dentro "paris saint germain", era l'unico candidato e
-  passava senza che niente protestasse. Il PSG ha girato con la forza del Paris
-  FC finché non l'ho visto quinto in classifica europea invece che secondo.
-
-Il secondo caso ha cambiato anche la regola, non solo la tabella: un candidato
-unico non basta più. Se nello stesso campionato c'è un'altra squadra che
-comincia con la stessa parola, l'accoppiamento **si rifiuta** e scrive perché,
-invece di risolvere l'ambiguità a caso.
-
-Due cautele che restano: le partite sono 140 contro le 800 di un backtest di
-Serie A, e soprattutto **non ci sono le quote** — quindi manca l'ancoraggio al
-mercato, che in Serie A vale metà del lavoro.
 
 ### La maledizione del vincitore
 
@@ -486,7 +429,7 @@ una accettata: senza il conto scritto, fra sei mesi qualcuno la riprova.
 | `worker.js` | fa girare il motore fuori dal thread dell'interfaccia, così lo schermo non si blocca |
 | `scripts/build_data.py` | scarica e normalizza i dati da sei fonti (solo libreria standard) |
 | `.github/workflows/aggiorna-dati.yml` | il robot: quattro giri al giorno |
-| `tools/` | generatore di dati sintetici, le tre prove (122 sulle fonti, 78 sul motore, 15 sul backtest), la verifica di una giornata a posteriori e le quattro misure (arbitri, indipendenza, valore, regola di selezione) |
+| `tools/` | generatore di dati sintetici, le tre prove (102 sulle fonti, 78 sul motore, 15 sul backtest), la verifica di una giornata a posteriori e le quattro misure (arbitri, indipendenza, valore, regola di selezione) |
 | `data/` | riempita dalla Action: `serie-a.json` e `meta.json` |
 
 ## Una nota sul senso di tutto questo

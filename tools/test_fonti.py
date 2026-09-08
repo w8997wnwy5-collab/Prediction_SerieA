@@ -586,119 +586,6 @@ def test_notizie_a_ogni_giro():
           '[] if leggero else' in testo)
 
 
-def test_europa():
-    """Le coppe: l'unico posto dove squadre di campionati diversi si
-    incontrano, e quindi l'unico da cui si puo capire quanto vale una lega
-    rispetto a un'altra. Il formato ha tre trappole, e sono tutte qui."""
-    sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(
-        os.path.abspath(__file__))), 'scripts'))
-    import build_europa as E
-
-    finto = (
-        b'= UEFA Champions League 2025/26\n\n'
-        b'  Tue Sep 16 2025\n'
-        b'    21:00  Juventus FC (ITA)       v Borussia Dortmund (GER)  4-4 (0-0)\n'
-        b'    18:45  PAE Olympiakos SFP (GRE) v Paphos FC (CYP)          0-0\n'
-        b'  Wed Feb 25\n'
-        b'    21:00  Juventus FC (ITA)       v Galatasaray SK (TUR)     3-2 a.e.t. (3-0, 1-0)\n'
-        b'  Sat May 30\n'
-        b'    18:00  Paris Saint-Germain FC (FRA) v Arsenal FC (ENG)   4-3 pen. 1-1 a.e.t. (1-1, 0-1)\n'
-        b'  Wed Jun 03\n'
-        b'    21:00  Real Madrid CF (ESP)    v FC Barcelona (ESP)\n'
-    )
-    vero = E.B.scarica
-    E.B.scarica = lambda *a, **k: finto
-    try:
-        giocate, future = E.prendi_coppa('x', 'Champions League', '2025-26', {})
-    finally:
-        E.B.scarica = vero
-
-    prova('legge tutte le partite giocate', len(giocate) == 4, len(giocate))
-    prova('e tiene da parte quelle ancora da giocare', len(future) == 1, len(future))
-
-    per = {g['c'][:8] + g['v'][:8]: g for g in giocate}
-    jd = [g for g in giocate if g['v'].startswith('Borussia')][0]
-    prova('il caso normale: risultato e primo tempo',
-          (jd['gc'], jd['gv'], jd['ptc'], jd['ptv']) == (4, 4, 0, 0))
-    prova('il paese di ogni squadra arriva con lei — e la chiave di tutto',
-          jd['pc'] == 'ITA' and jd['pv'] == 'GER')
-    op = [g for g in giocate if g['c'].startswith('PAE')][0]
-    prova('una partita senza primo tempo non si inventa il primo tempo',
-          'ptc' not in op and (op['gc'], op['gv']) == (0, 0))
-
-    # LA trappola: per una scommessa conta il 90', non i supplementari.
-    jg = [g for g in giocate if g['v'].startswith('Galatasaray')][0]
-    prova('coi supplementari si tiene il risultato dei 90 minuti, non quello finale',
-          (jg['gc'], jg['gv']) == (3, 0), '%d-%d invece di 3-0' % (jg['gc'], jg['gv']))
-    prova('e si segna che e andata oltre il 90esimo', jg.get('oltre90') is True)
-    fin = [g for g in giocate if g['c'].startswith('Paris')][0]
-    prova('una finale decisa ai rigori resta un PAREGGIO',
-          (fin['gc'], fin['gv']) == (1, 1), '%d-%d invece di 1-1' % (fin['gc'], fin['gv']))
-    prova('e il suo primo tempo e quello vero', (fin['ptc'], fin['ptv']) == (0, 1))
-
-    # le date, che scavalcano il capodanno
-    prova('la data arriva su ogni partita', all(g.get('d') for g in giocate))
-    prova("l'anno si eredita dalla riga sopra",
-          jd['d'] == '2025-09-16', jd['d'])
-    prova('e passa al nuovo anno a gennaio senza che nessuno glielo dica',
-          jg['d'] == '2026-02-25' and fin['d'] == '2026-05-30',
-          '%s / %s' % (jg['d'], fin['d']))
-
-
-def test_accoppiamento_nomi():
-    """football-data scrive "Man City", openfootball "Manchester City FC". Su
-    cinquantaquattro squadre di coppa i nomi che coincidono alla lettera sono
-    UNO: senza accoppiarli, ogni squadra esiste due volte e le partite di coppa
-    smettono di fare da ponte fra i campionati — cioe' l'unica ragione per cui
-    sono li'."""
-    sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(
-        os.path.abspath(__file__))), 'scripts'))
-    import build_europa as E
-
-    campionati = [
-        {'p': 'FRA', 'c': 'Paris SG', 'v': 'Paris FC', 'd': '2026-01-01', 'gc': 1, 'gv': 0},
-        {'p': 'FRA', 'c': 'Marseille', 'v': 'Lille', 'd': '2026-01-01', 'gc': 1, 'gv': 0},
-        {'p': 'GER', 'c': 'Bayern Munich', 'v': 'Dortmund', 'd': '2026-01-01', 'gc': 1, 'gv': 0},
-        {'p': 'ITA', 'c': 'Inter', 'v': 'Juventus', 'd': '2026-01-01', 'gc': 1, 'gv': 0},
-    ]
-    coppe = [
-        {'c': 'Olympique de Marseille', 'v': 'FC Bayern München', 'pc': 'FRA', 'pv': 'GER'},
-        {'c': 'FC Internazionale Milano', 'v': 'Lille OSC', 'pc': 'ITA', 'pv': 'FRA'},
-        {'c': 'Paris Saint-Germain FC', 'v': 'Juventus FC', 'pc': 'FRA', 'pv': 'ITA'},
-    ]
-    mappa, orfane = E.accoppia_nomi(campionati, coppe, {})
-    prova('i fronzoli societari non contano: Lille OSC e Lille',
-          mappa.get('Lille OSC') == 'Lille', mappa.get('Lille OSC'))
-    prova('ne i nomi lunghi: Olympique de Marseille e Marseille',
-          mappa.get('Olympique de Marseille') == 'Marseille')
-    prova('ne le sigle: FC Internazionale Milano e Inter',
-          mappa.get('FC Internazionale Milano') == 'Inter')
-    prova('Munchen e Munich e una traduzione, e sta nella tabella a mano',
-          mappa.get('FC Bayern München') == 'Bayern Munich')
-    prova('e il PSG e il PSG, non il Paris FC',
-          mappa.get('Paris Saint-Germain FC') == 'Paris SG',
-          mappa.get('Paris Saint-Germain FC'))
-
-    # LA prova che conta: senza la riga scritta a mano, l'ambiguita' deve
-    # bloccare l'accoppiamento invece di risolverlo a caso. A Parigi ci sono due
-    # squadre in Ligue 1 e per un giro intero il PSG ha avuto la forza del
-    # Paris FC — un candidato unico non basta a stare tranquilli.
-    salva = E.NOMI_A_MANO.pop('Paris Saint-Germain FC')
-    try:
-        m2, o2 = E.accoppia_nomi(campionati, coppe, {})
-    finally:
-        E.NOMI_A_MANO['Paris Saint-Germain FC'] = salva
-    prova('senza la riga a mano, due squadre della stessa citta non si accoppiano a caso',
-          'Paris Saint-Germain FC' not in m2, m2.get('Paris Saint-Germain FC'))
-    prova('e il motivo viene scritto, non ingoiato',
-          any('ambiguo' in perche for _, _, perche in o2),
-          [p for _, _, p in o2])
-
-    # due squadre di coppa non devono mai finire sulla stessa squadra di campionato
-    doppie = [v for v in mappa.values() if list(mappa.values()).count(v) > 1]
-    prova('nessuna squadra di campionato riceve due squadre di coppa', not doppie, doppie)
-
-
 def main():
     test_validatori()
     test_quote()
@@ -715,8 +602,6 @@ def main():
     test_thesportsdb()
     test_notizie()
     test_notizie_a_ogni_giro()
-    test_europa()
-    test_accoppiamento_nomi()
 
     larghezza = max(len(n) for n, _, _ in ESITI)
     falliti = 0
