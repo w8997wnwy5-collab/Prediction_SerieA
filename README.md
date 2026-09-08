@@ -215,6 +215,8 @@ node tools/misura_arbitri.js                        # l'arbitro sposta i gol? (n
 node tools/misura_indipendenza.js                   # le giocate cadono insieme? (no)
 node tools/misura_valore.js                         # si batte il mercato? (no, e c'è di peggio)
 node tools/ottimizza_regola.js                      # quale soglia conviene? (nessuna, e va bene così)
+node tools/misura_handicap.js                       # l'handicap dice qualcosa in più? (no)
+node tools/misura_campo.js                          # il campo pesa diverso per squadra? (no)
 ```
 
 ### Le notizie, e cosa possono fare
@@ -404,21 +406,26 @@ cambiare l'impacchettamento cambia due cose diverse, che vale la pena tenere
 separate:
 
 **Il rischio**, che è ovvio. **Il prezzo**, che non lo è: il ricarico del banco
-si moltiplica a ogni selezione. Su una singola paghi il 6.5%; su un'accumulata
-da dieci paghi 1.065¹⁰, cioè il **47%**. Con le stesse dieci selezioni e gli
-stessi 20 chf:
+si moltiplica a ogni selezione. Su una singola paghi il 4.9%; su un'accumulata
+da dieci paghi 1.049¹⁰, cioè il **38%**. Con le stesse dieci selezioni al 75% e
+gli stessi 20 chf:
 
 | come | in attivo | ti torna | al massimo |
 |---|---|---|---|
-| una da 10 | 6% | 10.65 | 186 |
-| 2 da 5 | 42% | 14.60 | 61 |
-| 4 da 3 | 35% | 17.11 | 36 |
-| 5 da 2 | 28% | 17.63 | 31 |
-| 10 singole | 44% | 18.78 | 25 |
+| una da 10 | 6% | 12.40 | 220 |
+| 2 da 5 | 42% | 15.75 | 66 |
+| 3 da 3 + 1 | 38% | 17.76 | 37 |
+| 5 da 2 | 28% | 18.18 | 32 |
+| 10 singole | 53% | 19.07 | 25 |
 
-Non è un invito a non farle: l'accumulata è l'unica che può pagare 186, e
+Non è un invito a non farle: l'accumulata è l'unica che può pagare 220, e
 nessuna delle altre ci arriva. È che se una la fai, tanto vale sapere che stai
 comprando una lotteria a quel prezzo, e non un pronostico a quel prezzo.
+
+Il 4.9% non è scelto: è misurato, ed è la storia della sezione qui sotto. Le
+stesse righe con il 6.5% che l'app assumeva prima davano 10.65 invece di 12.40
+sull'accumulata — la manopola in **Schedine** rifà tutta la tabella, perché
+quale sia il tuo ricarico lo sai tu e non io.
 
 Il conto è **esatto, non simulato**: con dieci selezioni gli scenari possibili
 sono 1024 e si enumerano tutti. Regge però su un'ipotesi — che le selezioni
@@ -431,13 +438,54 @@ tutta questa parte sarebbe sbagliata.
 Sulle stesse 93 giornate: 692 selezioni prese su 927 (74.6%) contro il 71.8%
 promesso, z = 1.95. Il modello promette un filo meno di quanto mantiene.
 
-### Un'idea buona che i dati hanno bocciato
+### Il ricarico del banco, che assumevo invece di misurarlo
 
-Un arbitro che fischia tanto spezzetta la partita; una partita spezzettata ha
-meno gioco effettivo; con meno gioco si fanno meno gol. L'ipotesi è sensata, e
-le designazioni escono due o tre giorni prima — cioè in tempo per giocarci.
-Meritava di essere provata invece che dichiarata. `tools/misura_arbitri.js` la
-prova in tre modi, dal più indulgente al più severo:
+Per mesi il conto delle schedine partiva da 6.5%. Non era una misura: era un
+numero scelto a occhio perché suonava plausibile, e governava la riga più
+importante di tutta la sezione. Nei file che scarico ci sono, per ogni partita,
+sia la quota **media** di tutti i bookmaker sia la **migliore** del mercato.
+Bastava sommare le tre probabilità implicite e vedere di quanto passano l'unità.
+Su 1930 partite di Serie A:
+
+| | ricarico |
+|---|---|
+| media dei bookmaker europei | **4.90%** |
+| la migliore del mercato, esito per esito | **0.00%** |
+| Betfair Exchange | **0.51%** |
+| quello che questa app assumeva | 6.50% |
+
+Lo zero non è un errore di conto. Se per ogni singolo esito si prendesse il
+banco più generoso fra tutti, il ricarico collettivo sparisce: i bookmaker si
+scavalcano a vicenda abbastanza da annullarlo. Non è però una cosa che chi
+gioca su un sito solo possa fare, e infatti il numero che conta per l'app è il
+4.9%.
+
+E qui finisce quello che so davvero. **Sporttip** è un operatore in concessione
+unica in Svizzera, e i monopoli di solito ricaricano più della media europea —
+ma quanto, non l'ho misurato, e non me lo invento. Perciò il valore di partenza
+è il numero vero (4.9%) e sopra la tabella c'è una manopola a quattro
+posizioni: 4.9% misurato, 6.5% quello che assumevo, 8.5% poca concorrenza, 11%
+monopolio. La scheda spiega anche come scoprire il proprio senza fidarsi di
+nessuno: dividere la quota equa scritta qui per quella offerta lì, su due o tre
+partite. **Quel rapporto è il ricarico.**
+
+Non è cosmetica. Le stesse dieci selezioni, gli stessi 20 chf: l'accumulata
+rende 12.40 al 4.9% e 7.04 all'11%, perché il ricarico si compone a ogni
+selezione. Un parametro inventato che sposta il risultato del 43% è peggio di
+un parametro mancante, perché non si vede.
+
+### Tre idee buone che i dati hanno bocciato
+
+Tutte e tre erano ragionevoli, tutte e tre avevano un meccanismo credibile
+dietro, e tutte e tre sono state misurate invece che dichiarate. Sono qui
+perché un'idea provata e bocciata vale quanto una accettata: senza il conto
+scritto, fra sei mesi qualcuno la riprova.
+
+**L'arbitro.** Un arbitro che fischia tanto spezzetta la partita; una partita
+spezzettata ha meno gioco effettivo; con meno gioco si fanno meno gol. Le
+designazioni escono due o tre giorni prima, cioè in tempo per giocarci.
+`tools/misura_arbitri.js` la prova in tre modi, dal più indulgente al più
+severo:
 
 | | |
 |---|---|
@@ -456,9 +504,55 @@ Dove l'arbitro conta davvero è sui cartellini: dal più mite al più severo si
 passa da 3.1 a 5.8 gialli a partita, quasi il doppio. Quella tabella è rimasta
 in **Squadre**, come fatto sulla Serie A e non come previsione da giocare.
 
+**L'handicap asiatico come terzo ancoraggio.** Il modello si ancora al mercato
+su due assi: chi è più forte (dall'1X2) e quanti gol si faranno (dall'Over/Under
+2.5). L'handicap asiatico è un terzo mercato, con la sua linea e le sue quote, e
+dice la stessa cosa del primo asse ma con più precisione — le linee vanno di un
+quarto di gol invece che a salti. Sembrava informazione gratis.
+`tools/misura_handicap.js` misura quanto le due letture si somigliano e poi
+quale delle due prevede meglio:
+
+| | |
+|---|---|
+| correlazione fra la supremazia letta dai due mercati | **r = 0.909** |
+| scarto tipico fra le due letture | **0.6 punti** di quota |
+| errore ancorandosi all'1X2 | **0.24910** |
+| errore ancorandosi all'handicap | **0.24932**, z = 0.58 |
+
+Le due letture sono la stessa lettura. Dove differiscono, differiscono di un
+soffio, e quel soffio non contiene niente: la differenza fra i due errori è
+dentro il rumore. Aggiungere l'handicap avrebbe raddoppiato il codice
+dell'ancoraggio per riscrivere un numero che già avevo. Il conto della
+probabilità di handicap (`probHandicap`, con i rimborsi delle linee intere e le
+mezze poste sui quarti) è rimasto nel motore, perché è un mercato che si può
+voler giocare — ma non entra nella stima.
+
+**Il vantaggio del campo, squadra per squadra.** Che il campo pesi non è in
+discussione: il modello lo stima e vale mezzo gol. Il dubbio era se pesi
+*uguale* per tutti. Uno stadio pieno e ostile non può valere quanto uno vuoto,
+e nei residui si vedeva: dispersione 1.26 invece di 1.00, la Roma mezzo gol
+sopra la media in casa, il Monza mezzo gol sotto. `tools/misura_campo.js` prova
+a dare a ogni squadra il suo, tirato verso la media di quanto serve (il
+parametro *k*: più è alto, meno ogni squadra si allontana dalla media):
+
+| effetto campo | errore fuori campione |
+|---|---|
+| tutto per squadra, nessun freno | 0.19871 |
+| k = 20 | 0.19695 |
+| k = 80 | 0.19595 |
+| k = 160 | 0.19566 |
+| **uguale per tutti (come adesso)** | **0.19542** |
+
+Il modo in cui perde è la parte interessante: più si tira l'effetto verso zero,
+meglio si prevede — e la risposta migliore sta *sul bordo*, cioè al caso limite
+di non avere nessun effetto per squadra. **Quando l'ottimo cade sul bordo,
+l'effetto che si stava misurando non c'era.** La Roma a +0.5 in casa è vera sul
+passato e non si ripete: con venti squadre, il massimo di venti numeri casuali è
+sempre notevole.
+
 È lo stesso esito dei giorni di riposo, misurati e scartati per lo stesso
-motivo. Le due misure sono qui perché un'idea provata e bocciata vale quanto
-una accettata: senza il conto scritto, fra sei mesi qualcuno la riprova.
+motivo. Quattro idee sensate, quattro conti, quattro no. Il modello è quello che
+è rimasto in piedi.
 
 ## Struttura
 
@@ -469,7 +563,7 @@ una accettata: senza il conto scritto, fra sei mesi qualcuno la riprova.
 | `worker.js` | fa girare il motore fuori dal thread dell'interfaccia, così lo schermo non si blocca |
 | `scripts/build_data.py` | scarica e normalizza i dati da sei fonti (solo libreria standard) |
 | `.github/workflows/aggiorna-dati.yml` | il robot: quattro giri al giorno |
-| `tools/` | generatore di dati sintetici, le tre prove (107 sulle fonti, 78 sul motore, 15 sul backtest), la verifica di una giornata a posteriori e le quattro misure (arbitri, indipendenza, valore, regola di selezione) |
+| `tools/` | generatore di dati sintetici, le tre prove (107 sulle fonti, 88 sul motore, 15 sul backtest), la verifica di una giornata a posteriori e le sei misure (arbitri, indipendenza, valore, regola di selezione, handicap, vantaggio del campo) |
 | `data/` | riempita dalla Action: `serie-a.json` e `meta.json` |
 
 ## Una nota sul senso di tutto questo
