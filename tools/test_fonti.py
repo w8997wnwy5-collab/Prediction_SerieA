@@ -70,6 +70,22 @@ def test_quote():
     prova('quote incomplete vengono ignorate',
           'q' not in B.quote_da_riga({'AvgH': '2.10', 'AvgD': '', 'AvgA': '3.5'}))
 
+    # La quota MIGLIORE del mercato sull'Over/Under: ricarico quasi nullo,
+    # quindi togliendolo si sbaglia quasi niente. Tenuta a parte da 'qou'
+    # finche' non e' misurata, perche' un secondo campo che si scambia col
+    # primo per sbaglio e' il modo piu' silenzioso di rovinare l'ancoraggio.
+    e = B.quote_extra_da_riga({'MaxC>2.5': '2.05', 'MaxC<2.5': '1.98',
+                               'Max>2.5': '1.99', 'Max<2.5': '1.90'})
+    prova('legge l\'Over/Under migliore del mercato, di chiusura',
+          e.get('qoumax') == [2.05, 1.98], str(e.get('qoumax')))
+    prova('e ripiega sull\'apertura quando la chiusura non c\'e',
+          B.quote_extra_da_riga({'Max>2.5': '1.99', 'Max<2.5': '1.90'}).get('qoumax') == [1.99, 1.9])
+    prova('il ricarico della migliore e piu piccolo di quello della media',
+          (1 / 2.05 + 1 / 1.98) < (1 / 1.80 + 1 / 2.00))
+    prova('qoumax non finisce mai dentro qou',
+          'qou' not in B.quote_extra_da_riga({'MaxC>2.5': '2.05', 'MaxC<2.5': '1.98'}) and
+          'qoumax' not in B.quote_da_riga({'MaxC>2.5': '2.05', 'MaxC<2.5': '1.98'}))
+
 
 # ── Understat ───────────────────────────────────────────────────────────────
 

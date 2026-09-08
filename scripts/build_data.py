@@ -281,6 +281,16 @@ COLONNE_EXCHANGE = (('BFECH', 'BFECD', 'BFECA'), ('BFEH', 'BFED', 'BFEA'))
 # differenza fra il banco migliore e quello medio.
 COLONNE_MAX = (('MaxCH', 'MaxCD', 'MaxCA'), ('MaxH', 'MaxD', 'MaxA'))
 
+# Lo stesso trucco sull'Over/Under 2.5, che e' il secondo asse dell'ancoraggio.
+# Il primo asse e' passato dalla quota media a quella di Betfair Exchange e ci
+# ha guadagnato lo 0.28%, per un motivo solo: il ricarico. Una quota media porta
+# dentro il 4.9% del banco, e il modo con cui lo si toglie (dividere per la
+# somma) e' approssimato — tanto piu' storto quanto piu' il ricarico e' grosso.
+# Betfair sull'Over/Under non c'e', ma la quota MIGLIORE del mercato si': ha
+# ricarico praticamente nullo, quindi non c'e' quasi niente da togliere e non
+# c'e' quasi niente da sbagliare. Tenuta a parte finche' non e' misurata.
+COLONNE_OU_MAX = (('MaxC>2.5', 'MaxC<2.5'), ('Max>2.5', 'Max<2.5'))
+
 # L'handicap asiatico dice di quanti gol una squadra e' data favorita, ed e' il
 # mercato piu' liquido del mondo: la sua linea e' la misura piu' precisa della
 # supremazia attesa che si possa avere gratis. Oggi l'ancoraggio usa due assi
@@ -302,6 +312,11 @@ def quote_extra_da_riga(r):
         q = [num(r.get(a)), num(r.get(b)), num(r.get(c))]
         if all(q) and min(q) > 1:
             fuori['qmax'] = [round(x, 3) for x in q]
+            break
+    for a, b in COLONNE_OU_MAX:
+        qo, qu = num(r.get(a)), num(r.get(b))
+        if qo and qu and min(qo, qu) > 1:
+            fuori['qoumax'] = [round(qo, 3), round(qu, 3)]
             break
     for linea, ca, cv in COLONNE_HANDICAP:
         h, qa, qv = num(r.get(linea)), num(r.get(ca)), num(r.get(cv))
