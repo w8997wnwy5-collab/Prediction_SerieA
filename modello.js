@@ -442,6 +442,57 @@ function _risolvi(lam, mu, rho, bersaglioSquilibrio, bersaglioOver) {
    voluti. I fattori servono alla simulazione: si applicano a ogni giro senza
    rifare la ricerca, così la fascia di incertezza resta quella del modello e
    non viene schiacciata dall'ancoraggio. */
+/* ─────────────────────────── handicap asiatico ───────────────────────────
+
+   Il mercato piu' liquido del mondo, e il modo piu' preciso che esista di
+   dire quanto una squadra e' data favorita. "Casa -0.5" vuol dire che la casa
+   parte con mezzo gol di svantaggio: vince la scommessa solo se vince la
+   partita. "Casa 0" vuol dire che il pareggio RIMBORSA. E "casa -0.25" vuol
+   dire meta' puntata su 0 e meta' su -0.5 — con il pareggio che rimborsa una
+   meta' e perde l'altra.
+
+   I rimborsi sono il motivo per cui questo conto non e' banale, e sono anche
+   il motivo per cui vale la pena farlo: una quota di 1.90 su "casa 0" non dice
+   la stessa cosa di una quota di 1.90 su "casa -0.5", e trattarle uguali
+   butterebbe via proprio l'informazione che si e' venuti a prendere. */
+
+function _esitoHandicap(diff, linea) {
+  var x = diff + linea;
+  return x > 0.001 ? 1 : (x < -0.001 ? -1 : 0);      /* vinta, persa, rimborsata */
+}
+
+/* Probabilita' che la casa copra la linea, e che sia rimborsata. Le linee a
+   quarto di gol sono meta' su una linea e meta' sull'altra. */
+function probHandicap(matrice, linea) {
+  var linee = Math.abs(linea * 2 - Math.round(linea * 2)) < 1e-9
+    ? [linea] : [linea - 0.25, linea + 0.25];
+  var vinta = 0, rimborsata = 0, i, j, k;
+  for (i = 0; i < matrice.length; i++) {
+    for (j = 0; j < matrice[i].length; j++) {
+      var p = matrice[i][j];
+      if (!(p > 0)) continue;
+      for (k = 0; k < linee.length; k++) {
+        var e = _esitoHandicap(i - j, linee[k]);
+        if (e > 0) vinta += p / linee.length;
+        else if (e === 0) rimborsata += p / linee.length;
+      }
+    }
+  }
+  return { vinta: vinta, rimborsata: rimborsata,
+           /* Condizionata al non-rimborso: e' il numero confrontabile con le
+              quote, perche' su un rimborso il banco non guadagna ne' perde. */
+           coperta: vinta / Math.max(1e-9, 1 - rimborsata) };
+}
+
+/* La stessa cosa, letta dalle quote invece che dalla matrice. */
+function daQuoteHandicap(qah) {
+  if (!qah || qah.length < 3) return null;
+  var qc = Number(qah[1]), qv = Number(qah[2]);
+  if (!(qc > 1) || !(qv > 1)) return null;
+  var ic = 1 / qc, iv = 1 / qv;
+  return { linea: Number(qah[0]), coperta: ic / (ic + iv), margine: ic + iv - 1 };
+}
+
 function ancoraMercato(lam, mu, rho, opz) {
   opz = opz || {};
   var w1 = opz.peso1x2 == null ? 0 : opz.peso1x2;
@@ -1879,7 +1930,8 @@ var API = {
   poisson: poisson, tau: tau, giorni: giorni, limita: limita, media: media,
   prepara: prepara, stima: stima, stimaRho: stimaRho, costruisci: costruisci,
   attesi: attesi, matriceRisultati: matriceRisultati, esiti: esiti, prevedi: prevedi,
-  ancoraMercato: ancoraMercato, daQuoteOU: daQuoteOU, fondiLogit: fondiLogit, fondiTre: fondiTre,
+  ancoraMercato: ancoraMercato, daQuoteOU: daQuoteOU,
+  probHandicap: probHandicap, daQuoteHandicap: daQuoteHandicap, fondiLogit: fondiLogit, fondiTre: fondiTre,
   _sintesi: _sintesi,
   forze: forze, calibraTiri: calibraTiri, xgDaTiri: xgDaTiri, allineaXg: allineaXg,
   statisticheArbitri: statisticheArbitri, cartelliniAttesi: cartelliniAttesi, verso: verso,

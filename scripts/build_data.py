@@ -273,6 +273,14 @@ COLONNE_OU = (('AvgC>2.5', 'AvgC<2.5'), ('B365C>2.5', 'B365C<2.5'),
 # da sempre, nelle colonne BFEC*.
 COLONNE_EXCHANGE = (('BFECH', 'BFECD', 'BFECA'), ('BFEH', 'BFED', 'BFEA'))
 
+# La quota MIGLIORE fra tutti i bookmaker, non la media. Serve a una cosa sola,
+# ma importante: sapere quanto costa davvero giocare. L'app finora assumeva un
+# ricarico del 6.5% per selezione — un numero scelto a occhio — e su quella
+# assunzione poggia tutta la tabella "come le impacchetti". Con Max e Avg
+# insieme il ricarico si calcola invece di stimarlo, e si vede anche la
+# differenza fra il banco migliore e quello medio.
+COLONNE_MAX = (('MaxCH', 'MaxCD', 'MaxCA'), ('MaxH', 'MaxD', 'MaxA'))
+
 # L'handicap asiatico dice di quanti gol una squadra e' data favorita, ed e' il
 # mercato piu' liquido del mondo: la sua linea e' la misura piu' precisa della
 # supremazia attesa che si possa avere gratis. Oggi l'ancoraggio usa due assi
@@ -289,6 +297,11 @@ def quote_extra_da_riga(r):
         q = [num(r.get(a)), num(r.get(b)), num(r.get(c))]
         if all(q) and min(q) > 1:
             fuori['qex'] = [round(x, 3) for x in q]
+            break
+    for a, b, c in COLONNE_MAX:
+        q = [num(r.get(a)), num(r.get(b)), num(r.get(c))]
+        if all(q) and min(q) > 1:
+            fuori['qmax'] = [round(x, 3) for x in q]
             break
     for linea, ca, cv in COLONNE_HANDICAP:
         h, qa, qv = num(r.get(linea)), num(r.get(ca)), num(r.get(cv))
