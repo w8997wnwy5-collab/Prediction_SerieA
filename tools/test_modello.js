@@ -370,6 +370,41 @@ prova('e nessuna selezione finisce in due schedine',
   prova('due squadre diverse non si accorpano fra loro', due.length === 2, due.length);
 })();
 
+/* ─── il ricarico del banco: misurato, non assunto ─── */
+(function () {
+  var html;
+  try {
+    html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  } catch (e) { return; }
+  var blocco = html.match(/var RICARICHI = \[[\s\S]*?\n\];/);
+  prova('la manopola del ricarico esiste', !!blocco);
+  if (!blocco) return;
+  var RICARICHI = eval('(' + blocco[0].replace('var RICARICHI = ', '').replace(/;\s*$/, '') + ')');
+  prova('quattro posizioni', RICARICHI.length === 4, RICARICHI.length);
+  prova('crescenti', RICARICHI.every(function (x, i) { return i === 0 || x.v > RICARICHI[i - 1].v; }));
+  prova('si parte dal numero MISURATO (4.9%), non da quello che avevo assunto',
+        Math.abs(RICARICHI[0].v - 0.049) < 1e-9 && /RICARICHI\[0\]/.test(html),
+        RICARICHI[0].v);
+  prova('nessun 6.5% scritto a mano e rimasto in giro',
+        !/Math\.pow\(1\.065/.test(html));
+  prova('il ricarico passa da una funzione sola',
+        /function quotaBanco[\s\S]{0,200}1 \+ ricarico\(\)\.v/.test(html));
+  prova('ogni posizione ha una spiegazione, non solo un numero',
+        RICARICHI.every(function (x) { return x.testo && x.testo.length > 40; }));
+
+  /* Il conto che conta: il ricarico si moltiplica a ogni selezione, quindi su
+     un'accumulata da dieci costa molto piu' di dieci volte. */
+  var sel = [];
+  for (var i = 0; i < 10; i++) sel.push({ p: 0.75, quota: (1 / 0.75) / 1.049 });
+  var acc = M.profiloGiocata(sel, [[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]], 20);
+  var sing = M.profiloGiocata(sel, sel.map(function (_, k) { return [k]; }), 20);
+  prova('sull\'accumulata il ricarico si compone',
+        Math.abs(acc.atteso - 20 / Math.pow(1.049, 10)) < 1e-6, acc.atteso.toFixed(4));
+  prova('sulle singole no', Math.abs(sing.atteso - 20 / 1.049) < 1e-6, sing.atteso.toFixed(4));
+  prova('e la differenza fra i due e grossa: e il punto di tutta la sezione',
+        sing.atteso - acc.atteso > 5, (sing.atteso - acc.atteso).toFixed(2));
+})();
+
 var largh = esiti.reduce(function (a, e) { return Math.max(a, e[0].length); }, 0);
 var falliti = 0;
 esiti.forEach(function (e) {

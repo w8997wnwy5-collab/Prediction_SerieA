@@ -1678,8 +1678,70 @@ function candidatiGiornata(){
 /* Quanto ti restituisce davvero il banco: la quota equa meno il suo ricarico,
    che su una multipla si moltiplica a ogni selezione. Non è pessimismo, è
    quello che c'è scritto sul biglietto. */
+/* ══════════════════════════════════════════════════════════════
+   QUANTO TI RICARICA IL TUO OPERATORE
+
+   Per mesi qui c'è stato 6.5%, scelto a occhio. Poi l'ho misurato, ed era
+   sbagliato in un modo che vale la pena sapere.
+
+   Nei file che scarico ci sono, per ogni partita, sia la quota MEDIA di tutti
+   i bookmaker sia la MIGLIORE del mercato. Su 1930 partite:
+
+     media dei bookmaker europei    4.90%
+     la migliore del mercato        0.00%
+     Betfair Exchange               0.51%
+
+   Lo zero sulla migliore non è un errore: se per ogni esito si prendesse il
+   banco più generoso, il ricarico collettivo sparisce. Non è però una cosa che
+   chi gioca su un sito solo possa fare.
+
+   E qui finisce quello che so. Sporttip è un operatore in concessione unica in
+   Svizzera, e i monopoli di solito ricaricano più della media europea — ma
+   quanto, non l'ho misurato e non me lo invento. Il valore di partenza è il
+   numero vero che conosco (4.9%), e la manopola serve a spostarlo se le tue
+   quote dicono altro: bastano un paio di partite per capirlo, dividendo la
+   quota equa che vedi qui per quella che vedi lì.
+   ══════════════════════════════════════════════════════════════ */
+var RICARICHI = [
+  {id:'medio',  v:0.049, nome:'Media europea', testo:'Il ricarico medio dei bookmaker europei, misurato su 1930 partite di Serie A. È il numero vero, ma non è detto sia il tuo.'},
+  {id:'sopra',  v:0.065, nome:'Un po\' sopra', testo:'Quello che questa app assumeva prima di misurarlo. Ragionevole per un operatore non fra i più competitivi.'},
+  {id:'caro',   v:0.085, nome:'Caro',          testo:'Tipico di chi ha poca concorrenza. Con dieci selezioni il banco si prende oltre metà della giocata.'},
+  {id:'monopolio', v:0.11, nome:'Monopolio',   testo:'Un operatore in concessione unica può arrivare qui. Se è il tuo caso, l\'accumulata lunga è quasi un biglietto della lotteria.'}
+];
+var CHIAVE_RICARICO = 'seriea_ricarico_v1';
+
+function ricarico(){
+  if(S.ricarico) return S.ricarico;
+  var id = null;
+  try{ id = localStorage.getItem(CHIAVE_RICARICO); }catch(e){}
+  S.ricarico = RICARICHI.filter(function(x){ return x.id === id; })[0] || RICARICHI[0];
+  return S.ricarico;
+}
+function impostaRicarico(id){
+  var r = RICARICHI.filter(function(x){ return x.id === id; })[0];
+  if(!r) return;
+  S.ricarico = r;
+  try{ localStorage.setItem(CHIAVE_RICARICO, id); }catch(e){}
+  render(); window.scrollTo(0,0);
+}
+function sceltaRicarico(){
+  var a = ricarico();
+  return '<div class="h2">Quanto ti ricarica il tuo operatore</div><div class="card">'+
+    '<div class="prud">'+RICARICHI.map(function(x){
+      return '<button class="prudb'+(x.id===a.id?' on':'')+'" onclick="impostaRicarico(\''+x.id+'\')">'+
+        '<b>'+esc(x.nome)+'</b><em>'+(100*x.v).toFixed(1)+'%</em></button>';
+    }).join('')+'</div>'+
+    '<div class="note" style="margin-top:2px">'+esc(a.testo)+'<br><br>'+
+    'Questo numero governa tutta la tabella qui sotto, e non è un dettaglio: su una singola '+
+    'costa il '+(100*a.v).toFixed(1)+'%, su un\'accumulata da dieci costa il <b>'+
+    Math.round(100*(1-1/Math.pow(1+a.v,10)))+'%</b>, perché si moltiplica a ogni selezione.<br><br>'+
+    'Come scoprire il tuo: prendi una partita, guarda la quota equa che scrivo io e quella che ti '+
+    'offre il tuo operatore. Il rapporto fra le due <b>è</b> il ricarico. Con due o tre partite hai '+
+    'il numero, e da lì in poi i conti di quest\'app sono i tuoi invece che una media.</div></div>';
+}
+
 function quotaBanco(quotaEqua, nSelezioni){
-  return quotaEqua / Math.pow(1.065, nSelezioni);
+  return quotaEqua / Math.pow(1 + ricarico().v, nSelezioni);
 }
 
 function schedaSchedina(profilo, scelte){
@@ -1819,10 +1881,14 @@ function cardQuanteNePrendi(){
 
    Le stesse dieci selezioni, la stessa puntata, e cinque modi di giocarle. Non
    cambia solo il rischio — cambia quanto ti resta in mano nel lungo periodo, e
-   cambia tantissimo. Il motivo è che il ricarico del banco si moltiplica a
-   ogni selezione: su una singola paghi il 6.5%, su un'accumulata da dieci
-   paghi 1.065¹⁰, cioè quasi il doppio del giusto. Il banco non prende il 6.5%
-   della tua giocata: ne prende il 47%.
+   cambia tantissimo. Il motivo è che il ricarico del banco si MOLTIPLICA a
+   ogni selezione: quello che su una singola costa il 4.9%, su un'accumulata da
+   dieci costa 1.049¹⁰, cioè il 39% della giocata.
+
+   Quanto valga davvero quel ricarico lo decide la manopola qui sopra, e il suo
+   valore di partenza è misurato, non assunto: 4.9% è il ricarico medio dei
+   bookmaker europei su 1930 partite di Serie A. Per mesi qui c'è stato 6.5%,
+   che avevo scelto a occhio.
 
    Non è un invito a non farle. È che se una la fai, tanto vale sapere che
    stai comprando una lotteria a quel prezzo, e non un pronostico a quel
@@ -1863,9 +1929,11 @@ function cardComeGiocarle(){
     nu(q,0)+' chf così, ripetuto tante volte. Non è il rischio: è il prezzo.<br><br>'+
     'La differenza fra <b>'+nu(acc.atteso,2)+'</b> e <b>'+nu(migliore.atteso,2)+'</b> non viene dal '+
     'modello, viene dal ricarico del banco, che si <b>moltiplica</b> a ogni selezione. Su una '+
-    'singola paghi il 6.5%; su un\'accumulata da '+n+' paghi 1.065<sup>'+n+'</sup>, cioè il <b>'+
-    Math.round(100*(1-1/Math.pow(1.065,n)))+'%</b>. Il banco non si prende il 6.5% della tua '+
-    'giocata: se ne prende il '+Math.round(100*(1-1/Math.pow(1.065,n)))+'%.<br><br>'+
+    'singola paghi il '+(100*ricarico().v).toFixed(1)+'%; su un\'accumulata da '+n+' paghi '+
+    (1+ricarico().v).toFixed(3)+'<sup>'+n+'</sup>, cioè il <b>'+
+    Math.round(100*(1-1/Math.pow(1+ricarico().v,n)))+'%</b>. Il banco non si prende il '+
+    (100*ricarico().v).toFixed(1)+'% della tua giocata: se ne prende il '+
+    Math.round(100*(1-1/Math.pow(1+ricarico().v,n)))+'%.<br><br>'+
     'Detto questo: l\'accumulata da '+n+' è l\'unica che può pagare '+nu(acc.massimo,0)+' chf, e '+
     'nessuna delle altre ci arriva nemmeno lontanamente. Se è quello che stai comprando va '+
     'benissimo — l\'importante è sapere che stai comprando <b>una lotteria a quel prezzo</b>, non '+
@@ -1887,6 +1955,7 @@ function tabSchedine(){
       '<span>chf. È l\'unica cosa che ti chiedo di scrivere in tutta l\'app: '+
       'da qui in giù i conti sono fatti su questa cifra.</span>'+
     '</div></div>';
+  h += sceltaRicarico();
   h += '<div id="schedProfilo">'+cardQuanteNePrendi()+cardComeGiocarle()+'</div>';
   h += '<div class="note" style="margin-bottom:14px">Le selezioni sono le stesse che vedi nella '+
     '<b>Giornata</b>, prese dalla stessa funzione: se lì una partita dice una cosa, qui non può dirne '+
@@ -1895,7 +1964,8 @@ function tabSchedine(){
   h += '<div id="schedElenco">'+elencoSchedine()+'</div>';
   h += '<div class="note warn"><p>La colonna <b>"prendi"</b> usa la quota equa: quella che renderebbe '+
     'la giocata un pareggio nel lungo periodo. Nessun operatore te la offre. La colonna '+
-    '<b>"realistico"</b> toglie un ricarico del 6.5% per selezione, che è l\'ordine di grandezza vero.</p>'+
+    '<b>"realistico"</b> toglie il ricarico che hai scelto qui sopra ('+(100*ricarico().v).toFixed(1)+
+    '% per selezione).</p>'+
     '<p>Le multiple sono la parte del mercato dove quel margine pesa di più, perché si moltiplica a '+
     'ogni selezione. Con sei selezioni il banco parte con quasi il 50% di vantaggio. Il modello qui '+
     'serve a sapere quanto vale davvero quello che stai per giocare, non a promettere che esce.</p></div>';
