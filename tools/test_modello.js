@@ -416,6 +416,40 @@ prova('e nessuna selezione finisce in due schedine',
         sing.atteso - acc.atteso > 5, (sing.atteso - acc.atteso).toFixed(2));
 })();
 
+/* ─── i multigol: onesti e monotoni insieme ───
+
+   Accendendo i multigol l'app propone Multigol 1-4 su nove partite su dieci.
+   Misurato: la regola resta calibrata (0.4σ), quindi non e' rotta — dice pero'
+   la stessa cosa in ogni partita, e una previsione che non cambia da partita a
+   partita non informa su nessuna. Le prove qui sotto proteggono le due cose che
+   possono rompersi in silenzio: che l'avviso ci sia quando serve, e che i
+   numeri misurati non vengano ricopiati male. */
+(function () {
+  var html;
+  try { html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8'); } catch (e) { return; }
+
+  prova('tutti i multigol stanno in una famiglia sola',
+        /mg12:'multigol'[\s\S]{0,300}mg03:'multigol'/.test(html));
+  prova('esiste l\'avviso per quando la stessa selezione esce dappertutto',
+        /function avvisoMonotonia[\s\S]{0,900}esce su/.test(html));
+  prova('e scatta sopra i due terzi, non a caso',
+        /conta\[top\] \/ tot < 0\.6/.test(html));
+  prova('l\'avviso dice che NON e rotto, perche misurato non lo e',
+        /non e rotto|non è rotto/.test(html));
+  prova('la manopola solida/distintiva esiste', /function sceltaDistintiva/.test(html));
+  prova('e la distintiva chiede uno scarto dalla media di giornata',
+        /vuoleDistintiva\(\)[\s\S]{0,500}Math\.abs\(m\.scarto[^)]*\) >= 0\.03/.test(html));
+  prova('se nessuna e distintiva si torna alla piu solida invece di non proporre niente',
+        /if\(dist\.length\) pagante = dist;/.test(html));
+  prova('tutte e due le posizioni portano i numeri misurati, non solo una',
+        /79\.9%[\s\S]{0,2000}69\.9%/.test(html));
+  prova('e dicono anche il prezzo: quante selezioni diverse escono',
+        /2\.6[\s\S]{0,200}selezioni diverse|selezioni diverse[\s\S]{0,200}2\.6/.test(html) &&
+        /5\.3/.test(html));
+  prova('lo strumento che ha prodotto quei numeri esiste',
+        fs.existsSync(path.join(__dirname, 'misura_multigol.js')));
+})();
+
 /* ─── il mese: una domanda diversa dal valore atteso ───
 
    "Voglio chiudere il mese in attivo" non e' "voglio guadagnare", e le due

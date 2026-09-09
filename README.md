@@ -224,6 +224,7 @@ node tools/misura_ancora_ou.js                      # l'Over/Under a ricarico ze
 node tools/misura_stringimento.js                   # l'ancoraggio deve stringere di più quando il modello alza la voce? (no)
 node tools/misura_mercati.js                        # il peso giusto è lo stesso su tutti i mercati? (sì: uno)
 node tools/ottimizza_mese.js                        # quale struttura chiude il mese in attivo più spesso
+node tools/misura_multigol.js                       # Multigol 1-4 ovunque: bug o regola che fa il suo mestiere?
 ```
 
 ### Le notizie, e cosa possono fare
@@ -558,6 +559,51 @@ E la tabella **non dà per scontata la propria tesi**: quando le selezioni più
 solide sono davvero solide, le singole vincono su tutti e due i fronti e la
 scheda lo dice. Si rifà a ogni giornata.
 
+### Multigol 1-4 dappertutto: onesto e monotono insieme
+
+Accendendo i mercati multigol, l'app propone **Multigol 1-4 su nove partite su
+dieci**. Sembra un bug. Non lo è, ed è più interessante di un bug.
+
+"La più solida" ordina per **pavimento** — il fondo della banda di incertezza —
+e prende la prima sotto la soglia di prudenza. Multigol 1-4 vuol dire *"fra uno
+e quattro gol"*: sta al 78-81% in ogni partita di ogni giornata, ha quindi il
+pavimento più alto ovunque, e sotto la soglia dello 0.82 ci passa. Vince ovunque
+perché è davvero, ovunque, la cosa più solida.
+
+È lo stesso inciampo di *"Almeno un gol al 93%"*, che questo README dichiara di
+aver già corretto. La correzione era un tetto sulla probabilità. Multigol 1-4
+passa sotto il tetto.
+
+E c'è un dettaglio che rende la cosa peggiore di quanto sembri: quando la regola
+di selezione è stata tarata, **i multigol non erano nell'elenco dei mercati
+misurati**. La manopola della prudenza, coi suoi numeri, descrive un mondo senza
+multigol. Accendendoli, l'app usciva dal proprio collaudo continuando a mostrare
+i numeri di prima.
+
+Rimisurato su 93 giornate coi multigol accesi (`tools/misura_multigol.js`):
+
+| regola | prese | promesse | scarto | quota | 8 su 10 | selezioni diverse |
+|---|---|---|---|---|---|---|
+| pavimento (come adesso) | 79.9% | 79.4% | +0.4σ | 9.9 | 62% | **2.6 su 10** |
+| pavimento, ma distintiva | 69.9% | 69.7% | +0.2σ | 42.5 | 41% | **5.3 su 10** |
+
+Due cose vanno dette insieme, e separarle sarebbe disonesto. **La regola resta
+calibrata:** prende quanto promette, a 0.4σ. Non è rotta. **E dice la stessa
+cosa in ogni partita:** 2.6 selezioni diverse su dieci. Una previsione che non
+cambia da partita a partita non informa su nessuna partita — l'app mostrava
+dieci volte un fatto sul *campionato* travestito da dieci fatti sulle *partite*.
+
+Notare che il problema esisteva già senza multigol: 2.8 selezioni diverse su 10.
+I multigol lo hanno solo reso impossibile da non vedere.
+
+La correzione non è cambiare la regola di nascosto — sarebbe scambiare dieci
+punti di probabilità senza dirlo. È **una manopola con i due numeri scritti**, e
+un avviso in Giornata quando la stessa selezione esce su più di due terzi delle
+partite. Se l'obiettivo è chiudere il mese in attivo, la più solida vince
+davvero: gambe più probabili, e su una multipla corta è quello che conta. Se
+l'obiettivo è sapere cosa ha di diverso questa partita, la distintiva è l'unica
+che risponde.
+
 ### Il modello non deve avere opinioni
 
 Il risultato più scomodo che sia uscito da questo progetto, e quello che ne
@@ -798,7 +844,7 @@ dire che quello che resta da guadagnare non sta nel modello, sta nel **prezzo**
 | `worker.js` | fa girare il motore fuori dal thread dell'interfaccia, così lo schermo non si blocca |
 | `scripts/build_data.py` | scarica e normalizza i dati da sei fonti (solo libreria standard) |
 | `.github/workflows/aggiorna-dati.yml` | il robot: quattro giri al giorno |
-| `tools/` | generatore di dati sintetici, le tre prove (123 sulle fonti, 120 sul motore, 15 sul backtest), la verifica di una giornata a posteriori e le nove misure (arbitri, indipendenza, valore, regola di selezione, handicap, vantaggio del campo, neopromosse, taratura dei parametri, ancoraggio Over/Under) |
+| `tools/` | generatore di dati sintetici, le tre prove (123 sulle fonti, 130 sul motore, 15 sul backtest), la verifica di una giornata a posteriori e le nove misure (arbitri, indipendenza, valore, regola di selezione, handicap, vantaggio del campo, neopromosse, taratura dei parametri, ancoraggio Over/Under) |
 | `data/` | riempita dalla Action: `serie-a.json` e `meta.json` |
 
 ## Una nota sul senso di tutto questo

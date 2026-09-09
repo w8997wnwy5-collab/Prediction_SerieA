@@ -1046,6 +1046,51 @@ function sceltaPrudenza(){
    — la scheda della giornata e il costruttore di schedine — e infatti
    mostravano cose diverse sulla stessa partita. Adesso la funzione è una: se
    sbaglia, sbaglia dappertutto uguale, che è molto più facile da accorgersene. */
+/* ══════════════════════════════════════════════════════════════
+   DISTINTIVA O SOLIDA
+
+   Accendendo i multigol, l'app propone Multigol 1-4 su nove partite su dieci.
+   Sembra un bug, e non lo è: è la regola che fa esattamente il suo mestiere.
+   "La più solida" ordina per PAVIMENTO e prende la prima sotto la soglia di
+   prudenza; Multigol 1-4 vuol dire "fra uno e quattro gol", sta al 78-81% in
+   ogni partita di ogni giornata, ha un pavimento altissimo e passa sotto la
+   soglia. Vince ovunque perché è davvero, ovunque, la cosa più solida.
+
+   È lo stesso inciampo di "Almeno un gol al 93%", che il codice dice di aver
+   già corretto una volta. La correzione era un tetto sulla probabilità.
+   Multigol 1-4 passa sotto il tetto.
+
+   Misurato su 93 giornate (tools/misura_multigol.js), coi multigol accesi:
+
+     regola                  prese  promesse  quota  8su10  selezioni diverse
+     pavimento (come adesso) 79.9%   79.4%      9.9    62%      2.6 su 10
+     pavimento, ma distintiva 69.9%  69.7%     42.5    41%      5.3 su 10
+
+   Due cose vanno dette insieme. La prima: la regola di adesso resta ONESTA
+   anche così — prende quanto promette, a 0.4σ. Non è rotta. La seconda: dice
+   la stessa cosa in ogni partita, e una previsione che non cambia da partita a
+   partita non informa su nessuna partita.
+
+   Quale delle due convenga dipende da cosa si sta cercando, e le due risposte
+   sono entrambe difendibili — per questo è una manopola e non una correzione.
+   Se l'obiettivo è chiudere il mese in attivo, la più solida è meglio: gambe
+   più probabili, e su una multipla corta è quello che conta. Se l'obiettivo è
+   sapere cosa ha di diverso questa partita, la distintiva è l'unica che
+   risponde.
+   ══════════════════════════════════════════════════════════════ */
+var CHIAVE_DISTINTIVA = 'seriea_distintiva_v1';
+function vuoleDistintiva(){
+  if(S.distintiva != null) return S.distintiva;
+  try{ S.distintiva = localStorage.getItem(CHIAVE_DISTINTIVA) === '1'; }catch(e){ S.distintiva = false; }
+  return S.distintiva;
+}
+function commutaDistintiva(){
+  S.distintiva = !vuoleDistintiva();
+  try{ localStorage.setItem(CHIAVE_DISTINTIVA, S.distintiva ? '1' : '0'); }catch(e){}
+  S._sim = null; _mediaGiornata = null;
+  render(); window.scrollTo(0,0);
+}
+
 function sceltePartita(p, quante){
   var mk = mercatiDi(p, 1500, true);
   if(!mk) return null;
@@ -1084,6 +1129,14 @@ function sceltePartita(p, quante){
      più in basso si paga di più e si prende di rado, più in alto il contrario.
      Nessuna delle due è migliore — vedi il commento a PRUDENZE. */
   var pagante = perSolidita.filter(function(m){ return m.p <= prudenza().soglia; });
+  if(vuoleDistintiva()){
+    /* Si chiede che la selezione si discosti di almeno tre punti dalla media
+       della giornata: se una cosa vale uguale in tutte le partite, non dice
+       niente su questa. Se nessuna ci arriva si torna alla più solida, invece
+       di non proporre niente — una giornata senza proposte sarebbe peggio. */
+    var dist = pagante.filter(function(m){ return Math.abs(m.scarto || 0) >= 0.03; });
+    if(dist.length) pagante = dist;
+  }
   return {
     tutte: voci, sim: mk.sim,
     speciali: perScarto.slice(0, quante || 3),
@@ -1401,6 +1454,65 @@ function tabellaArbitri(){
     'messo dentro un modello, non è informazione in più: è rumore in più.</div></div>';
 }
 
+/* Quando la stessa selezione esce su quasi tutte le partite, l'app sta
+   mostrando dieci volte un fatto sul CAMPIONATO travestito da dieci fatti
+   sulle partite. Non è sbagliato — è misurato, ed è onesto: prende quanto
+   promette. Ma chi legge crede di star vedendo dieci analisi, e ne sta vedendo
+   una sola ripetuta, e quella differenza va detta invece che lasciata capire.
+
+   Non è un errore da correggere di nascosto: è il prezzo della regola più
+   solida, e il modo giusto di pagarlo è saperlo. */
+function avvisoMonotonia(partite){
+  if(partite.length < 4) return '';
+  var conta = {}, nomi = {}, tot = 0;
+  partite.forEach(function(p){
+    var sc = sceltePartita(p, 1);
+    if(!sc || !sc.piuSolida) return;
+    conta[sc.piuSolida.id] = (conta[sc.piuSolida.id] || 0) + 1;
+    nomi[sc.piuSolida.id] = sc.piuSolida.nome;
+    tot++;
+  });
+  if(!tot) return '';
+  var top = Object.keys(conta).sort(function(a,b){ return conta[b] - conta[a]; })[0];
+  if(!top || conta[top] / tot < 0.6) return '';
+  return '<div class="note warn" style="margin-bottom:12px"><b>'+esc(nomi[top])+
+    ' esce su '+conta[top]+' partite su '+tot+'.</b> Non è un\'osservazione su queste partite: '+
+    'è quanto vale quel mercato <b>sempre</b>, in ogni giornata. La regola che sceglie "la più '+
+    'solida" ordina per pavimento, e un mercato che sta all\'80% ovunque ha il pavimento più alto '+
+    'ovunque — quindi vince ovunque.<br><br>'+
+    'Misurato su 93 giornate, non è rotto: prende il 79.9% contro il 79.4% promesso. È onesto e '+
+    'monotono insieme. Se vuoi che ogni partita dica qualcosa di <b>suo</b>, accendi '+
+    '<b>selezioni distintive</b> qui sotto — costa dieci punti di probabilità e li vedi scritti.'+
+    '</div>';
+}
+
+function sceltaDistintiva(){
+  var on = vuoleDistintiva();
+  return '<div class="h2">Solida o distintiva</div><div class="card">'+
+    '<div class="prud">'+
+      '<button class="prudb'+(on?'':' on')+'" onclick="'+(on?'commutaDistintiva()':'')+'">'+
+        '<b>La più solida</b><em>79.9%</em></button>'+
+      '<button class="prudb'+(on?' on':'')+'" onclick="'+(on?'':'commutaDistintiva()')+'">'+
+        '<b>La più distintiva</b><em>69.9%</em></button>'+
+    '</div>'+
+    '<div class="note">'+
+    (on
+      ? 'Ogni partita propone qualcosa che <b>si discosta</b> dalla media della giornata: se una '+
+        'cosa vale uguale dappertutto, non dice niente su nessuna. Su 93 giornate: prende il '+
+        '<b>69.9%</b> contro il 69.7% promesso, quota mediana della decupla <b>42.5</b>, e otto su '+
+        'dieci il 41% delle volte. In una giornata da dieci partite propone <b>5.3</b> selezioni '+
+        'diverse invece di 2.6.'
+      : 'Ogni partita propone la giocata col <b>pavimento più alto</b> fra quelle che pagano '+
+        'qualcosa. Su 93 giornate: prende il <b>79.9%</b> contro il 79.4% promesso, quota mediana '+
+        'della decupla <b>9.9</b>, e otto su dieci il 62% delle volte. Il prezzo è che in una '+
+        'giornata da dieci partite propone solo <b>2.6</b> selezioni diverse: spesso è la stessa '+
+        'cosa dieci volte.')+
+    '<br><br><b>Non c\'è una migliore.</b> Se l\'obiettivo è chiudere il mese in attivo, la più '+
+    'solida vince: gambe più probabili, e su una multipla corta è quello che conta. Se l\'obiettivo '+
+    'è sapere cosa ha di diverso questa partita, la distintiva è l\'unica che risponde. Le due '+
+    'righe di numeri sono misurate sulle stesse 93 giornate, con lo stesso metodo.</div></div>';
+}
+
 function schedaPartita(p, indice){
   var pr = previsione(p);
   if(!pr) return '';
@@ -1543,8 +1655,10 @@ function tabGiornata(){
   h += '<p class="lede">Dal '+esc(dataLunga(g.inizio))+(g.fine!==g.inizio?' al '+esc(dataLunga(g.fine)):'')+
     '. Su ogni partita trovi <b>la più solida</b>: la giocata più sicura fra quelle che pagano '+
     'qualcosa. Tocca la partita per tutte le altre.</p>';
+  h += avvisoMonotonia(g.partite);
   h += g.partite.map(function(p){ return schedaPartita(p, prossime.indexOf(p)); }).join('');
   h += sceltaPrudenza();
+  h += sceltaDistintiva();
   if(gruppi.length > 1){
     var dopo = gruppi.slice(1, 4);
     h += '<div class="h2">Più avanti</div><div class="card">'+
