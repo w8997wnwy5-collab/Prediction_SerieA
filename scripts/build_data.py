@@ -291,6 +291,15 @@ COLONNE_MAX = (('MaxCH', 'MaxCD', 'MaxCA'), ('MaxH', 'MaxD', 'MaxA'))
 # c'e' quasi niente da sbagliare. Tenuta a parte finche' non e' misurata.
 COLONNE_OU_MAX = (('MaxC>2.5', 'MaxC<2.5'), ('Max>2.5', 'Max<2.5'))
 
+# bet365 e' uno dei tre operatori su cui si gioca davvero, e football-data lo
+# pubblica su tutto l'archivio. Non serve a prevedere: serve a sapere QUANTO
+# COSTA. Il ricarico medio europeo (4.9%) e' una media su decine di banchi, e
+# non e' detto sia quello di nessuno in particolare; questo invece e' il numero
+# di un banco vero, su 1930 partite di Serie A. Gli altri due (Sporttip,
+# Eurobet) in questo file non ci sono, e per quelli l'unico modo di saperlo e'
+# il registro delle giocate.
+COLONNE_B365 = (('B365CH', 'B365CD', 'B365CA'), ('B365H', 'B365D', 'B365A'))
+
 # L'handicap asiatico dice di quanti gol una squadra e' data favorita, ed e' il
 # mercato piu' liquido del mondo: la sua linea e' la misura piu' precisa della
 # supremazia attesa che si possa avere gratis. Oggi l'ancoraggio usa due assi
@@ -312,6 +321,11 @@ def quote_extra_da_riga(r):
         q = [num(r.get(a)), num(r.get(b)), num(r.get(c))]
         if all(q) and min(q) > 1:
             fuori['qmax'] = [round(x, 3) for x in q]
+            break
+    for a, b, c in COLONNE_B365:
+        q = [num(r.get(a)), num(r.get(b)), num(r.get(c))]
+        if all(q) and min(q) > 1:
+            fuori['qb365'] = [round(x, 3) for x in q]
             break
     for a, b in COLONNE_OU_MAX:
         qo, qu = num(r.get(a)), num(r.get(b))

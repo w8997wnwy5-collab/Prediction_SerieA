@@ -84,6 +84,17 @@ def test_quote():
           B.quote_extra_da_riga({'Max>2.5': '1.99', 'Max<2.5': '1.90'}).get('qoumax') == [1.99, 1.9])
     prova('il ricarico della migliore e piu piccolo di quello della media',
           (1 / 2.05 + 1 / 1.98) < (1 / 1.80 + 1 / 2.00))
+    # bet365 e' uno dei banchi su cui si gioca davvero: il suo ricarico non e'
+    # una media europea, e' un numero suo. Tenuto a parte da 'q' perche' serve
+    # a sapere quanto costa, non a prevedere.
+    b3 = B.quote_extra_da_riga({'B365CH': '2.55', 'B365CD': '3.45', 'B365CA': '2.85',
+                                'B365H': '2.50', 'B365D': '3.40', 'B365A': '2.80'})
+    prova('legge bet365 di chiusura', b3.get('qb365') == [2.55, 3.45, 2.85], str(b3.get('qb365')))
+    prova('e ripiega sull\'apertura', B.quote_extra_da_riga(
+          {'B365H': '2.50', 'B365D': '3.40', 'B365A': '2.80'}).get('qb365') == [2.5, 3.4, 2.8])
+    prova('bet365 non finisce dentro q',
+          'q' not in B.quote_extra_da_riga({'B365CH': '2.55', 'B365CD': '3.45', 'B365CA': '2.85'}))
+
     prova('qoumax non finisce mai dentro qou',
           'qou' not in B.quote_extra_da_riga({'MaxC>2.5': '2.05', 'MaxC<2.5': '1.98'}) and
           'qoumax' not in B.quote_da_riga({'MaxC>2.5': '2.05', 'MaxC<2.5': '1.98'}))
