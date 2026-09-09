@@ -15,6 +15,7 @@ I dati si aggiornano da soli quattro volte al giorno, con un robot che vive su G
 |---|---|
 | **Giornata** | Le partite in arrivo e, per ciascuna, **cosa ha di diverso dalle altre della stessa giornata**. Toccandola: la matrice di tutti i punteggi, primo tempo/finale, corner, cartellini con l'arbitro che scegli, e i cursori per scontare le assenze. |
 | **Ammoniti** | Cartellini attesi partita per partita, ordinati. Chi fischia stretto, chi se le va a cercare. |
+| **Il mio libro** | Le giocate vere, a quote vere, sui banchi veri: da lì il ricarico misurato per banco, la calibrazione personale e se discostarsi dal modello conviene. |
 | **Schedine** | Un solo campo — quanto ci punti — e da lì quota, probabilità vera e vincita possibile, alla quota equa e con il ricarico del banco. |
 | **Squadre** | Attacco contro difesa di tutte e 20, forma recente, corner. |
 | **Precisione** | Se ci si può fidare, detto in italiano prima che in numeri. Più sotto: calibrazione, confronto col mercato, e i pronostici che l'app ha segnato da sola. |
@@ -429,26 +430,26 @@ cambiare l'impacchettamento cambia due cose diverse, che vale la pena tenere
 separate:
 
 **Il rischio**, che è ovvio. **Il prezzo**, che non lo è: il ricarico del banco
-si moltiplica a ogni selezione. Su una singola paghi il 4.9%; su un'accumulata
-da dieci paghi 1.049¹⁰, cioè il **38%**. Con le stesse dieci selezioni al 75% e
-gli stessi 20 chf:
+si moltiplica a ogni selezione. Su una singola paghi il 5.6% (bet365, misurato);
+su un'accumulata da dieci paghi 1.056¹⁰, cioè il **42%**. Con le stesse dieci
+selezioni al 75% e gli stessi 20 chf:
 
 | come | in attivo | ti torna | al massimo |
 |---|---|---|---|
-| una da 10 | 6% | 12.40 | 220 |
-| 2 da 5 | 42% | 15.75 | 66 |
-| 3 da 3 + 1 | 38% | 17.76 | 37 |
-| 5 da 2 | 28% | 18.18 | 32 |
-| 10 singole | 53% | 19.07 | 25 |
+| una da 10 | 6% | 11.60 | 206 |
+| 2 da 5 | 42% | 15.23 | 64 |
+| 3 da 3 + 1 | 38% | 17.47 | 37 |
+| 5 da 2 | 28% | 17.94 | 32 |
+| 10 singole | 53% | 18.94 | 25 |
 
-Non è un invito a non farle: l'accumulata è l'unica che può pagare 220, e
+Non è un invito a non farle: l'accumulata è l'unica che può pagare 206, e
 nessuna delle altre ci arriva. È che se una la fai, tanto vale sapere che stai
 comprando una lotteria a quel prezzo, e non un pronostico a quel prezzo.
 
-Il 4.9% non è scelto: è misurato, ed è la storia della sezione qui sotto. Le
-stesse righe con il 6.5% che l'app assumeva prima davano 10.65 invece di 12.40
-sull'accumulata — la manopola in **Schedine** rifà tutta la tabella, perché
-quale sia il tuo ricarico lo sai tu e non io.
+Il 5.6% non è scelto: è il ricarico misurato di bet365 su 1930 partite, ed è la
+storia della sezione qui sotto. La manopola in **Schedine** rifà tutta la
+tabella — e quando il **libro** ha otto giocate segnate, il numero che ci
+mette dentro è quello vero di chi gioca, non di un banco medio.
 
 Il conto è **esatto, non simulato**: con dieci selezioni gli scenari possibili
 sono 1024 e si enumerano tutti. Regge però su un'ipotesi — che le selezioni
@@ -472,9 +473,10 @@ Su 1930 partite di Serie A:
 
 | | ricarico |
 |---|---|
-| media dei bookmaker europei | **4.90%** |
+| **bet365** | **5.63%** |
+| media dei bookmaker europei | 4.90% |
+| Betfair Exchange | 0.51% |
 | la migliore del mercato, esito per esito | **0.00%** |
-| Betfair Exchange | **0.51%** |
 | quello che questa app assumeva | 6.50% |
 
 Lo zero non è un errore di conto. Se per ogni singolo esito si prendesse il
@@ -483,19 +485,73 @@ scavalcano a vicenda abbastanza da annullarlo. Non è però una cosa che chi
 gioca su un sito solo possa fare, e infatti il numero che conta per l'app è il
 4.9%.
 
-E qui finisce quello che so davvero. **Sporttip** è un operatore in concessione
-unica in Svizzera, e i monopoli di solito ricaricano più della media europea —
-ma quanto, non l'ho misurato, e non me lo invento. Perciò il valore di partenza
-è il numero vero (4.9%) e sopra la tabella c'è una manopola a quattro
-posizioni: 4.9% misurato, 6.5% quello che assumevo, 8.5% poca concorrenza, 11%
-monopolio. La scheda spiega anche come scoprire il proprio senza fidarsi di
-nessuno: dividere la quota equa scritta qui per quella offerta lì, su due o tre
-partite. **Quel rapporto è il ricarico.**
+**bet365 sta sopra la media europea, non sotto.** Ed è il punto: la media di
+tutti i bookmaker è un numero onesto su banchi che nessuno usa tutti insieme.
+Chi gioca, gioca da qualche parte in particolare. Perciò il valore di partenza
+della manopola è quello di un banco vero e misurato (5.6%), non la media —
+e le altre posizioni servono da confronto: 4.9% la media europea, 8.5% poca
+concorrenza, 11% monopolio.
+
+**Sporttip** e **Eurobet**, gli altri due banchi in uso, in questo file non ci
+sono. Sporttip in particolare è in concessione unica in Svizzera, e i monopoli
+di solito ricaricano di più — ma quanto, non lo so e non me lo invento. Il modo
+per saperlo non è una schermata da chiedere: è **Il mio libro** (sezione
+successiva), che lo misura da otto giocate segnate.
 
 Non è cosmetica. Le stesse dieci selezioni, gli stessi 20 chf: l'accumulata
-rende 12.40 al 4.9% e 7.04 all'11%, perché il ricarico si compone a ogni
-selezione. Un parametro inventato che sposta il risultato del 43% è peggio di
+rende 11.60 al 5.6% e 7.04 all'11%, perché il ricarico si compone a ogni
+selezione. Un parametro inventato che sposta il risultato del 40% è peggio di
 un parametro mancante, perché non si vede.
+
+### Il mio libro: la parte che non si può chiedere
+
+Tutto il resto di questo progetto è replicabile, ed è giusto così. I dati sono
+pubblici, il metodo è scritto qui per intero, e due persone che partono da qui
+arrivano allo stesso posto. La statistica non è di nessuno.
+
+Le giocate di una persona sì. A che quota le ha prese, su quale dei suoi banchi,
+quali ha scelto fra quelle proposte e quali si è inventato. Non si scaricano da
+nessuna parte e non si possono chiedere: si accumulano una alla volta. E
+rispondono a tre domande che il modello, da solo, non può nemmeno formulare.
+
+**1. Quanto costa giocare, davvero.** Non la media europea — il ricarico di
+*questo* banco su *queste* quote. Il libro lo misura in due modi, e uno è
+nettamente migliore:
+
+- **quota tua ÷ migliore del mercato di quel giorno.** Funziona perché il
+  ricarico della migliore del mercato è **zero**, misurato: i banchi si
+  scavalcano abbastanza da annullarlo. Quindi la differenza fra i due prezzi
+  *è*, quasi esattamente, quello che si prende il banco. Nessun modello in
+  mezzo: prezzo contro prezzo. Vale su 1X2 e Over/Under 2.5, gli unici mercati
+  per cui l'archivio porta la quota massima.
+- **quota equa mia ÷ quota tua.** Disponibile su tutti i mercati, ma ci porta
+  dentro il mio errore: se sbaglio io del 3%, quel 3% finisce nel conto del
+  banco. Ripiego, dichiarato come tale.
+
+Da otto giocate in poi compare una quinta posizione nella manopola del
+ricarico — **"Il mio"** — e da lì in poi i conti delle schedine sono i suoi
+invece che una media.
+
+**2. Quanto è calibrato il modello sulle partite che sceglie lui**, che non è
+la stessa cosa che essere calibrato in media: di cento partite ne gioca dieci,
+e quelle dieci sono una selezione, non un campione.
+
+**3. Quando si discosta dal modello, ci guadagna o ci perde?** È la versione
+personale della maledizione del vincitore. Sul modello quella misura fa paura
+(−35% dove crede di avere il 20% di vantaggio). Su una persona non si sa: vede
+cose che il modello non vede — un'assenza, una squadra che sta bene — ma è
+anche l'unica delle due parti che può affezionarsi a una squadra.
+
+Due dettagli di progetto che contano più di quanto sembri:
+
+- **L'esito non lo scrive l'utente.** Si segnano due cose sole, quota presa e
+  banco; il risultato lo mette l'app quando arriva, via `M.haVinto` sui dati
+  già in casa. Chiedere anche il risultato vorrebbe dire chiedere due volte,
+  e la seconda non la fa nessuno — è il motivo per cui la maggior parte dei
+  registri di scommesse resta vuota dopo tre settimane.
+- **Non c'è nessun server.** Il libro sta in `localStorage`, e si esporta e
+  reimporta come testo. Non passa da nessuna parte perché non c'è nessuna parte
+  da cui passare.
 
 ### Le idee buone che i dati hanno bocciato
 

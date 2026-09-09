@@ -1681,51 +1681,105 @@ function candidatiGiornata(){
 /* ══════════════════════════════════════════════════════════════
    QUANTO TI RICARICA IL TUO OPERATORE
 
-   Per mesi qui c'è stato 6.5%, scelto a occhio. Poi l'ho misurato, ed era
-   sbagliato in un modo che vale la pena sapere.
+   Per mesi qui c'è stato 6.5%, scelto a occhio. Poi l'ho misurato, e non era
+   solo sbagliato: era sbagliato nel modo peggiore, cioè PER DIFETTO su un
+   banco e per eccesso su un altro, quindi non c'era un numero solo da correggere.
 
-   Nei file che scarico ci sono, per ogni partita, sia la quota MEDIA di tutti
-   i bookmaker sia la MIGLIORE del mercato. Su 1930 partite:
+   Nei file che scarico ci sono, per ogni partita, la quota media di tutti i
+   bookmaker, la migliore del mercato, e quella di bet365 riga per riga. Su
+   1930 partite di Serie A:
 
-     media dei bookmaker europei    4.90%
-     la migliore del mercato        0.00%
+     bet365                         5.63%
+     media di tutti i bookmaker     4.90%
      Betfair Exchange               0.51%
+     la migliore del mercato        0.00%
 
    Lo zero sulla migliore non è un errore: se per ogni esito si prendesse il
-   banco più generoso, il ricarico collettivo sparisce. Non è però una cosa che
-   chi gioca su un sito solo possa fare.
+   banco più generoso, il ricarico collettivo sparisce. È anche il motivo per
+   cui quel numero è utile — la differenza fra la quota che prendi tu e la
+   migliore del mercato È, quasi esattamente, quello che si prende il tuo banco.
+   È così che il libro misura il ricarico senza passare da me.
 
-   E qui finisce quello che so. Sporttip è un operatore in concessione unica in
-   Svizzera, e i monopoli di solito ricaricano più della media europea — ma
-   quanto, non l'ho misurato e non me lo invento. Il valore di partenza è il
-   numero vero che conosco (4.9%), e la manopola serve a spostarlo se le tue
-   quote dicono altro: bastano un paio di partite per capirlo, dividendo la
-   quota equa che vedi qui per quella che vedi lì.
+   bet365 sta SOPRA la media europea, non sotto. Perciò il valore di partenza
+   qui è il suo (5.6%) e non la media: è un numero misurato, su un banco che
+   usi davvero, invece di una media di banchi che non usi.
+
+   Sporttip ed Eurobet nel file non ci sono. Sporttip in particolare è in
+   concessione unica in Svizzera, e i monopoli di solito ricaricano di più —
+   ma quanto, non lo so e non me lo invento. Il modo per saperlo è il libro:
+   otto giocate segnate lì e il numero è tuo.
    ══════════════════════════════════════════════════════════════ */
 var RICARICHI = [
-  {id:'medio',  v:0.049, nome:'Media europea', testo:'Il ricarico medio dei bookmaker europei, misurato su 1930 partite di Serie A. È il numero vero, ma non è detto sia il tuo.'},
-  {id:'sopra',  v:0.065, nome:'Un po\' sopra', testo:'Quello che questa app assumeva prima di misurarlo. Ragionevole per un operatore non fra i più competitivi.'},
-  {id:'caro',   v:0.085, nome:'Caro',          testo:'Tipico di chi ha poca concorrenza. Con dieci selezioni il banco si prende oltre metà della giocata.'},
-  {id:'monopolio', v:0.11, nome:'Monopolio',   testo:'Un operatore in concessione unica può arrivare qui. Se è il tuo caso, l\'accumulata lunga è quasi un biglietto della lotteria.'}
+  {id:'bet365', v:0.056, nome:'bet365',        testo:'Misurato sulle sue quote di chiusura, 1930 partite di Serie A. È uno dei tre banchi su cui giochi, ed è l\'unico che l\'archivio mi lascia misurare senza chiederti niente.'},
+  {id:'medio',  v:0.049, nome:'Media europea', testo:'Il ricarico medio di tutti i bookmaker del file, sulle stesse 1930 partite. Serve da confronto: bet365 sta sopra la media, non sotto.'},
+  {id:'caro',   v:0.085, nome:'Caro',          testo:'Tipico di chi ha poca concorrenza, o di un mercato di nicchia dentro un banco per il resto normale. Con dieci selezioni il banco si prende oltre metà della giocata.'},
+  {id:'monopolio', v:0.11, nome:'Monopolio',   testo:'Un operatore in concessione unica può arrivare qui, e Sporttip lo è. Non l\'ho misurato e non me lo invento: se giochi lì, segnalo nel libro e in otto giocate lo sappiamo.'}
 ];
 var CHIAVE_RICARICO = 'seriea_ricarico_v1';
+
+/* Il ricarico misurato sul TUO libro, quando ce n'è abbastanza.
+
+   È il punto in cui questa app smette di usare una media e comincia a usare
+   te. Il numero preferito è quello che non passa dal modello — la tua quota
+   contro la migliore del mercato di quel giorno — perché la migliore del
+   mercato ha ricarico zero (misurato: 0.00% su 1930 partite), e quindi la
+   differenza fra le due È quello che si prende il tuo banco. Dove quel
+   confronto non c'è si ripiega sulla quota equa mia, che è disponibile sempre
+   ma porta dentro anche il mio errore.
+
+   Sotto le otto giocate non torna niente: un ricarico stimato su tre righe è
+   un numero che sembra preciso e non lo è. */
+function ricaricoDalLibro(){
+  var l = (typeof libro === 'function') ? libro() : [];
+  if(!l.length) return null;
+  var puro = [], stimato = [];
+  l.forEach(function(g){
+    if(!(g.presa > 1) || !(g.equa > 1)) return;
+    var mio = _quotaMercatoDi(g);
+    if(mio > 1) puro.push(mio / g.presa - 1);
+    stimato.push(g.equa / g.presa - 1);
+  });
+  var usa = puro.length >= 8 ? puro : stimato;
+  var comeSi = puro.length >= 8 ? 'mercato' : 'equa';
+  if(usa.length < 8) return null;
+  var m = usa.reduce(function(a,b){ return a+b; }, 0) / usa.length;
+  var sd = Math.sqrt(usa.reduce(function(s,x){ return s+(x-m)*(x-m); }, 0) / Math.max(1, usa.length-1));
+  return {v: Math.max(0, Math.min(0.30, m)), n: usa.length, come: comeSi,
+          incertezza: sd / Math.sqrt(usa.length)};
+}
+
+function ricarichiDisponibili(){
+  var mio = ricaricoDalLibro();
+  if(!mio) return RICARICHI;
+  return [{id:'mio', v:mio.v, nome:'Il mio',
+           testo:'Misurato sulle '+mio.n+' giocate del tuo libro'+
+             (mio.come === 'mercato'
+               ? ', confrontando le tue quote con la migliore del mercato di quel giorno. '+
+                 'Non passa da me: è prezzo contro prezzo.'
+               : ', confrontando le tue quote con la mia quota equa. Dentro c\'è anche il mio errore, '+
+                 'quindi è un\'indicazione — diventerà pulito quando avrai otto giocate su 1X2 o '+
+                 'Over/Under 2.5, che sono i mercati per cui ho una quota di mercato con cui '+
+                 'confrontarmi.')+
+             ' Incertezza: ±'+(100*1.96*mio.incertezza).toFixed(1)+' punti.'}].concat(RICARICHI);
+}
 
 function ricarico(){
   if(S.ricarico) return S.ricarico;
   var id = null;
   try{ id = localStorage.getItem(CHIAVE_RICARICO); }catch(e){}
-  S.ricarico = RICARICHI.filter(function(x){ return x.id === id; })[0] || RICARICHI[0];
+  var elenco = ricarichiDisponibili();
+  S.ricarico = elenco.filter(function(x){ return x.id === id; })[0] || elenco[0];
   return S.ricarico;
 }
 function impostaRicarico(id){
-  var r = RICARICHI.filter(function(x){ return x.id === id; })[0];
+  var r = ricarichiDisponibili().filter(function(x){ return x.id === id; })[0];
   if(!r) return;
   S.ricarico = r;
   try{ localStorage.setItem(CHIAVE_RICARICO, id); }catch(e){}
   render(); window.scrollTo(0,0);
 }
-/* Il ricarico misurato sulle quote di QUESTA giornata, invece che il 4.9%
-   dell'archivio. Non e' la stessa cosa: una giornata con due partite in
+/* Il ricarico misurato sulle quote di QUESTA giornata, invece che il numero
+   d'archivio. Non e' la stessa cosa: una giornata con due partite in
    equilibrio e otto scontate ha un ricarico diverso dalla media di cinque
    stagioni, e vederlo muoversi ogni settimana e' il modo piu' rapido di
    capire che quel numero e' misurabile e non un'opinione. */
@@ -1768,17 +1822,30 @@ function sceltaRicarico(){
       riga('Betfair Exchange', mis.borsa, 'dove si scommette contro altra gente, non contro un banco');
   }
   return '<div class="h2">Quanto ti ricarica il tuo operatore</div><div class="card">'+
-    '<div class="prud">'+RICARICHI.map(function(x){
+    '<div class="prud">'+ricarichiDisponibili().map(function(x){
       return '<button class="prudb'+(x.id===a.id?' on':'')+'" onclick="impostaRicarico(\''+x.id+'\')">'+
         '<b>'+esc(x.nome)+'</b><em>'+(100*x.v).toFixed(1)+'%</em></button>';
     }).join('')+'</div>'+
-    '<div class="note" style="margin-top:2px">'+esc(a.testo)+'<br><br>'+
+    '<div class="note" style="margin-top:2px">'+esc(a.testo)+
+    (a.id === 'mio'
+      ? '<br><br>Questa posizione esiste perché hai tenuto il <b>libro</b>. Finché non c\'era, '+
+        'qui la scelta migliore che potevo offrirti era una media europea che non è di nessuno.'
+      : (ricaricoDalLibro()
+          ? '<br><br>Nel tuo libro adesso c\'è abbastanza per misurare il <b>tuo</b> ricarico: '+
+            'è la prima posizione del quadrante.'
+          : '<br><br>Segna otto giocate nel <b>libro</b> e qui compare una quinta posizione: '+
+            'la tua, misurata sulle quote che prendi davvero invece che su una media europea.'))+
+    '<br><br>'+
     'Questo numero governa tutta la tabella qui sotto, e non è un dettaglio: su una singola '+
     'costa il '+(100*a.v).toFixed(1)+'%, su un\'accumulata da dieci costa il <b>'+
     Math.round(100*(1-1/Math.pow(1+a.v,10)))+'%</b>, perché si moltiplica a ogni selezione.<br><br>'+
-    'Come scoprire il tuo: prendi una partita, guarda la quota equa che scrivo io e quella che ti '+
-    'offre il tuo operatore. Il rapporto fra le due <b>è</b> il ricarico. Con due o tre partite hai '+
-    'il numero, e da lì in poi i conti di quest\'app sono i tuoi invece che una media.</div>'+
+    (a.id === 'mio'
+      ? 'Da qui in giù i conti di quest\'app sono i <b>tuoi</b>, non una media di banchi che non usi. '+
+        'Più segni, più il numero si stringe.'
+      : 'Come scoprire il tuo senza fare niente: segna le giocate nel <b>libro</b>. Ti chiede solo a '+
+        'che quota l\'hai presa e su quale banco, e da otto giocate in poi il ricarico te lo misuro io, '+
+        'confrontando le tue quote con la migliore del mercato di quel giorno — che ha ricarico zero, '+
+        'quindi la differenza <b>è</b> quello che si prende il tuo banco.')+'</div>'+
     righe + '</div>';
 }
 
@@ -1924,13 +1991,14 @@ function cardQuanteNePrendi(){
    Le stesse dieci selezioni, la stessa puntata, e cinque modi di giocarle. Non
    cambia solo il rischio — cambia quanto ti resta in mano nel lungo periodo, e
    cambia tantissimo. Il motivo è che il ricarico del banco si MOLTIPLICA a
-   ogni selezione: quello che su una singola costa il 4.9%, su un'accumulata da
-   dieci costa 1.049¹⁰, cioè il 39% della giocata.
+   ogni selezione: quello che su una singola costa il 5.6%, su un'accumulata da
+   dieci costa 1.056¹⁰, cioè il 42% della giocata.
 
    Quanto valga davvero quel ricarico lo decide la manopola qui sopra, e il suo
-   valore di partenza è misurato, non assunto: 4.9% è il ricarico medio dei
-   bookmaker europei su 1930 partite di Serie A. Per mesi qui c'è stato 6.5%,
-   che avevo scelto a occhio.
+   valore di partenza è misurato su un banco vero: 5.63% è quello di bet365 su
+   1930 partite di Serie A. Per mesi qui c'è stato 6.5%, scelto a occhio, e per
+   un giorno la media europea (4.9%) — che è un numero onesto ma di banchi che
+   non usi, e per giunta più basso del tuo.
 
    Non è un invito a non farle. È che se una la fai, tanto vale sapere che
    stai comprando una lotteria a quel prezzo, e non un pronostico a quel
@@ -2613,8 +2681,14 @@ function renderPartita(){
         return '<div class="row"><div class="pos">'+(i+1)+'</div>'+
           '<div class="n">'+esc(m.nome)+'<em>anche nello scenario sfavorevole resta sopra il '+
           pc(m.p05)+'</em></div>'+
-          '<div class="v">'+pc(m.p)+'<span>quota equa '+nu(m.quota,2)+'</span></div></div>';
+          '<div class="v">'+pc(m.p)+'<span>quota equa '+nu(m.quota,2)+'</span></div>'+
+          '<button class="btn ghost sm" style="width:auto;margin-left:8px;padding:7px 10px" '+
+          'onclick="segnaDaSelezione(\''+chiavePartita(p)+'\',\''+m.id+'\')">segna</button></div>';
       }).join('')+
+      '<div class="note">Il bottone <b>segna</b> mette la giocata nel tuo libro: ti chiede solo a che '+
+      'quota l\'hai presa e su quale banco, il risultato lo metto io quando arriva. Da lì escono il '+
+      'tuo ricarico vero — quello di bet365, di Sporttip, di Eurobet, misurati e non assunti — e la '+
+      'risposta a se ti conviene scegliere diverso da me.</div>'+
       '<div class="note"><p><b>Solida non vuol dire conveniente.</b> Questa classifica ordina per '+
       'probabilità, e al prezzo che ti fa il banco una giocata molto probabile rende in media meno di '+
       'quanto costa: il margine del 5-7% se lo tiene lui, e su una quota bassa è quasi tutto quello '+
@@ -2833,6 +2907,522 @@ function vai(t){
   S.tab = t; render(); window.scrollTo(0,0);
 }
 
+
+/* ══════════════════════════════════════════════════════════════
+   IL MIO LIBRO
+
+   Questa è la parte dell'app che nessun altro può avere.
+
+   Tutto il resto — il Dixon-Coles, l'ancoraggio, il backtest — chiunque può
+   chiederlo e ottenerlo uguale. I dati sono pubblici, il metodo è scritto nel
+   README, e due persone che partono da lì arrivano allo stesso posto. È giusto
+   così: la statistica non è di nessuno.
+
+   Quello che invece è di UNA persona sola sono le sue giocate. A che quota le
+   ha prese davvero, su quale dei suoi banchi, quali ha scelto fra quelle che
+   il modello proponeva e quali si è inventato per conto suo. Sono dati che non
+   esistono da nessuna parte, non si scaricano, e non si possono chiedere:
+   si accumulano una giocata alla volta.
+
+   E servono a rispondere a tre domande che il modello, da solo, non può
+   nemmeno formulare:
+
+     1. QUANTO MI COSTA GIOCARE. Non il 4.9% medio europeo — il mio, su
+        bet365, su Sporttip, su Eurobet, misurato sulle quote che ho preso
+        davvero. Finora quel numero era una manopola da girare a occhio.
+
+     2. QUANTO SONO CALIBRATO IO. Il backtest dice quanto è preciso il
+        modello su tutte le partite. Il libro dice quanto è preciso su
+        QUELLE CHE HO GIOCATO — che sono una selezione, non un campione, e
+        possono comportarsi diversamente.
+
+     3. QUANDO MI DISCOSTO, CI GUADAGNO O CI PERDO? Questa è la domanda
+        interessante, ed è la versione personale della maledizione del
+        vincitore. Il modello propone; io scelgo. A volte prendo quello che
+        propone, a volte no. Dopo qualche decina di giocate si può misurare
+        chi dei due ha ragione — e la risposta non è ovvia, perché io so
+        cose che il modello non sa, ma sono anche l'unico dei due che può
+        innamorarsi di una squadra.
+
+   Niente di tutto questo si inventa. Finché le giocate sono poche, qui sotto
+   c'è scritto che sono poche.
+   ══════════════════════════════════════════════════════════════ */
+
+var CHIAVE_LIBRO = 'seriea_libro_v1';
+
+/* I banchi su cui si gioca davvero. bet365 è anche nell'archivio (football-data
+   lo pubblica su tutte e 1930 le partite), quindi per quello un numero di
+   partenza c'è già; gli altri due si misurano solo qui. */
+var OPERATORI = [
+  {id:'bet365',   nome:'bet365'},
+  {id:'sporttip', nome:'Sporttip'},
+  {id:'eurobet',  nome:'Eurobet'},
+  {id:'altro',    nome:'Altro'}
+];
+function nomeOperatore(id){
+  var o = OPERATORI.filter(function(x){ return x.id === id; })[0];
+  return o ? o.nome : id;
+}
+
+function libro(){
+  if(S._libro) return S._libro;
+  var l = [];
+  try{ l = JSON.parse(localStorage.getItem(CHIAVE_LIBRO) || '[]'); }catch(e){ l = []; }
+  if(!Array.isArray(l)) l = [];
+  S._libro = l;
+  return l;
+}
+function salvaLibro(){
+  try{ localStorage.setItem(CHIAVE_LIBRO, JSON.stringify(S._libro || [])); }catch(e){}
+  S.ricarico = null;
+}
+
+/* La partita giocata che corrisponde a una riga del libro. La tolleranza sui
+   giorni c'è perché un anticipo spostato cambia data fra il momento in cui si
+   segna la giocata e il momento in cui arriva il risultato. */
+function partitaDiGiocata(g){
+  var ps = (S.doc && S.doc.partite) || [];
+  for(var i = ps.length - 1; i >= 0; i--){
+    var p = ps[i];
+    if(p.gc == null || p.c !== g.c || p.v !== g.v) continue;
+    if(Math.abs(M.giorni(p.d, g.d)) <= 5) return p;
+  }
+  return null;
+}
+
+/* L'esito non lo scrive l'utente: lo legge l'app dai dati quando arrivano.
+   È il motivo per cui questo registro può funzionare — chiedere anche il
+   risultato vorrebbe dire chiedere due volte, e la seconda non la fa nessuno.
+
+   Torna: 'presa', 'persa', 'attesa' (partita non ancora giocata o risultato
+   non ancora arrivato), 'ignota' (mercato che dipende dal primo tempo, e il
+   primo tempo in archivio non c'è). */
+function esitoGiocata(g){
+  var p = partitaDiGiocata(g);
+  if(!p) return {stato:'attesa', p:null};
+  var v = M.haVinto(g.mercato, p.gc, p.gv, p.ptc, p.ptv);
+  if(v == null) return {stato:'ignota', p:p};
+  return {stato: v ? 'presa' : 'persa', p:p};
+}
+
+/* Quanto torna indietro: la puntata per la quota se è presa, zero se è persa. */
+function ritornoGiocata(g, stato){
+  if(stato === 'presa') return g.punt * g.presa;
+  if(stato === 'persa') return 0;
+  return null;
+}
+
+function segnaDaSelezione(chiave, idMercato){
+  var p = null, l = partiteGiornata();
+  for(var i = 0; i < l.length; i++) if(chiavePartita(l[i]) === chiave) { p = l[i]; break; }
+  if(!p) return;
+  var mk = mercatiDi(p, 1500, true);
+  if(!mk) return;
+  var voce = mk.voci.filter(function(m){ return m.id === idMercato; })[0];
+  if(!voce) return;
+  var sc = sceltePartita(p, 3);
+  var suggerita = !!(sc && sc.piuSolida && sc.piuSolida.id === idMercato);
+  apriSegna({d:p.d, c:p.c, v:p.v, mercato:voce.id, nome:voce.nome,
+             p:voce.p, p05:voce.p05, equa:voce.quota, suggerita:suggerita,
+             qmax: p.qmax || null, qex: p.qex || null,
+             qoumax: p.qoumax || null, qou: p.qou || null});
+}
+
+function apriSegna(base){
+  S._segna = base;
+  var op = null;
+  try{ op = localStorage.getItem('seriea_operatore_v1'); }catch(e){}
+  if(!op) op = OPERATORI[0].id;
+  var h = testa('Segna la giocata', esc(base.c)+' — '+esc(base.v));
+  h += '<div class="card"><div class="row"><div class="n">'+esc(base.nome)+
+    '<em>quello che dico io: '+pc(base.p)+', quota equa '+nu(base.equa,2)+'</em></div>'+
+    '<div class="v">'+nu(base.equa,2)+'</div></div></div>';
+  h += '<div class="h2">A che quota l\'hai presa</div><div class="card">'+
+    '<div class="riga-punta"><input id="segnaQ" type="number" step="0.01" inputmode="decimal" '+
+      'value="'+nu(base.equa*0.95,2)+'" oninput="anteprimaSegna()">'+
+      '<span>la quota che c\'è scritta sul biglietto, non quella che dico io</span></div>'+
+    '<div class="prud" style="margin-top:10px">'+OPERATORI.map(function(o){
+      return '<button class="prudb'+(o.id===op?' on':'')+'" id="op_'+o.id+'" '+
+        'onclick="scegliOperatore(\''+o.id+'\')"><b>'+esc(o.nome)+'</b></button>';
+    }).join('')+'</div>'+
+    '<div class="riga-punta" style="margin-top:10px"><input id="segnaP" type="number" step="1" '+
+      'inputmode="decimal" value="'+nu(puntata(),0)+'" oninput="anteprimaSegna()">'+
+      '<span>chf su questa selezione</span></div>'+
+    '<div class="note" id="segnaNota" style="margin-top:10px"></div></div>';
+  h += '<button class="btn acc" style="margin-top:14px" onclick="confermaSegna()">Segna sul libro</button>';
+  h += '<button class="btn ghost" style="margin-top:8px" onclick="chiudi()">Lascia perdere</button>';
+  modale(h);
+  anteprimaSegna();
+}
+
+function scegliOperatore(id){
+  S._segnaOp = id;
+  try{ localStorage.setItem('seriea_operatore_v1', id); }catch(e){}
+  OPERATORI.forEach(function(o){
+    var el = document.getElementById('op_'+o.id);
+    if(el) el.className = 'prudb' + (o.id === id ? ' on' : '');
+  });
+  anteprimaSegna();
+}
+function operatoreScelto(){
+  if(S._segnaOp) return S._segnaOp;
+  var op = null;
+  try{ op = localStorage.getItem('seriea_operatore_v1'); }catch(e){}
+  return op || OPERATORI[0].id;
+}
+
+/* Il ricarico di questa singola giocata, mostrato mentre lo si scrive. È il
+   pezzo che trasforma il registro da compito in strumento: si vede subito
+   quanto costa quel prezzo, invece di scoprirlo dopo trenta giocate. */
+function anteprimaSegna(){
+  var b = S._segna; if(!b) return;
+  var el = document.getElementById('segnaNota'); if(!el) return;
+  var q = parseFloat((document.getElementById('segnaQ')||{}).value);
+  var pt = parseFloat((document.getElementById('segnaP')||{}).value);
+  if(!(q > 1)){ el.innerHTML = 'Scrivi la quota che ti danno.'; return; }
+  var ric = b.equa / q - 1;
+  var atteso = b.p * q - 1;
+  var t = 'Rispetto alla mia quota equa ('+nu(b.equa,2)+') questo prezzo ti ricarica il <b>'+
+    (100*ric).toFixed(1)+'%</b>. ';
+  t += atteso >= 0
+    ? 'Col mio numero il valore atteso sarebbe positivo (+'+(100*atteso).toFixed(1)+'%) — ma prima di '+
+      'crederci leggi la <b>maledizione del vincitore</b> in Precisione: dove il modello è più in '+
+      'disaccordo col mercato è dove sbaglia di più.'
+    : 'Col mio numero il valore atteso è '+(100*atteso).toFixed(1)+'%. È normale: è quello che il banco '+
+      'si prende, ed è la ragione per cui la domanda giusta non è "vinco?" ma "quanto mi costa?".';
+  if(isFinite(pt) && pt > 0) t += '<br><br>Se esce ti tornano <b>'+nu(pt*q,2)+' chf</b>.';
+  t += '<br><br>Questa riga finisce nel <b>tuo</b> libro, che sta solo su questo telefono. '+
+       'Da lì esce il tuo ricarico vero, la tua calibrazione, e la risposta a se ti conviene '+
+       'discostarti da quello che propongo.';
+  el.innerHTML = t;
+}
+
+function confermaSegna(){
+  var b = S._segna; if(!b) return;
+  var q = parseFloat((document.getElementById('segnaQ')||{}).value);
+  var pt = parseFloat((document.getElementById('segnaP')||{}).value);
+  if(!(q > 1) || !(pt > 0)) return;
+  libro().push({
+    id: 'g' + Date.now() + Math.floor(Math.random()*1000),
+    quando: new Date().toISOString().slice(0,10),
+    d: b.d, c: b.c, v: b.v,
+    mercato: b.mercato, nome: b.nome,
+    p: Math.round(b.p*10000)/10000, p05: Math.round((b.p05||b.p)*10000)/10000,
+    equa: Math.round(b.equa*1000)/1000,
+    presa: Math.round(q*1000)/1000,
+    op: operatoreScelto(),
+    punt: pt,
+    suggerita: !!b.suggerita,
+    /* le quote di mercato di quel momento, congelate: servono a misurare il
+       ricarico SENZA passare dal modello, che ha un errore suo */
+    qmax: b.qmax || null, qex: b.qex || null,
+    qoumax: b.qoumax || null, qou: b.qou || null
+  });
+  salvaLibro();
+  chiudi();
+  S.tab = 'libro'; render(); window.scrollTo(0,0);
+}
+
+/* Il quadrante del ricarico tiene in memoria la posizione scelta. Quando il
+   libro cambia, quella memoria può essere diventata sbagliata — è l'ottava
+   giocata a far comparire la posizione "Il mio", e senza questa riga non
+   comparirebbe fino al prossimo caricamento della pagina. */
+function scordaRicarico(){ S.ricarico = null; }
+
+function cancellaGiocata(id){
+  S._libro = libro().filter(function(g){ return g.id !== id; });
+  salvaLibro(); scordaRicarico();
+  render();
+}
+
+/* ── le misure ─────────────────────────────────────────────────────────── */
+
+function misureLibro(){
+  var l = libro();
+  if(!l.length) return null;
+  var righe = l.map(function(g){
+    var e = esitoGiocata(g);
+    return {g:g, stato:e.stato, partita:e.p, ritorno:ritornoGiocata(g, e.stato)};
+  });
+  righe.sort(function(a,b){ return a.g.d < b.g.d ? 1 : (a.g.d > b.g.d ? -1 : 0); });
+  var chiuse = righe.filter(function(r){ return r.stato==='presa' || r.stato==='persa'; });
+
+  var giocato = 0, tornato = 0, prese = 0, promesse = 0;
+  chiuse.forEach(function(r){
+    giocato += r.g.punt; tornato += r.ritorno;
+    if(r.stato==='presa') prese++;
+    promesse += r.g.p;
+  });
+
+  /* Il ricarico per operatore, in due modi.
+
+     Il primo passa dal modello: quota equa mia / quota tua. È disponibile
+     sempre, ma dentro c'è anche l'errore del modello — se sbaglio io di un
+     3%, quel 3% finisce nel conto del banco.
+
+     Il secondo non passa dal modello: la quota migliore del mercato di quel
+     giorno / la tua. Confronta un prezzo con un prezzo, senza nessuna mia
+     opinione in mezzo. Vale solo sull'1X2, perché è lì che l'archivio porta
+     la quota massima — ma dove c'è, è quello il numero da guardare. */
+  var perOp = {};
+  righe.forEach(function(r){
+    var g = r.g, o = perOp[g.op] = perOp[g.op] || {n:0, somma:0, nPuro:0, sommaPuro:0,
+                                                   giocato:0, tornato:0, chiuse:0, prese:0};
+    o.n++; o.somma += (g.equa / g.presa - 1);
+    var mio = _quotaMercatoDi(g);
+    if(mio){ o.nPuro++; o.sommaPuro += (mio / g.presa - 1); }
+    if(r.stato==='presa' || r.stato==='persa'){
+      o.chiuse++; o.giocato += g.punt; o.tornato += r.ritorno;
+      if(r.stato==='presa') o.prese++;
+    }
+  });
+
+  /* Suggerite contro tue: la maledizione del vincitore, versione personale. */
+  function blocco(f){
+    var s = chiuse.filter(f);
+    var gi = 0, to = 0, pr = 0, pro = 0;
+    s.forEach(function(r){ gi += r.g.punt; to += r.ritorno; pro += r.g.p; if(r.stato==='presa') pr++; });
+    return {n:s.length, prese:pr, promesse:pro, giocato:gi, tornato:to,
+            roi: gi > 0 ? to/gi - 1 : null};
+  }
+
+  return {
+    righe: righe, chiuse: chiuse.length, aperte: righe.length - chiuse.length,
+    giocato: giocato, tornato: tornato,
+    roi: giocato > 0 ? tornato/giocato - 1 : null,
+    prese: prese, promesse: promesse,
+    perOperatore: perOp,
+    suggerite: blocco(function(r){ return r.g.suggerita; }),
+    mie: blocco(function(r){ return !r.g.suggerita; })
+  };
+}
+
+/* La quota di mercato per lo stesso esito, congelata al momento della giocata.
+   Solo 1X2: sugli altri mercati l'archivio non porta una quota di riferimento,
+   e inventarne una vorrebbe dire rimettere in mezzo il modello. */
+function _quotaMercatoDi(g){
+  var q = g.qmax || g.qex;
+  if(q && q.length === 3){
+    if(g.mercato === '1') return q[0];
+    if(g.mercato === 'X') return q[1];
+    if(g.mercato === '2') return q[2];
+  }
+  var o = g.qoumax || g.qou;
+  if(o && o.length === 2){
+    if(g.mercato === 'O25') return o[0];
+    if(g.mercato === 'U25') return o[1];
+  }
+  return null;
+}
+
+function tabLibro(){
+  var m = misureLibro();
+  var h = '';
+  if(!m){
+    h += '<div class="card"><div class="empty"><b>Il libro è vuoto</b>'+
+      'Vai in <b>Giornata</b>, apri una partita e usa <b>Segna la giocata</b> quando ne piazzi una. '+
+      'Ti chiedo due cose sole: a che quota l\'hai presa e su quale banco. Il risultato lo metto io '+
+      'quando arriva.</div></div>';
+    h += cardPerchePersonale();
+    return h;
+  }
+  h += '<div class="hero"><div class="l">Nel libro</div>'+
+    '<div class="v">'+m.righe.length+'</div>'+
+    '<div class="s">'+m.chiuse+' già decise'+(m.aperte?', '+m.aperte+' ancora aperte':'')+'. '+
+    (m.chiuse >= 8
+      ? 'Da qui in giù ci sono i tuoi numeri, non le medie di nessuno.'
+      : 'Con meno di una decina di giocate chiuse i numeri qui sotto non vogliono ancora dire niente: '+
+        'ci sono per farti vedere cosa diventeranno.')+'</div></div>';
+
+  /* il conto vero */
+  if(m.chiuse){
+    var atteso = m.promesse;
+    h += '<div class="h2">Come sta andando</div><div class="card">'+
+      '<div class="kpi">'+
+      '<div><div class="l">Giocato</div><div class="v">'+nu(m.giocato,0)+'</div><div class="s">chf</div></div>'+
+      '<div><div class="l">Tornato</div><div class="v">'+nu(m.tornato,0)+'</div><div class="s">chf</div></div>'+
+      '<div><div class="l">Saldo</div><div class="v" style="color:'+
+        (m.tornato>=m.giocato?'var(--ok)':'var(--warn)')+'">'+
+        (m.tornato>=m.giocato?'+':'')+nu(m.tornato-m.giocato,0)+'</div><div class="s">chf</div></div>'+
+      '</div>'+
+      '<div class="row"><div class="n">Ne hai prese<em>su '+m.chiuse+' decise</em></div>'+
+        '<div class="v">'+m.prese+'</div></div>'+
+      '<div class="row"><div class="n">Io ne promettevo<em>somma delle probabilità che ti avevo dato</em></div>'+
+        '<div class="v">'+nu(atteso,1)+'</div></div>'+
+      '<div class="note">'+_testoCalibrazione(m.prese, atteso, m.chiuse)+'</div></div>';
+  }
+
+  /* il ricarico, per banco */
+  var ops = Object.keys(m.perOperatore);
+  if(ops.length){
+    h += '<div class="h2">Quanto ti costa ogni banco</div><div class="card">';
+    ops.sort(function(a,b){ return m.perOperatore[b].n - m.perOperatore[a].n; }).forEach(function(id){
+      var o = m.perOperatore[id];
+      var r1 = o.somma / o.n;
+      var r2 = o.nPuro ? o.sommaPuro / o.nPuro : null;
+      var vero = r2 != null ? r2 : r1;
+      h += '<div class="row"><div class="n">'+esc(nomeOperatore(id))+
+        '<em>'+o.n+' giocat'+(o.n===1?'a':'e')+
+        (r2 != null ? ' · '+o.nPuro+' confrontabil'+(o.nPuro===1?'e':'i')+' col mercato'
+                    : ' · nessuna confrontabile col mercato')+
+        '</em></div>'+
+        '<div class="v">'+(100*vero>=0?'':'−')+Math.abs(100*vero).toFixed(1)+'%'+
+        '<span>'+(r2 != null ? 'misurato sul mercato' : 'stimato con la mia quota equa')+'</span>'+
+        '</div></div>';
+    });
+    h += '<div class="note"><p>Due modi di misurarlo, e non valgono uguale.</p>'+
+      '<p>Il <b>migliore</b> non passa da me: confronta la tua quota con la <b>migliore del mercato di '+
+      'quel giorno</b>, prezzo contro prezzo. E funziona per un motivo che vale la pena sapere — il '+
+      'ricarico della migliore del mercato, misurato su 1930 partite di Serie A, è <b>zero</b>: i banchi '+
+      'si scavalcano abbastanza da annullarlo. Quindi la differenza fra la tua quota e quella è, quasi '+
+      'esattamente, quello che si prende il tuo banco. Vale sull\'1X2 e sull\'Over/Under 2.5, gli unici '+
+      'due mercati per cui l\'archivio porta la quota massima.</p>'+
+      '<p>L\'altro è <b>quota equa mia ÷ quota tua</b>: c\'è per tutti i mercati, ma dentro c\'è anche '+
+      'il mio errore — se sbaglio io del 3%, quel 3% finisce nel conto del banco. Si usa quando il primo '+
+      'non è disponibile, e va letto come un\'indicazione.</p>'+
+      '<p>Un numero <b>negativo</b> vuol dire che hai preso meglio della migliore del mercato di quel '+
+      'giorno: succede quando punti presto e la quota poi si abbassa. È buon segno, non un errore.</p>'+
+      (ops.length > 1
+        ? '<br><br>Con più banchi la differenza fra le righe <b>è</b> quanto ti conviene aprire l\'altra '+
+          'app prima di puntare. Sul lungo periodo è la voce che sposta di più, più del modello.'
+        : '<br><br>Quando avrai segnato giocate su più di un banco, qui vedrai quale ti conviene, '+
+          'e non per sentito dire.')+
+      '</div></div>';
+  }
+
+  /* la domanda interessante */
+  if(m.suggerite.n + m.mie.n > 0){
+    h += '<div class="h2">Quando ti discosti da me</div><div class="card">'+
+      '<div class="row"><div class="n">Quelle che proponevo io<em>la più solida della partita</em></div>'+
+        '<div class="v">'+m.suggerite.n+
+        (m.suggerite.n?'<span>'+m.suggerite.prese+' prese, ne promettevo '+nu(m.suggerite.promesse,1)+'</span>':'')+
+        '</div></div>'+
+      '<div class="row"><div class="n">Quelle che hai scelto tu<em>un altro mercato della stessa partita</em></div>'+
+        '<div class="v">'+m.mie.n+
+        (m.mie.n?'<span>'+m.mie.prese+' prese, ne promettevo '+nu(m.mie.promesse,1)+'</span>':'')+
+        '</div></div>'+
+      (m.suggerite.roi != null && m.mie.roi != null
+        ? '<div class="row"><div class="n"><b>Reso per franco giocato</b></div><div class="v">'+
+          (100*m.suggerite.roi>=0?'+':'')+(100*m.suggerite.roi).toFixed(0)+'%'+
+          '<span>tue: '+(100*m.mie.roi>=0?'+':'')+(100*m.mie.roi).toFixed(0)+'%</span></div></div>'
+        : '')+
+      '<div class="note">È la versione personale della <b>maledizione del vincitore</b>. '+
+      'Sul modello l\'ho misurata e fa paura: dove si scosta di più dal mercato è dove perde di più '+
+      '(−35% quando crede di avere il 20% di vantaggio). Su di te non lo so ancora, e non lo sa '+
+      'nessuno: tu vedi cose che io non vedo — un\'assenza, una squadra che sta bene — ma sei anche '+
+      'l\'unico dei due che può affezionarsi a una squadra. Serviranno qualche decina di giocate per '+
+      'ciascuna colonna prima che questi numeri vogliano dire qualcosa.</div></div>';
+  }
+
+  /* le righe */
+  h += '<div class="h2">Le giocate<span class="r">'+m.righe.length+'</span></div><div class="card">';
+  h += m.righe.map(function(r){
+    var g = r.g;
+    var col = r.stato==='presa' ? 'var(--ok)' : (r.stato==='persa' ? 'var(--warn)' : 'var(--mute)');
+    var eti = {presa:'presa', persa:'persa', attesa:'in attesa', ignota:'non decidibile'}[r.stato];
+    return '<div class="row"><div class="n">'+esc(g.nome)+
+      '<em>'+esc(sigla(g.c))+'–'+esc(sigla(g.v))+' · '+esc(dataBreve(g.d))+' · '+
+      esc(nomeOperatore(g.op))+' @'+nu(g.presa,2)+' · '+nu(g.punt,0)+' chf</em></div>'+
+      '<div class="v" style="color:'+col+'">'+eti+
+      (r.ritorno != null ? '<span>'+nu(r.ritorno,2)+' chf</span>' : '<span>'+pc(g.p)+'</span>')+
+      '</div>'+
+      '<button class="btn ghost sm" style="margin-left:8px" onclick="cancellaGiocata(\''+g.id+'\')">×</button>'+
+      '</div>';
+  }).join('');
+  h += '</div>';
+
+  h += cardPortaVia();
+  h += cardPerchePersonale();
+  return h;
+}
+
+function _testoCalibrazione(prese, promesse, n){
+  if(!n) return '';
+  var sd = Math.sqrt(Math.max(0.5, promesse * (1 - promesse/Math.max(1,n))));
+  var z = (prese - promesse) / Math.max(0.7, sd);
+  if(n < 15) return 'Con '+n+' giocate decise questo confronto non dice ancora niente: la differenza '+
+    'fra '+prese+' e '+nu(promesse,1)+' sta dentro il caso qualunque cosa succeda. Serve qualche decina.';
+  if(Math.abs(z) < 1.6) return 'Ne hai prese '+prese+' e io ne promettevo '+nu(promesse,1)+': è la stessa '+
+    'cosa (z = '+nu(z,1)+'). Le probabilità che ti do sono oneste sulle partite che giochi tu, che è una '+
+    'cosa diversa dall\'essere oneste in media — tu ne scegli dieci su cento.';
+  if(z > 0) return 'Ne hai prese '+prese+' contro le '+nu(promesse,1)+' che promettevo (z = +'+nu(z,1)+'): '+
+    'sono stato prudente sulle partite che scegli tu. Può essere fortuna, e con questi numeri lo è quasi '+
+    'sempre — ma se resta così anche fra cinquanta giocate, vuol dire che scegli bene.';
+  return 'Ne hai prese '+prese+' contro le '+nu(promesse,1)+' che promettevo (z = '+nu(z,1)+'). '+
+    'Se non è sfortuna, è il caso in cui le mie probabilità sono ottimiste proprio sulle giocate che '+
+    'preferisci — e allora conviene guardare la colonna "quando ti discosti da me" qui sopra.';
+}
+
+/* Un libro che vive solo dentro un browser è un libro che si perde. */
+function cardPortaVia(){
+  return '<div class="h2">Portalo via</div><div class="card">'+
+    '<div class="note">Il libro sta nella memoria di questo browser, e basta svuotare i dati del sito '+
+    'per perderlo. Qui sotto lo copi in un file di testo: tienilo dove vuoi, e rimettilo dentro da un '+
+    'altro telefono quando ti serve. Non passa da nessun server — non c\'è nessun server.</div>'+
+    '<button class="btn ghost sm" style="margin-top:10px" onclick="esportaLibro()">Copia il libro</button> '+
+    '<button class="btn ghost sm" style="margin-top:10px" onclick="apriImportaLibro()">Rimettilo dentro</button>'+
+    '<div class="note" id="libroEsito" style="margin-top:8px"></div></div>';
+}
+
+function esportaLibro(){
+  var t = JSON.stringify(libro());
+  var el = document.getElementById('libroEsito');
+  function fatto(ok){
+    if(el) el.innerHTML = ok
+      ? 'Copiato. Incollalo in una nota, in una mail a te stesso, dove vuoi.'
+      : 'Non sono riuscito a copiarlo da solo. Eccolo, prendilo a mano:<br>'+
+        '<textarea style="width:100%;height:110px;margin-top:6px;font-family:var(--mono);font-size:10px">'+
+        esc(t)+'</textarea>';
+  }
+  try{
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(t).then(function(){ fatto(true); }, function(){ fatto(false); });
+    } else fatto(false);
+  }catch(e){ fatto(false); }
+}
+
+function apriImportaLibro(){
+  var h = testa('Rimetti dentro il libro', 'incolla quello che avevi copiato');
+  h += '<div class="card"><textarea id="libroDentro" style="width:100%;height:150px;'+
+    'font-family:var(--mono);font-size:11px" placeholder="[...]"></textarea>'+
+    '<div class="note" style="margin-top:8px">Le giocate che hai adesso non spariscono: quelle nuove '+
+    'si aggiungono, e quelle che ci sono già non vengono duplicate.</div></div>';
+  h += '<button class="btn acc" style="margin-top:14px" onclick="importaLibro()">Rimetti dentro</button>';
+  h += '<button class="btn ghost" style="margin-top:8px" onclick="chiudi()">Lascia perdere</button>';
+  modale(h);
+}
+
+function importaLibro(){
+  var t = (document.getElementById('libroDentro')||{}).value || '';
+  var nuove;
+  try{ nuove = JSON.parse(t); }catch(e){ nuove = null; }
+  if(!Array.isArray(nuove)) return;
+  var c = libro(), visti = {};
+  c.forEach(function(g){ visti[g.id] = 1; });
+  var aggiunte = 0;
+  nuove.forEach(function(g){
+    if(!g || !g.id || visti[g.id] || !g.c || !g.v || !g.mercato) return;
+    visti[g.id] = 1; c.push(g); aggiunte++;
+  });
+  salvaLibro();
+  chiudi();
+  S.tab = 'libro'; render(); window.scrollTo(0,0);
+}
+
+function cardPerchePersonale(){
+  return '<div class="h2">Perché questa parte è tua e basta</div><div class="card">'+
+    '<div class="note">Tutto il resto di quest\'app chiunque può averlo uguale. I dati sono pubblici, '+
+    'il metodo è scritto per intero nel README, e due persone che partono da lì arrivano allo stesso '+
+    'posto. È giusto così: la statistica non è di nessuno.<br><br>'+
+    'Le tue giocate no. A che quota le hai prese, su quale dei tuoi banchi, quali hai scelto fra quelle '+
+    'che proponevo e quali ti sei inventato. Non si scaricano da nessuna parte e non si possono chiedere: '+
+    'si accumulano una alla volta, e dopo qualche decina rispondono a tre cose che il modello da solo '+
+    'non può nemmeno formulare — <b>quanto ti costa giocare</b> davvero, <b>quanto sono calibrato sulle '+
+    'partite che scegli tu</b> (che non è la stessa cosa che essere calibrato in media), e '+
+    '<b>se discostarti da me ti conviene</b>.<br><br>'+
+    'È l\'unico pezzo che, fra sei mesi, questa app avrà e nessun\'altra copia potrà avere.</div></div>';
+}
+
 /* ══════════════════════════════════════════════════════════════
    GUSCIO
    ══════════════════════════════════════════════════════════════ */
@@ -2840,14 +3430,16 @@ var TABS = [
   {k:'giornata',  n:'Giornata',  p:'M4 6h16M4 12h16M4 18h10'},
   {k:'schedine',  n:'Schedine',  p:'M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6'},
   {k:'squadre',   n:'Squadre',   p:'M12 3l7 4v6c0 4-3 6.5-7 8-4-1.5-7-4-7-8V7z'},
+  {k:'libro',     n:'Libro',     p:'M4 5a2 2 0 0 1 2-2h13v18H6a2 2 0 0 1-2-2zM9 8h7M9 12h7'},
   {k:'precisione',n:'Precisione',p:'M4 18L9 12l4 3 7-9M4 20h16'},
   {k:'dati',      n:'Dati',      p:'M4 7c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3zM4 7v10c0 1.7 3.6 3 8 3s8-1.3 8-3V7'}
 ];
-var TITOLI = {giornata:'Giornata', schedine:'Schedine',
+var TITOLI = {giornata:'Giornata', schedine:'Schedine', libro:'Il mio libro',
               squadre:'Squadre', precisione:'Precisione', dati:'Dati'};
 var SOTTO = {
   giornata:   'COSA HA DI DIVERSO OGNI PARTITA',
   schedine:   'QUOTA, PROBABILITÀ E VINCITA POSSIBILE',
+  libro:      'LE MIE GIOCATE, E COSA DICONO DI ME',
   squadre:    'CHI SEGNA, CHI CONCEDE, CHI TIRA CORNER',
   precisione: 'QUANTO MI POSSO SBAGLIARE',
   dati:       'DA DOVE ARRIVA TUTTO'
@@ -2888,6 +3480,7 @@ function render(){
   }
   var corpo =
     S.tab==='schedine'   ? tabSchedine() :
+    S.tab==='libro'      ? tabLibro() :
     S.tab==='squadre'    ? tabSquadre() :
     S.tab==='precisione' ? tabPrecisione() :
     S.tab==='dati'       ? tabDati() : tabGiornata();

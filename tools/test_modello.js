@@ -381,10 +381,21 @@ prova('e nessuna selezione finisce in due schedine',
   if (!blocco) return;
   var RICARICHI = eval('(' + blocco[0].replace('var RICARICHI = ', '').replace(/;\s*$/, '') + ')');
   prova('quattro posizioni', RICARICHI.length === 4, RICARICHI.length);
-  prova('crescenti', RICARICHI.every(function (x, i) { return i === 0 || x.v > RICARICHI[i - 1].v; }));
-  prova('si parte dal numero MISURATO (4.9%), non da quello che avevo assunto',
-        Math.abs(RICARICHI[0].v - 0.049) < 1e-9 && /RICARICHI\[0\]/.test(html),
-        RICARICHI[0].v);
+  /* Non piu' crescenti: la prima e' bet365 (5.6%), la seconda la media europea
+     (4.9%), che sta SOTTO. E' il punto — il banco che si usa e' piu' caro
+     della media, e metterlo in ordine di prezzo nasconderebbe proprio quello. */
+  prova('si parte da un banco VERO e misurato, non da una media',
+        RICARICHI[0].id === 'bet365' && Math.abs(RICARICHI[0].v - 0.056) < 1e-9,
+        RICARICHI[0].id + ' ' + RICARICHI[0].v);
+  prova('e quel banco sta sopra la media europea, che e il fatto interessante',
+        RICARICHI[0].v > RICARICHI[1].v && RICARICHI[1].id === 'medio');
+  prova('le due posizioni non misurate stanno in fondo e sono le piu care',
+        RICARICHI[2].v > RICARICHI[0].v && RICARICHI[3].v > RICARICHI[2].v);
+  /* Il ripiego non e' piu' RICARICHI[0] scritto a mano ma il primo dell'elenco
+     disponibile — che e' RICARICHI[0] finche' il libro non ha abbastanza
+     giocate, e la posizione "Il mio" da li' in poi. */
+  prova('e in mancanza di scelta si prende il primo dell\'elenco disponibile',
+        /S\.ricarico = elenco\.filter[\s\S]{0,80}\|\| elenco\[0\]/.test(html));
   prova('nessun 6.5% scritto a mano e rimasto in giro',
         !/Math\.pow\(1\.065/.test(html));
   prova('il ricarico passa da una funzione sola',
@@ -403,6 +414,87 @@ prova('e nessuna selezione finisce in due schedine',
   prova('sulle singole no', Math.abs(sing.atteso - 20 / 1.049) < 1e-6, sing.atteso.toFixed(4));
   prova('e la differenza fra i due e grossa: e il punto di tutta la sezione',
         sing.atteso - acc.atteso > 5, (sing.atteso - acc.atteso).toFixed(2));
+})();
+
+/* ─── il libro: la parte che non si puo' chiedere ───
+
+   Tutto il resto di quest'app due persone lo ottengono uguale. Il libro no: e'
+   fatto di giocate vere, a quote vere, su banchi veri. Le prove qui sotto
+   guardano le due cose che possono rompersi in silenzio — il conto del
+   ricarico e la scelta di quale dei due modi usare — perche' un ricarico
+   sbagliato non da' nessun errore: da' solo numeri credibili e falsi. */
+(function () {
+  var html;
+  try {
+    html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  } catch (e) { return; }
+  function estrai(n) {
+    var i = html.indexOf('function ' + n + '(');
+    if (i < 0) return null;
+    var d = 0;
+    for (var k = html.indexOf('{', i); k < html.length; k++) {
+      if (html[k] === '{') d++;
+      else if (html[k] === '}') { d--; if (!d) return html.slice(i, k + 1); }
+    }
+    return null;
+  }
+
+  var src = estrai('_quotaMercatoDi');
+  prova('il confronto col mercato esiste', !!src);
+  if (!src) return;
+  var _quotaMercatoDi = eval('(' + src + ')');            // eslint-disable-line no-eval
+  var g = { qmax: [2.60, 3.52, 2.88], qoumax: [1.95, 2.00] };
+  prova('1 legge la quota di casa', _quotaMercatoDi(_c(g, '1')) === 2.60);
+  prova('X legge il pareggio', _quotaMercatoDi(_c(g, 'X')) === 3.52);
+  prova('2 legge la trasferta', _quotaMercatoDi(_c(g, '2')) === 2.88);
+  prova('Over 2.5 legge la quota Over', _quotaMercatoDi(_c(g, 'O25')) === 1.95);
+  prova('Under 2.5 legge la quota Under', _quotaMercatoDi(_c(g, 'U25')) === 2.00);
+  prova('un mercato senza quota di riferimento torna niente invece di inventarla',
+        _quotaMercatoDi(_c(g, '1X')) == null);
+  prova('e senza quote in archivio torna niente',
+        _quotaMercatoDi({ mercato: '1' }) == null);
+  function _c(base, m) { var o = { mercato: m }; for (var k in base) o[k] = base[k]; return o; }
+
+  /* Il conto del ricarico. La quota migliore del mercato ha ricarico misurato
+     zero, quindi (migliore / presa - 1) E' il ricarico del banco: se il banco
+     ricarica il 5.5%, il conto deve tornare 5.5%. */
+  var src2 = estrai('ricaricoDalLibro');
+  prova('il ricarico dal libro esiste', !!src2);
+  if (!src2) return;
+  var finto = [];
+  for (var i = 0; i < 10; i++) {
+    var rif = 2.50;
+    finto.push({ mercato: '1', qmax: [rif, 3.4, 2.9], presa: rif / 1.055, equa: rif });
+  }
+  /* si rimonta la funzione con le sue due dipendenze */
+  var fabbrica = new Function('libro', '_quotaMercatoDi', 'return ' + src2 + ';');
+  var f = fabbrica(function () { return finto; }, _quotaMercatoDi);
+  var r = f();
+  prova('con dieci giocate il ricarico si misura', !!r);
+  prova('e ritrova il 5.5% che avevo messo dentro',
+        r && Math.abs(r.v - 0.055) < 0.0005, r ? r.v.toFixed(4) : 'niente');
+  prova('e dice di averlo misurato sul mercato, non sulla mia quota equa',
+        r && r.come === 'mercato', r ? r.come : 'niente');
+  prova('sotto le otto giocate non torna niente invece di un numero fragile',
+        fabbrica(function () { return finto.slice(0, 5); }, _quotaMercatoDi)() == null);
+
+  /* Senza quota di mercato ripiega sulla quota equa, e lo dichiara. */
+  var senza = finto.map(function (x) { return { mercato: '1X', presa: x.presa, equa: x.equa }; });
+  var r2 = fabbrica(function () { return senza; }, _quotaMercatoDi)();
+  prova('senza confronto di mercato ripiega sulla quota equa', r2 && r2.come === 'equa',
+        r2 ? r2.come : 'niente');
+
+  prova('il quadrante del ricarico sa del libro',
+        /function ricarichiDisponibili[\s\S]{0,400}ricaricoDalLibro\(\)/.test(html));
+  prova('e la posizione del libro sta per prima, quando c\'e',
+        /id:'mio'[\s\S]*?\.concat\(RICARICHI\)/.test(html) &&
+        html.indexOf("id:'mio'") < html.indexOf('.concat(RICARICHI)'));
+  prova('salvare il libro butta il ricarico tenuto in memoria',
+        /function salvaLibro[\s\S]{0,200}S\.ricarico = null/.test(html));
+  prova('l\'esito non lo scrive l\'utente: lo legge l\'app',
+        /function esitoGiocata[\s\S]{0,400}M\.haVinto/.test(html));
+  prova('il libro sta solo sul telefono: nessuna chiamata a un server',
+        !/fetch\([^)]*libro|libro[^\n]*fetch\(/.test(html));
 })();
 
 var largh = esiti.reduce(function (a, e) { return Math.max(a, e[0].length); }, 0);
