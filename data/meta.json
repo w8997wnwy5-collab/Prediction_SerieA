@@ -1,5 +1,5 @@
 {
- "aggiornato": "2026-09-09T05:25:10+00:00",
+ "aggiornato": "2026-09-09T07:32:48+00:00",
  "esito": "ok",
  "ultima_partita": "2026-09-07",
  "partite_totali": 1930,
@@ -37,8 +37,8 @@
   "calendario stagione": "ok da openfootball: 360 partite",
   "calendario": "360 partite in tutto, 0 con le quote (0 scaricate adesso, 0 tenute da prima)",
   "TheSportsDB risultati": "1 risultati accolti",
-  "Understat 2026-27": "fallita: nella pagina non compare mai datesData (18704 byte): o è cambiato il nome, o quella servita non è la pagina della lega",
-  "Understat 2025-26": "fallita: nella pagina non compare mai datesData (18704 byte): o è cambiato il nome, o quella servita non è la pagina della lega",
+  "Understat 2026-27": "fallita: nella pagina non compare mai datesData (18714 byte): o è cambiato il nome, o quella servita non è la pagina della lega",
+  "Understat 2025-26": "fallita: nella pagina non compare mai datesData (18714 byte): o è cambiato il nome, o quella servita non è la pagina della lega",
   "Understat": "fermato dopo 2 tentativi: understat.com risponde sempre con la stessa pagina, la stessa per tutte le stagioni. Non è un formato cambiato, è un blocco — probabilmente sull'indirizzo da cui gira la Action. Gli xG restano dedotti dai tiri.",
   "ESPN calendario": "non disponibile: HTTP Error 403: Forbidden",
   "football-data.org arbitri": "saltati: nessuna chiave FOOTBALL_DATA_TOKEN",
@@ -53,7 +53,7 @@
   "marcatori": "saltati: nessuna chiave FOOTBALL_DATA_TOKEN",
   "notizie ANSA": "49 titoli tenuti su 80 (scartati: 1 doppio, 30 nessuna squadra)",
   "notizie Football Italia": "18 titoli tenuti su 20 (scartati: 2 nessuna squadra)",
-  "notizie Repubblica": "10 titoli tenuti su 25 (scartati: 3 doppio, 12 nessuna squadra)",
+  "notizie Repubblica": "11 titoli tenuti su 25 (scartati: 2 doppio, 12 nessuna squadra)",
   "notizie": "60 titoli tenuti, 4 segnalano un'assenza, 1 la panchina"
  }
 }
