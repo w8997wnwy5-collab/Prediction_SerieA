@@ -95,6 +95,22 @@ def test_quote():
     prova('bet365 non finisce dentro q',
           'q' not in B.quote_extra_da_riga({'B365CH': '2.55', 'B365CD': '3.45', 'B365CA': '2.85'}))
 
+    # L'apertura tenuta A PARTE dalla chiusura, non al posto suo. Serve a
+    # misurare una cosa che nessun backtest di questo progetto poteva porsi:
+    # il peso giusto da dare al modello e' lo stesso quando il mercato e'
+    # ancora grezzo e quando ha gia' assorbito le formazioni?
+    ap = B.quote_extra_da_riga({'AvgCH':'2.55','AvgCD':'3.45','AvgCA':'2.85',
+                                'AvgH':'2.40','AvgD':'3.30','AvgA':'3.05',
+                                'Avg>2.5':'1.88','Avg<2.5':'1.92'})
+    prova('legge le quote di APERTURA', ap.get('qap') == [2.4, 3.3, 3.05], str(ap.get('qap')))
+    prova('e l\'apertura Over/Under', ap.get('qapou') == [1.88, 1.92], str(ap.get('qapou')))
+    ch = B.quote_da_riga({'AvgCH':'2.55','AvgCD':'3.45','AvgCA':'2.85',
+                          'AvgH':'2.40','AvgD':'3.30','AvgA':'3.05'})
+    prova('la chiusura resta in q, l\'apertura non la sostituisce',
+          ch.get('q') == [2.55, 3.45, 2.85] and 'qap' not in ch, str(ch))
+    prova('apertura e chiusura sono due campi distinti, mai lo stesso',
+          ap.get('qap') != ch.get('q'))
+
     prova('qoumax non finisce mai dentro qou',
           'qou' not in B.quote_extra_da_riga({'MaxC>2.5': '2.05', 'MaxC<2.5': '1.98'}) and
           'qoumax' not in B.quote_da_riga({'MaxC>2.5': '2.05', 'MaxC<2.5': '1.98'}))

@@ -300,6 +300,24 @@ COLONNE_OU_MAX = (('MaxC>2.5', 'MaxC<2.5'), ('Max>2.5', 'Max<2.5'))
 # il registro delle giocate.
 COLONNE_B365 = (('B365CH', 'B365CD', 'B365CA'), ('B365H', 'B365D', 'B365A'))
 
+# Le quote di APERTURA, tenute a parte da quelle di chiusura invece che
+# scartate. Servono a una domanda che finora nessuna misura di questo progetto
+# poteva porsi, e che e' la piu' importante di tutte.
+#
+# Tutti i backtest si ancorano alla CHIUSURA: il prezzo con cui la partita e'
+# andata in campo, dopo che il mercato ha assorbito formazioni e infortuni. E'
+# la stima migliore che esista — e non e' quella che si ha in mano quando si
+# gioca. Chi punta il venerdi' ha l'apertura, che e' piu' grezza.
+#
+# Se il mercato di chiusura e' molto piu' informato del modello, ma quello di
+# apertura lo e' meno, allora il peso giusto da dare al modello NON e' lo
+# stesso nei due casi — e tararlo sulla chiusura, come si fa sempre, vuol dire
+# tararlo su una situazione in cui non ci si trova mai.
+COLONNE_1X2_APERTURA = (('AvgH', 'AvgD', 'AvgA'), ('B365H', 'B365D', 'B365A'),
+                        ('PSH', 'PSD', 'PSA'), ('BbAvH', 'BbAvD', 'BbAvA'))
+COLONNE_OU_APERTURA = (('Avg>2.5', 'Avg<2.5'), ('B365>2.5', 'B365<2.5'),
+                       ('BbAv>2.5', 'BbAv<2.5'), ('P>2.5', 'P<2.5'))
+
 # L'handicap asiatico dice di quanti gol una squadra e' data favorita, ed e' il
 # mercato piu' liquido del mondo: la sua linea e' la misura piu' precisa della
 # supremazia attesa che si possa avere gratis. Oggi l'ancoraggio usa due assi
@@ -326,6 +344,16 @@ def quote_extra_da_riga(r):
         q = [num(r.get(a)), num(r.get(b)), num(r.get(c))]
         if all(q) and min(q) > 1:
             fuori['qb365'] = [round(x, 3) for x in q]
+            break
+    for a, b, c in COLONNE_1X2_APERTURA:
+        q = [num(r.get(a)), num(r.get(b)), num(r.get(c))]
+        if all(q) and min(q) > 1:
+            fuori['qap'] = [round(x, 3) for x in q]
+            break
+    for a, b in COLONNE_OU_APERTURA:
+        qo, qu = num(r.get(a)), num(r.get(b))
+        if qo and qu and min(qo, qu) > 1:
+            fuori['qapou'] = [round(qo, 3), round(qu, 3)]
             break
     for a, b in COLONNE_OU_MAX:
         qo, qu = num(r.get(a)), num(r.get(b))
