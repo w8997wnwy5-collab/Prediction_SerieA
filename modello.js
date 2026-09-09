@@ -1383,6 +1383,89 @@ function profiloGiocata(sel, gruppi, puntata) {
   };
 }
 
+/* La distribuzione INTERA dei ritorni di una struttura, non solo la media.
+
+   profiloGiocata torna i numeri riassuntivi; qui serve la distribuzione per
+   intero, perche' la domanda "quante volte chiudo il MESE in attivo" non si
+   risponde con una media: si risponde convolvendo quattro giornate e guardando
+   quanta massa sta sopra la spesa. */
+function distribuzioneRitorni(sel, gruppi, puntata, passo) {
+  var n = sel.length;
+  if (!n || n > 20 || !gruppi.length) return null;
+  passo = passo || Math.max(0.05, puntata / 200);
+  var perSchedina = puntata / gruppi.length;
+  var scenari = 1 << n, mappa = {}, i, s, g, atteso = 0;
+  for (s = 0; s < scenari; s++) {
+    var pr = 1, ritorno = 0;
+    for (i = 0; i < n; i++) pr *= ((s >> i) & 1) ? sel[i].p : (1 - sel[i].p);
+    if (pr < 1e-15) continue;
+    for (g = 0; g < gruppi.length; g++) {
+      var q = 1, tutte = true;
+      for (i = 0; i < gruppi[g].length; i++) {
+        var idx = gruppi[g][i];
+        if (!((s >> idx) & 1)) { tutte = false; break; }
+        q *= sel[idx].quota;
+      }
+      if (tutte) ritorno += perSchedina * q;
+    }
+    /* La media si somma sul ritorno ESATTO, prima di incasellarlo. La griglia
+       serve alla coda — dove un quarto di franco non sposta niente — ma sulla
+       media un errore di arrotondamento si accumula su quattro convoluzioni e
+       diventa visibile. È lo stesso inciampo di profiloGiocata, ed è per quello
+       che qui c'è una riga apposta invece di ricavarla dalle celle. */
+    atteso += ritorno * pr;
+    var cella = Math.round(ritorno / passo);
+    mappa[cella] = (mappa[cella] || 0) + pr;
+  }
+  return { passo: passo, mappa: mappa, puntata: puntata, atteso: atteso };
+}
+
+/* Quante volte su cento il MESE chiude in attivo.
+
+   Le giornate sono indipendenti — verificato, non assunto: la varianza del
+   numero di esiti presi in una giornata sta a 1.00 di quella teorica. Quindi
+   il ritorno del mese e' la convoluzione di quello della giornata con se'
+   stesso, tante volte quante sono le giornate.
+
+   Il conto e' esatto a meno della griglia, e la griglia si sceglie fine.
+   Simulare qui sarebbe piu' facile e piu' impreciso: la coda destra — le
+   giornate molto buone, che sono l'unica cosa che tiene sopra il mese quando
+   il gioco e' sfavorevole — e' fatta di eventi rari, ed e' esattamente quella
+   che una simulazione stima peggio. */
+function probMeseInAttivo(dist, giornate) {
+  if (!dist || !(giornate > 0)) return null;
+  var corrente = { 0: 1 }, k, j, nuova, chiavi = Object.keys(dist.mappa).map(Number);
+  for (k = 0; k < giornate; k++) {
+    nuova = {};
+    var da = Object.keys(corrente).map(Number);
+    for (var a = 0; a < da.length; a++) {
+      var pa = corrente[da[a]];
+      if (pa < 1e-14) continue;
+      for (j = 0; j < chiavi.length; j++) {
+        var somma = da[a] + chiavi[j];
+        nuova[somma] = (nuova[somma] || 0) + pa * dist.mappa[chiavi[j]];
+      }
+    }
+    /* Si potano le celle trascurabili a ogni passo: senza, la distribuzione
+       cresce a ogni convoluzione e il conto rallenta sul telefono per tenersi
+       massa che non sposta la quinta cifra. */
+    corrente = {};
+    Object.keys(nuova).forEach(function (c) { if (nuova[c] > 1e-13) corrente[c] = nuova[c]; });
+  }
+  var speso = dist.puntata * giornate;
+  var sopra = 0, pari = 0, tot = 0;
+  Object.keys(corrente).forEach(function (c) {
+    var v = Number(c) * dist.passo, pr = corrente[c];
+    tot += pr;
+    if (v > speso + 1e-9) sopra += pr;
+    else if (Math.abs(v - speso) <= 1e-9) pari += pr;
+  });
+  return { pAttivo: sopra / Math.max(1e-12, tot), pPari: pari / Math.max(1e-12, tot),
+           /* esatta: giornate indipendenti, quindi la media del mese è la media
+              della giornata moltiplicata. Nessuna griglia in mezzo. */
+           atteso: dist.atteso * giornate, speso: speso, giornate: giornate };
+}
+
 /* Le strutture sensate per n selezioni: tutte insieme, a gruppi, tutte singole.
    Gli spezzoni si fanno in ordine, così ogni schedina resta leggibile. */
 function struttureGiocata(n) {
@@ -1942,6 +2025,7 @@ var API = {
   simula: simula, calibra: calibra, combina: combina,
   kelly: kelly, valore: valore, occasioni: occasioni,
   distribuzioneEsiti: distribuzioneEsiti, profiloGiocata: profiloGiocata,
+  distribuzioneRitorni: distribuzioneRitorni, probMeseInAttivo: probMeseInAttivo,
   struttureGiocata: struttureGiocata,
   mercatiDaMatrice: mercatiDaMatrice, elencoMercati: elencoMercati, piuSicure: piuSicure,
   campiMercato: campiMercato, mercatiTempi: mercatiTempi, primoFinale: primoFinale,

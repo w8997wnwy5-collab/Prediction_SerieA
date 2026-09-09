@@ -221,6 +221,9 @@ node tools/misura_campo.js                          # il campo pesa diverso per 
 node tools/misura_neopromosse.js                    # serve l'archivio di Serie B? (no)
 node tools/tara_memoria.js                          # i parametri a occhio erano sbagliati? (no)
 node tools/misura_ancora_ou.js                      # l'Over/Under a ricarico zero aiuta? (no)
+node tools/misura_stringimento.js                   # l'ancoraggio deve stringere di più quando il modello alza la voce? (no)
+node tools/misura_mercati.js                        # il peso giusto è lo stesso su tutti i mercati? (sì: uno)
+node tools/ottimizza_mese.js                        # quale struttura chiude il mese in attivo più spesso
 ```
 
 ### Le notizie, e cosa possono fare
@@ -503,6 +506,97 @@ rende 11.60 al 5.6% e 7.04 all'11%, perché il ricarico si compone a ogni
 selezione. Un parametro inventato che sposta il risultato del 40% è peggio di
 un parametro mancante, perché non si vede.
 
+### Chiudere il mese in attivo non è la stessa domanda di guadagnare
+
+Questa è la parte del progetto che non somiglia a nient'altro, e non perché sia
+complicata: perché risponde a una domanda che le app di scommesse non pongono.
+
+Ovunque, qui e altrove, si ottimizza il **valore atteso**: quanto torna in
+media. È la domanda giusta se l'obiettivo è guadagnare. Ma *"voglio chiudere il
+mese in attivo"* è una richiesta diversa e legittima — ed è la richiesta vera di
+quasi tutti quelli che giocano. Le due risposte non solo differiscono: spesso
+sono **opposte**, e si dimostra in tre righe.
+
+Il valore atteso di un mese, a budget fisso `B`, con selezioni a probabilità `p`
+e un banco che ricarica `m` per gamba, dipende **solo** dal numero di gambe `L`:
+
+```
+atteso = B / (1+m)^L
+```
+
+Non da quante schedine fai. Non da quali. Solo da `L`. Quindi, se l'obiettivo
+fosse il ritorno medio, la risposta è una sola — singole — e non c'è altro da
+dire.
+
+La **probabilità di chiudere in attivo** no. Quella dipende eccome da quante
+schedine fai, e cambia molto, perché per stare sopra ti serve un **numero
+intero** di schedine vincenti. Con quattro schedine da 20 a quota 2.01 te ne
+servono due; con due da 40 te ne basta una. Il conto medio non se ne accorge —
+è identico nei due casi. Su un caso reale la differenza è di **10 punti di
+probabilità a valore atteso invariato**: l'unica cosa gratis di tutto il
+progetto.
+
+E sotto c'è un teorema vero. In un gioco **sfavorevole** — e col ricarico lo è
+sempre — la legge dei grandi numeri non è tua amica: più giocate fai, più il
+risultato si incolla alla media, che sta sotto zero. L'incertezza è l'unica cosa
+che può metterti sopra, e concentrare è il modo di comprarne. È il *bold play*
+di Dubins e Savage (1965). Nessuna app lo scrive, perché "concentra" suona
+irresponsabile — e non lo è, se accanto c'è scritto per intero quanto costa.
+Nell'app le due colonne stanno sempre affiancate: la probabilità di chiudere in
+attivo si **compra**, e si paga in valore atteso.
+
+**Il conto è esatto, non simulato.** La distribuzione dei ritorni di una
+giornata si enumera tutta (2ⁿ scenari), e il mese è quella distribuzione
+convoluta con sé stessa quattro volte — legittimo perché l'indipendenza fra
+giornate è stata *verificata*, non assunta. Simulare sarebbe stato più facile e
+più sbagliato proprio dove conta: la coda destra è fatta di eventi rari, ed è
+l'unica cosa che tiene sopra un mese quando il gioco è sfavorevole. La media
+viaggia esatta accanto alla griglia, perché su quattro convoluzioni
+l'arrotondamento si accumula.
+
+E la tabella **non dà per scontata la propria tesi**: quando le selezioni più
+solide sono davvero solide, le singole vincono su tutti e due i fronti e la
+scheda lo dice. Si rifà a ogni giornata.
+
+### Il modello non deve avere opinioni
+
+Il risultato più scomodo che sia uscito da questo progetto, e quello che ne
+ridefinisce lo scopo.
+
+L'ancoraggio fonde la previsione del modello con quella del mercato, con un
+peso. Sweepando quel peso sull'errore di previsione dell'1X2, la curva è
+monotona **fino al bordo**:
+
+| peso al mercato | errore |
+|---|---|
+| 0 (il modello da solo) | 0.19049 |
+| 0.85 (come faceva l'app) | 0.18402 |
+| **1 (il modello zitto)** | **0.18359** |
+
+Poi misurato su **tredici mercati**, con Brier e train/test: il peso migliore è
+**1 su tutti e tredici**. Sull'esito di una partita, l'opinione del modello
+sulle forze delle squadre vale zero, e ogni grammo di voce che le si concede
+peggiora la previsione.
+
+La conclusione facile — "allora il modello è inutile" — è sbagliata, ed è qui
+che sta il punto. **Il banco quota tre mercati; l'app ne mostra quaranta.** Il
+valore del modello non è indovinare chi vince: è prendere i due numeri che il
+mercato regala (supremazia e gol totali) e propagarli a quaranta mercati che
+nessuno quota, tenendo insieme le correlazioni fra di essi. Non è poco — è
+esattamente quello che il banco non ti dà — ma non è avere un'opinione.
+
+Nessuno tara l'ancoraggio così, perché tutti lo tarano sull'1X2, che è l'unico
+mercato su cui il confronto è comodo.
+
+**Il limite dichiarato, e stavolta verificato prima di dichiararlo:** tutto
+questo è misurato sulle quote di **chiusura**, che sono la stima migliore che
+esista e non sono quelle che hai in mano quando punti. Chi gioca prima delle
+formazioni ufficiali ha l'**apertura**, più grezza. Se il mercato di chiusura è
+molto più informato del modello ma quello di apertura lo è meno, il peso giusto
+non è 1 in quel momento — e tararlo sulla chiusura vuol dire tararlo su una
+situazione in cui non ci si trova mai. Le colonne di apertura sono ora
+nell'archivio, tenute separate, per poterlo misurare.
+
 ### Il mio libro: la parte che non si può chiedere
 
 Tutto il resto di questo progetto è replicabile, ed è giusto così. I dati sono
@@ -704,7 +798,7 @@ dire che quello che resta da guadagnare non sta nel modello, sta nel **prezzo**
 | `worker.js` | fa girare il motore fuori dal thread dell'interfaccia, così lo schermo non si blocca |
 | `scripts/build_data.py` | scarica e normalizza i dati da sei fonti (solo libreria standard) |
 | `.github/workflows/aggiorna-dati.yml` | il robot: quattro giri al giorno |
-| `tools/` | generatore di dati sintetici, le tre prove (116 sulle fonti, 88 sul motore, 15 sul backtest), la verifica di una giornata a posteriori e le nove misure (arbitri, indipendenza, valore, regola di selezione, handicap, vantaggio del campo, neopromosse, taratura dei parametri, ancoraggio Over/Under) |
+| `tools/` | generatore di dati sintetici, le tre prove (123 sulle fonti, 120 sul motore, 15 sul backtest), la verifica di una giornata a posteriori e le nove misure (arbitri, indipendenza, valore, regola di selezione, handicap, vantaggio del campo, neopromosse, taratura dei parametri, ancoraggio Over/Under) |
 | `data/` | riempita dalla Action: `serie-a.json` e `meta.json` |
 
 ## Una nota sul senso di tutto questo

@@ -416,6 +416,63 @@ prova('e nessuna selezione finisce in due schedine',
         sing.atteso - acc.atteso > 5, (sing.atteso - acc.atteso).toFixed(2));
 })();
 
+/* ─── il mese: una domanda diversa dal valore atteso ───
+
+   "Voglio chiudere il mese in attivo" non e' "voglio guadagnare", e le due
+   risposte sono spesso opposte. Il conto si regge su un'identita' che va
+   protetta con una prova, perche' se si rompe tutta la scheda mente in modo
+   credibile: il valore atteso di un mese dipende SOLO dal numero di gambe, non
+   da quante schedine si fanno. */
+(function () {
+  var p = 0.75, ric = 0.056, B = 20, G = 4;
+  function struttura(L, m) {
+    var sel = [], i;
+    /* una volta per gamba: il prodotto delle gambe compone il resto */
+    for (i = 0; i < L * m; i++) sel.push({ p: p, quota: (1 / p) / (1 + ric) });
+    var gruppi = [], g, j;
+    for (g = 0; g < m; g++) { var gr = []; for (j = 0; j < L; j++) gr.push(g * L + j); gruppi.push(gr); }
+    var d = M.distribuzioneRitorni(sel, gruppi, B);
+    return { d: d, r: M.probMeseInAttivo(d, G) };
+  }
+  var a = struttura(3, 2), b = struttura(3, 4), c = struttura(1, 4);
+
+  prova('la distribuzione dei ritorni somma a uno',
+        Math.abs(Object.keys(a.d.mappa).reduce(function (s, k) { return s + a.d.mappa[k]; }, 0) - 1) < 1e-9);
+  prova('il mese spende quattro giornate', a.r.speso === B * G, a.r.speso);
+  prova('l\'atteso del mese dipende SOLO dalle gambe, non da quante schedine',
+        Math.abs(a.r.atteso - b.r.atteso) < 0.05,
+        a.r.atteso.toFixed(3) + ' vs ' + b.r.atteso.toFixed(3));
+  prova('e vale budget / (1+ricarico)^gambe, che e la formula da cui parte tutto',
+        Math.abs(a.r.atteso - B * G / Math.pow(1 + ric, 3)) < 0.05,
+        a.r.atteso.toFixed(3) + ' vs ' + (B * G / Math.pow(1 + ric, 3)).toFixed(3));
+  prova('meno gambe = ritorno medio migliore, sempre', c.r.atteso > a.r.atteso);
+  prova('ma la probabilita di chiudere in attivo NON e la stessa a parita di gambe',
+        Math.abs(a.r.pAttivo - b.r.pAttivo) > 0.02,
+        (100 * a.r.pAttivo).toFixed(1) + '% vs ' + (100 * b.r.pAttivo).toFixed(1) + '%');
+  prova('e concentrare aiuta, quando il gioco e sfavorevole', a.r.pAttivo > b.r.pAttivo,
+        (100 * a.r.pAttivo).toFixed(1) + '% vs ' + (100 * b.r.pAttivo).toFixed(1) + '%');
+  prova('le probabilita restano probabilita',
+        a.r.pAttivo >= 0 && a.r.pAttivo <= 1 && b.r.pAttivo >= 0 && b.r.pAttivo <= 1);
+
+  /* Il controllo che smaschera un errore di convoluzione: con UNA sola
+     giornata il conto deve coincidere con l'enumerazione diretta. */
+  var sel1 = [], i;
+  for (i = 0; i < 3; i++) sel1.push({ p: p, quota: (1 / p) / (1 + ric) });
+  var uno = M.probMeseInAttivo(M.distribuzioneRitorni(sel1, [[0, 1, 2]], B), 1);
+  var diretto = M.profiloGiocata(sel1, [[0, 1, 2]], B);
+  prova('su una giornata sola la convoluzione coincide con l\'enumerazione',
+        Math.abs(uno.atteso - diretto.atteso) < 0.05 &&
+        Math.abs(uno.pAttivo - diretto.pAttivo) < 0.005,
+        uno.atteso.toFixed(3) + '/' + diretto.atteso.toFixed(3));
+
+  var html;
+  try { html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8'); } catch (e) { return; }
+  prova('la scheda del mese non da per scontato che concentrare vinca',
+        /best\.L === 1[\s\S]{0,900}vanno d\\'accordo/.test(html));
+  prova('e dice sempre quanto costa quella probabilita',
+        /costo > 0\.05[\s\S]{0,400}comprando/.test(html));
+})();
+
 /* ─── il libro: la parte che non si puo' chiedere ───
 
    Tutto il resto di quest'app due persone lo ottengono uguale. Il libro no: e'

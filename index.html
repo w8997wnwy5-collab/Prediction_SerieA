@@ -1591,7 +1591,7 @@ function impostaPuntata(v){
   var el = document.getElementById('schedElenco');
   if(el) el.innerHTML = elencoSchedine();
   var pf = document.getElementById('schedProfilo');
-  if(pf) pf.innerHTML = cardQuanteNePrendi() + cardComeGiocarle();
+  if(pf) pf.innerHTML = cardQuanteNePrendi() + cardMeseInAttivo() + cardComeGiocarle();
 }
 
 function cercaSchedine(candidati, maxSel){
@@ -2051,6 +2051,193 @@ function cardComeGiocarle(){
   return h;
 }
 
+
+/* ══════════════════════════════════════════════════════════════
+   COME CHIUDERE IL MESE IN ATTIVO PIÙ SPESSO
+
+   Questa scheda risponde a una domanda diversa da tutte le altre dell'app, e
+   la differenza è il punto.
+
+   Ovunque altrove si guarda il valore atteso: quanto torna in media. È la
+   domanda giusta se l'obiettivo è guadagnare. Ma "voglio chiudere il mese in
+   attivo" non è quella domanda, ed è una richiesta legittima e diversa.
+
+   E si dimostra in tre righe che le due risposte sono OPPOSTE.
+
+   Il valore atteso di un mese, a budget fisso, dipende SOLO da quante gambe
+   hanno le schedine: budget / (1+ricarico)^gambe. Non dipende da quante
+   schedine fai, né da quali. Solo dalle gambe. Quindi se l'obiettivo fosse
+   massimizzare il ritorno medio, la risposta sarebbe una sola: singole, e
+   basta parlare.
+
+   La probabilità di chiudere in attivo no. Quella dipende da quante schedine
+   fai, e cambia molto — perché per stare sopra ti serve un NUMERO INTERO di
+   schedine vincenti. Con quattro schedine da 20 a quota 2.01 te ne servono
+   due; con due schedine da 40 te ne basta una. Non è la stessa cosa, e il
+   conto medio non se ne accorge perché è identico nei due casi.
+
+   Il fondo di tutto questo è un teorema vero (Dubins-Savage, 1965): in un
+   gioco SFAVOREVOLE — e col ricarico lo è sempre — per raggiungere un
+   obiettivo conviene concentrare, non spalmare. La legge dei grandi numeri
+   non è amica di chi parte sotto: più giocate fai, più il risultato si
+   incolla al valore atteso, che è negativo. L'incertezza è l'unica cosa che
+   può metterti sopra.
+
+   Nessuna app di scommesse lo scrive, perché "concentra" suona come un
+   consiglio irresponsabile. Non lo è, se accanto c'è scritto per intero
+   quanto costa: la probabilità di chiudere in attivo si COMPRA, e si paga in
+   valore atteso. Sotto ci sono tutte e due le colonne, sempre.
+
+   Il conto è esatto, non simulato: la distribuzione dei ritorni di una
+   giornata si enumera (2^n scenari), e il mese è quella distribuzione
+   convoluta con sé stessa quattro volte. Simulare sarebbe più facile e più
+   sbagliato proprio dove conta: la coda destra è fatta di eventi rari, ed è
+   l'unica cosa che tiene sopra un mese quando il gioco è sfavorevole.
+   ══════════════════════════════════════════════════════════════ */
+var GIORNATE_MESE = 4;
+
+function cercaStruttureMese(){
+  var cand = candidatiGiornata();
+  if(!cand.length) return null;
+  var migliori = {};
+  cand.forEach(function(c){
+    if(!migliori[c.iPartita] || c.p05 > migliori[c.iPartita].p05) migliori[c.iPartita] = c;
+  });
+  var tutte = Object.keys(migliori).map(function(k){ return migliori[k]; })
+                    .sort(function(a,b){ return b.p05 - a.p05; });
+  var n = tutte.length;
+  if(n < 2) return null;
+  var pt = puntata(), fuori = [], L, m;
+  for(L = 1; L <= Math.min(6, n); L++){
+    for(m = 1; m <= Math.min(6, Math.floor(n / L)); m++){
+      var usate = tutte.slice(0, L * m);
+      /* Il ricarico si applica UNA VOLTA per gamba: distribuzioneRitorni
+         moltiplica le quote delle gambe fra loro, quindi la composizione
+         avviene da sola. Applicarlo qui L volte lo avrebbe applicato L volte
+         per gamba, cioè L² volte per schedina — e l'errore non si vedeva:
+         dava semplicemente numeri più bassi, tutti plausibili. L'ha trovato
+         una prova che confronta l'atteso con budget/(1+ricarico)^gambe. */
+      var sel = usate.map(function(c){
+        return {p: c.p, quota: quotaBanco(1 / c.p, 1)};
+      });
+      var gruppi = [], g;
+      for(g = 0; g < m; g++){
+        var gr = [];
+        for(var j = 0; j < L; j++) gr.push(g * L + j);
+        gruppi.push(gr);
+      }
+      var d = M.distribuzioneRitorni(sel, gruppi, pt);
+      if(!d) continue;
+      var r = M.probMeseInAttivo(d, GIORNATE_MESE);
+      if(!r) continue;
+      fuori.push({L:L, m:m, usate:usate.length,
+                  pAttivo:r.pAttivo, atteso:r.atteso, speso:r.speso,
+                  perSchedina: pt/m,
+                  /* la quota di UNA schedina: qui sì il ricarico va L volte,
+                     perché è una schedina da L gambe */
+                  quotaTipo: quotaBanco(1/prodP(usate.slice(0, L)), L)});
+    }
+  }
+  fuori.sort(function(a,b){ return b.pAttivo - a.pAttivo; });
+  return {opzioni: fuori, tutte: tutte};
+}
+function prodP(l){ var q = 1; l.forEach(function(c){ q *= c.p; }); return q; }
+
+function cardMeseInAttivo(){
+  var r = cercaStruttureMese();
+  if(!r || !r.opzioni.length) return '';
+  var best = r.opzioni[0];
+  var pt = puntata();
+  /* quella che l'app proponeva finora: tutte le più solide in una sola */
+  var tutteInsieme = r.opzioni.filter(function(o){ return o.m === 1 && o.L === Math.min(6, r.tutte.length); })[0]
+                     || r.opzioni[r.opzioni.length-1];
+  var singole = r.opzioni.filter(function(o){ return o.L === 1; })
+                         .sort(function(a,b){ return b.pAttivo - a.pAttivo; })[0];
+  var h = '<div class="h2">Chiudere il mese in attivo</div>';
+  h += '<div class="hero"><div class="l">La struttura che ci riesce più spesso</div>'+
+    '<div class="v">'+pc(best.pAttivo)+'</div>'+
+    '<div class="s"><b>'+best.m+' schedin'+(best.m===1?'a':'e')+' da '+best.L+' gamb'+
+    (best.L===1?'a':'e')+'</b>, '+nu(best.perSchedina,0)+' chf l\'una, ogni giornata. '+
+    'Su quattro giornate spendi '+nu(best.speso,0)+' chf e chiudi sopra il '+pc(best.pAttivo)+
+    ' dei mesi. Il conto è esatto: '+GIORNATE_MESE+' giornate convolute, non simulate.</div></div>';
+
+  h += '<div class="card"><div class="tabimp"><table><tr><th>come</th><th>P(mese in attivo)</th>'+
+    '<th>ti torna in media</th></tr>'+
+    r.opzioni.slice(0, 8).map(function(o){
+      var eti = o === best ? ' style="color:var(--accent);font-weight:700"' : '';
+      return '<tr'+eti+'><td>'+o.m+' da '+o.L+'</td><td>'+pc(o.pAttivo,1)+'</td><td>'+
+        nu(o.atteso,1)+' su '+nu(o.speso,0)+'</td></tr>';
+    }).join('')+'</table></div>';
+
+  /* Il testo lo scrivono i numeri, non io. Le due cose — massimizzare il
+     ritorno medio e massimizzare la probabilità di chiudere in attivo — di
+     solito litigano, ma NON sempre: quando le selezioni più solide della
+     giornata sono davvero solide, vincono le singole su tutti e due i fronti.
+     Dare per scontato il conflitto vorrebbe dire raccontare una teoria invece
+     di leggere una tabella. */
+  var costo = singole ? singole.atteso - best.atteso : 0;
+  h += '<div class="note"><p><b>Guarda le due colonne insieme, è tutto lì.</b> Il ritorno medio '+
+    'dipende <b>solo</b> da quante gambe hanno le schedine: a parità di gambe è identico, che tu '+
+    'ne faccia due o sei. La probabilità di chiudere in attivo no — quella cambia col numero di '+
+    'schedine, e cambia <b>senza costare niente</b>.</p>'+
+    '<p>Il motivo è che per stare sopra ti serve un <b>numero intero</b> di schedine vincenti. '+
+    'Con quattro schedine da '+nu(pt/4,0)+' te ne servono due; con due da '+nu(pt/2,0)+' te ne '+
+    'basta una. Il conto medio non se ne accorge, perché è lo stesso. Tu sì.</p>';
+
+  if(best.L === 1){
+    h += '<p><b>Su questa giornata le due domande vanno d\'accordo</b>, e non è sempre così: '+
+      'la struttura che chiude in attivo più spesso ('+best.m+' singol'+(best.m===1?'a':'e')+
+      ') è anche quella che rende di più. Succede quando le selezioni più solide sono davvero '+
+      'solide — qui la migliore sta al '+pc(r.tutte[0].p)+' — perché una gamba sola a quella '+
+      'probabilità vince abbastanza spesso da non aver bisogno della fortuna.</p>'+
+      '<p>Quando invece le partite sono più incerte la risposta si ribalta, e conviene '+
+      '<b>concentrare</b>: meno schedine, più lunghe. Il fondo è un teorema vero — in un gioco '+
+      'sfavorevole (e col ricarico lo è sempre) più giocate fai, più il risultato si incolla alla '+
+      'media, che è sotto zero. L\'incertezza diventa l\'unica alleata. Questa tabella si rifà a '+
+      'ogni giornata, quindi ti dirà lei quando succede.</p>';
+  } else {
+    h += '<p><b>Qui le due domande litigano</b>, ed è il caso normale. La struttura che chiude in '+
+      'attivo più spesso è '+best.m+' da '+best.L+' ('+pc(best.pAttivo,1)+'), mentre il ritorno '+
+      'medio migliore ce l\'hanno le singole'+(singole? ' ('+nu(singole.atteso,1)+' su '+
+      nu(singole.speso,0)+', ma solo '+pc(singole.pAttivo,1)+' di mesi in attivo)' : '')+'.</p>'+
+      '<p>Non è un paradosso: quando il gioco è sfavorevole, più giocate fai più il risultato si '+
+      'incolla alla media — che è sotto. L\'incertezza è l\'unica cosa che può metterti sopra, e '+
+      '<b>concentrare</b> è il modo di comprarne. È un teorema, non un\'opinione (Dubins-Savage, '+
+      '1965): in un gioco sfavorevole, per arrivare a un obiettivo conviene puntare grosso e poche '+
+      'volte.</p>'+
+      (costo > 0.05
+        ? '<p class="warn"><b>E quanto costa, detto chiaro.</b> Quella probabilità la stai '+
+          '<b>comprando</b>: '+nu(costo,1)+' chf di ritorno medio in meno sul mese, su '+
+          nu(best.speso,0)+' giocati. Non è un pasto gratis, è un cambio fra due cose che vuoi e '+
+          'non puoi avere insieme — e la scelta è tua, non mia.</p>'
+        : '');
+  }
+  /* Chi gioca ha le sue abitudini, e una tabella che dice "cambia tutto" viene
+     ignorata. Quindi si dice anche qual e' la scelta migliore DENTRO quello che
+     uno fa già: e' l'unica riga che verra' usata davvero. */
+  var suo = r.opzioni.filter(function(o){ return o.L >= 2 && o.L <= 4; })
+                     .sort(function(a,b){ return b.pAttivo - a.pAttivo; })[0];
+  if(suo && suo !== best){
+    var altre = r.opzioni.filter(function(o){ return o.L === suo.L && o !== suo; });
+    h += '<p><b>Se le multiple corte ti piacciono e basta</b> — che è una risposta legittima, '+
+      'perché una singola non si racconta — la migliore fra quelle da 2 a 4 gambe è '+
+      '<b>'+suo.m+' da '+suo.L+'</b>: '+pc(suo.pAttivo,1)+' di mesi in attivo, '+nu(suo.atteso,1)+
+      ' su '+nu(suo.speso,0)+' di ritorno medio'+
+      (altre.length
+        ? '. Con le stesse '+suo.L+' gambe ma '+altre[0].m+' schedine faresti '+
+          pc(altre[0].pAttivo,1)+', a ritorno medio identico: '+
+          (suo.pAttivo > altre[0].pAttivo ? 'sono ' + nu(100*(suo.pAttivo-altre[0].pAttivo),1) +
+            ' punti gratis' : 'la differenza è tutta nel numero di schedine')+'.'
+        : '.')+'</p>';
+  }
+  h += '<p>Il conto è <b>esatto</b>, non simulato: la distribuzione dei ritorni di una giornata '+
+    'si enumera tutta, e il mese è quella distribuzione convoluta con sé stessa quattro volte. '+
+    'Simulare sarebbe stato più facile e più sbagliato proprio dove conta: la coda destra è fatta '+
+    'di eventi rari, ed è l\'unica cosa che tiene sopra un mese quando il gioco è sfavorevole.</p>'+
+    '</div></div>';
+  return h;
+}
+
 function tabSchedine(){
   if(!(S._prossime||[]).length) S._prossime = prossimePartite();
   var partite = partiteGiornata();
@@ -2066,7 +2253,7 @@ function tabSchedine(){
       'da qui in giù i conti sono fatti su questa cifra.</span>'+
     '</div></div>';
   h += sceltaRicarico();
-  h += '<div id="schedProfilo">'+cardQuanteNePrendi()+cardComeGiocarle()+'</div>';
+  h += '<div id="schedProfilo">'+cardQuanteNePrendi()+cardMeseInAttivo()+cardComeGiocarle()+'</div>';
   h += '<div class="note" style="margin-bottom:14px">Le selezioni sono le stesse che vedi nella '+
     '<b>Giornata</b>, prese dalla stessa funzione: se lì una partita dice una cosa, qui non può dirne '+
     'un\'altra. A parità di quota scelgo la combinazione su cui il modello è più sicuro — quella col '+
