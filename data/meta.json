@@ -1,10 +1,10 @@
 {
- "aggiornato": "2026-09-13T11:25:01+00:00",
+ "aggiornato": "2026-09-13T17:24:44+00:00",
  "esito": "ok",
- "ultima_partita": "2026-09-12",
- "partite_totali": 1933,
- "partite_giocate": 1933,
- "nuove_oggi": 0,
+ "ultima_partita": "2026-09-13",
+ "partite_totali": 1934,
+ "partite_giocate": 1934,
+ "nuove_oggi": 1,
  "partite_in_arrivo": 350,
  "con_arbitro": 1140,
  "con_tiri": 1930,
@@ -32,11 +32,11 @@
   "calendario": "350 partite in tutto, 10 con le quote (10 scaricate adesso, 0 tenute da prima)",
   "TheSportsDB risultati": "1 risultati accolti",
   "ESPN calendario": "non disponibile: HTTP Error 403: Forbidden",
-  "ESPN arbitri": "793 partite sono senza arbitro, ma nessuna è stata agganciata a ESPN: senza il suo identificativo non posso chiederne il dettaglio",
+  "ESPN arbitri": "794 partite sono senza arbitro, ma nessuna è stata agganciata a ESPN: senza il suo identificativo non posso chiederne il dettaglio",
   "marcatori": "saltati: nessuna chiave FOOTBALL_DATA_TOKEN",
-  "notizie ANSA": "57 titoli tenuti su 82 (scartati: 1 doppio, 24 nessuna squadra)",
+  "notizie ANSA": "56 titoli tenuti su 81 (scartati: 1 doppio, 24 nessuna squadra)",
   "notizie Football Italia": "16 titoli tenuti su 20 (scartati: 4 nessuna squadra)",
-  "notizie Repubblica": "non disponibile: HTTP Error 403: Forbidden",
-  "notizie": "60 titoli tenuti, 8 segnalano un'assenza, 1 la panchina"
+  "notizie Repubblica": "9 titoli tenuti su 25 (scartati: 4 doppio, 12 nessuna squadra)",
+  "notizie": "60 titoli tenuti, 8 segnalano un'assenza, 0 la panchina"
  }
 }
