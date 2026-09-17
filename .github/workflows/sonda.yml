@@ -17,10 +17,12 @@ jobs:
         env:
           APIFOOTBALL_KEY: ${{ secrets.APIFOOTBALL_KEY }}
           FOOTBALL_DATA_TOKEN: ${{ secrets.FOOTBALL_DATA_TOKEN }}
+          ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
         run: |
           python3 scripts/sonda_fonti.py
           python3 scripts/_sonda_colonne.py
           python3 scripts/_sonda_calendario.py
+          python3 scripts/_sonda_odds.py
       - uses: actions/upload-artifact@v4
         if: always()
         with:
