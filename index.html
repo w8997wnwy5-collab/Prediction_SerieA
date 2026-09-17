@@ -1454,6 +1454,55 @@ function tabellaArbitri(){
     'messo dentro un modello, non è informazione in più: è rumore in più.</div></div>';
 }
 
+/* ══════════════════════════════════════════════════════════════
+   QUANDO L'ANCORAGGIO È SPENTO
+
+   Questa è la cosa più importante che l'app possa dirti, ed è stata muta per
+   mesi.
+
+   Il modello, da solo, è la sua versione peggiore: nel backtest fa 0.19470
+   contro 0.18959 di quello ancorato al mercato — il 2.6% peggio. E non è solo
+   una questione di precisione media: il modello NUDO è quello che soffre la
+   maledizione del vincitore, perché è l'unico che può farsi un'opinione
+   propria contro il mercato. Dove si discosta di più, rende il −35%.
+
+   Le quote delle partite in arrivo hanno una fonte sola: il file dei fixture
+   di football-data. Quando quel file non porta la Serie A — succede, e
+   succede senza rumore — l'ancoraggio si spegne e l'app continua a mostrare
+   numeri con la stessa faccia di sempre.
+
+   Un punto singolo di rottura sull'input più importante è già un problema.
+   Un punto singolo di rottura SILENZIOSO è il problema. Questo avviso non lo
+   ripara — non posso inventarmi le quote — ma smette di nasconderlo.
+   ══════════════════════════════════════════════════════════════ */
+function avvisoSenzaQuote(partite){
+  if(!partite.length) return '';
+  var senza = partite.filter(function(p){ return !(p.qex || p.q); }).length;
+  if(!senza) return '';
+  var b = S.back;
+  var quanto = null;
+  if(b && b.confronto && b.confronto.modello && b.confronto.ancorato){
+    var nudo = b.confronto.modello.rps, anc = b.confronto.ancorato.rps;
+    if(nudo > 0 && anc > 0) quanto = 100 * (nudo - anc) / anc;
+  }
+  var tutte = senza === partite.length;
+  return '<div class="note warn" style="margin-bottom:14px">'+
+    '<b>'+(tutte ? 'Nessuna partita di questa giornata ha le quote.'
+                 : senza+' partite su '+partite.length+' non hanno le quote.')+'</b> '+
+    'Quindi su quelle il modello parla <b>da solo</b>, ed è la sua versione peggiore: '+
+    (quanto != null
+      ? 'nel backtest sbaglia il <b>'+nu(quanto,1)+'% in più</b> di quando si ancora al mercato.'
+      : 'nel backtest sbaglia il <b>2.6% in più</b> di quando si ancora al mercato.')+
+    '<br><br>Conta più di quel che sembra. Il modello ancorato non ha opinioni proprie contro il '+
+    'mercato; quello nudo sì — ed è esattamente lì che si è misurata la <b>maledizione del '+
+    'vincitore</b>: dove crede di avere più vantaggio, rende il <b>−35%</b>. Le giocate di oggi '+
+    'vengono da quella versione.'+
+    '<br><br>Le quote delle partite in arrivo hanno una fonte sola, e oggi non ha pubblicato la '+
+    'Serie A. Non posso inventarmele. Quello che posso fare è dirtelo invece di lasciartelo '+
+    'credere: <b>tratta i numeri di questa giornata come indicativi</b>, e se puoi aspetta un giro '+
+    'di aggiornamento — le quote a volte arrivano poche ore prima.</div>';
+}
+
 /* Quando la stessa selezione esce su quasi tutte le partite, l'app sta
    mostrando dieci volte un fatto sul CAMPIONATO travestito da dieci fatti
    sulle partite. Non è sbagliato — è misurato, ed è onesto: prende quanto
@@ -1655,6 +1704,7 @@ function tabGiornata(){
   h += '<p class="lede">Dal '+esc(dataLunga(g.inizio))+(g.fine!==g.inizio?' al '+esc(dataLunga(g.fine)):'')+
     '. Su ogni partita trovi <b>la più solida</b>: la giocata più sicura fra quelle che pagano '+
     'qualcosa. Tocca la partita per tutte le altre.</p>';
+  h += avvisoSenzaQuote(g.partite);
   h += avvisoMonotonia(g.partite);
   h += g.partite.map(function(p){ return schedaPartita(p, prossime.indexOf(p)); }).join('');
   h += sceltaPrudenza();
