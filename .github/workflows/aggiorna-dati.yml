@@ -49,6 +49,7 @@ jobs:
         env:
           FOOTBALL_DATA_TOKEN: ${{ secrets.FOOTBALL_DATA_TOKEN }}
           APIFOOTBALL_KEY: ${{ secrets.APIFOOTBALL_KEY }}
+          ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
           # solo il giro delle 05:17 rilegge tutto l'archivio; gli altri
           # aggiornano calendario, quote e arbitri e basta
           MODO: ${{ (github.event.schedule == '17 11,17,23 * * *') && 'leggero' || 'completo' }}
@@ -58,6 +59,7 @@ jobs:
         env:
           FOOTBALL_DATA_TOKEN: ${{ secrets.FOOTBALL_DATA_TOKEN }}
           APIFOOTBALL_KEY: ${{ secrets.APIFOOTBALL_KEY }}
+          ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
           MODO: ${{ (github.event.schedule == '17 11,17,23 * * *') && 'leggero' || 'completo' }}
         run: |
           git config user.name  "github-actions[bot]"
