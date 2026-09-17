@@ -1913,7 +1913,20 @@ function valutaBacktest(res, opzioni) {
   opzioni = opzioni || {};
   var pesi = opzioni.pesi || [0, 0.2, 0.35, 0.5, 0.6, 0.7, 0.85, 1];
   var stiri = opzioni.stiri || [1, 1.05, 1.1, 1.15, 1.2, 1.3];
-  var ancore = opzioni.ancore || [0, 0.2, 0.4, 0.6, 0.75, 0.85, 0.95];
+  /* La griglia dell'ancoraggio arriva a UNO, e per mesi non ci arrivava.
+     Si fermava a 0.95, quindi il backtest non poteva scegliere "il modello sta
+     zitto del tutto" nemmeno se fosse stata la risposta giusta — ed era la
+     risposta giusta. Misurato in tre modi indipendenti:
+
+       tools/misura_stringimento.js  la curva del peso e' monotona fino al bordo
+       tools/misura_mercati.js       il peso migliore e' 1 su tutti e 13 i mercati
+       tools/misura_apertura.js      e resta 1 anche sulle quote di APERTURA,
+                                     cioe' prima che il mercato veda le formazioni
+
+     Una griglia che non contiene la risposta e' peggio di una griglia
+     sbagliata: sembra che una scelta sia stata fatta, e invece e' stata solo
+     impedita. */
+  var ancore = opzioni.ancore || [0, 0.2, 0.4, 0.6, 0.75, 0.85, 0.95, 1];
   var campioni = res.campioni, base = res.base, i, k;
   var conTiri = campioni.filter(function (c) { return c.lamT != null; });
 
