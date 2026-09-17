@@ -416,6 +416,46 @@ prova('e nessuna selezione finisce in due schedine',
         sing.atteso - acc.atteso > 5, (sing.atteso - acc.atteso).toFixed(2));
 })();
 
+/* ─── quando l'ancoraggio e' spento, l'app deve dirlo ───
+
+   Le quote delle partite in arrivo hanno una fonte sola. Quando quel file non
+   porta la Serie A — misurato: succede, e succede in silenzio — l'ancoraggio si
+   spegne e il modello parla da solo, che e' la sua versione peggiore e l'unica
+   che soffre la maledizione del vincitore. Un punto singolo di rottura e' un
+   problema; un punto singolo di rottura MUTO e' il problema. */
+(function () {
+  var html;
+  try { html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8'); } catch (e) { return; }
+
+  prova('l\'avviso per la giornata senza quote esiste',
+        /function avvisoSenzaQuote/.test(html));
+  prova('e guarda le quote vere, exchange comprese',
+        /avvisoSenzaQuote[\s\S]{0,700}!\(p\.qex \|\| p\.q\)/.test(html));
+  prova('viene mostrato in Giornata, non sepolto nel dettaglio',
+        /h \+= avvisoSenzaQuote\(g\.partite\);/.test(html));
+  prova('dice quanto costa, col numero preso dal backtest e non scritto a mano',
+        /avvisoSenzaQuote[\s\S]{0,1400}confronto\.modello\.rps/.test(html));
+  prova('e nomina la maledizione del vincitore, che e il vero motivo',
+        /avvisoSenzaQuote[\s\S]{0,2400}maledizione del/.test(html));
+  prova('non scatta quando le quote ci sono',
+        /if\(!senza\) return '';/.test(html));
+
+  /* La griglia dell'ancoraggio deve contenere la risposta misurata. */
+  var mot = fs.readFileSync(path.join(__dirname, '..', 'modello.js'), 'utf8');
+  var g = mot.match(/var ancore = opzioni\.ancore \|\| \[([^\]]*)\]/);
+  prova('la griglia dell\'ancoraggio esiste', !!g);
+  if (g) {
+    var v = g[1].split(',').map(function (x) { return parseFloat(x); });
+    prova('e arriva a UNO: senza, il backtest non puo scegliere la risposta misurata',
+          v.indexOf(1) >= 0, g[1]);
+    prova('ed e crescente', v.every(function (x, i) { return i === 0 || x > v[i - 1]; }), g[1]);
+  }
+  prova('e il perche e scritto accanto, con gli strumenti che l\'hanno misurato',
+        /misura_mercati\.js[\s\S]{0,300}misura_apertura\.js/.test(mot));
+  prova('lo strumento sull\'apertura esiste',
+        fs.existsSync(path.join(__dirname, 'misura_apertura.js')));
+})();
+
 /* ─── i multigol: onesti e monotoni insieme ───
 
    Accendendo i multigol l'app propone Multigol 1-4 su nove partite su dieci.

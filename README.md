@@ -225,6 +225,7 @@ node tools/misura_stringimento.js                   # l'ancoraggio deve stringer
 node tools/misura_mercati.js                        # il peso giusto è lo stesso su tutti i mercati? (sì: uno)
 node tools/ottimizza_mese.js                        # quale struttura chiude il mese in attivo più spesso
 node tools/misura_multigol.js                       # Multigol 1-4 ovunque: bug o regola che fa il suo mestiere?
+node tools/misura_apertura.js                       # il peso giusto quando il mercato non ha visto le formazioni (sempre 1)
 ```
 
 ### Le notizie, e cosa possono fare
@@ -634,14 +635,58 @@ esattamente quello che il banco non ti dà — ma non è avere un'opinione.
 Nessuno tara l'ancoraggio così, perché tutti lo tarano sull'1X2, che è l'unico
 mercato su cui il confronto è comodo.
 
-**Il limite dichiarato, e stavolta verificato prima di dichiararlo:** tutto
-questo è misurato sulle quote di **chiusura**, che sono la stima migliore che
-esista e non sono quelle che hai in mano quando punti. Chi gioca prima delle
-formazioni ufficiali ha l'**apertura**, più grezza. Se il mercato di chiusura è
-molto più informato del modello ma quello di apertura lo è meno, il peso giusto
-non è 1 in quel momento — e tararlo sulla chiusura vuol dire tararlo su una
-situazione in cui non ci si trova mai. Le colonne di apertura sono ora
-nell'archivio, tenute separate, per poterlo misurare.
+**E il limite dichiarato, adesso misurato.** Tutto quanto sopra era misurato
+sulle quote di **chiusura**, che sono la stima migliore che esista e non sono
+quelle che si hanno in mano quando si punta. Chi gioca prima delle formazioni
+ufficiali ha l'**apertura**, più grezza — e se il mercato di chiusura fosse
+molto più informato del modello ma quello di apertura lo fosse meno, il peso
+giusto non sarebbe 1 in quel momento. Tararlo sulla chiusura vorrebbe dire
+tararlo su una situazione in cui non ci si trova mai.
+
+Misurato (`tools/misura_apertura.js`), ora che l'apertura è in archivio:
+
+| | errore |
+|---|---|
+| mercato nudo, **apertura** | 0.18996 |
+| mercato nudo, **chiusura** | 0.18950 |
+| | z = 0.62 |
+
+Fra i due momenti il mercato si sposta del 2.3% (variazione totale), ma in
+accuratezza guadagna solo lo 0.24%, che non si distingue dal caso. E il peso
+migliore resta **1 su tutte e due**. Il mercato, pure grezzo, sa già più del
+modello: la mezza informazione che gli manca non basta a pareggiare il divario.
+Giocare prima delle formazioni costa **0.27%** di errore, z = 0.52 — cioè
+niente, e in cambio si prendono quote più alte.
+
+**Conseguenza spedita:** la griglia del backtest si fermava a 0.95, quindi l'app
+non poteva scegliere «il modello sta zitto del tutto» nemmeno volendo. Adesso
+arriva a 1, e la sceglie. *Una griglia che non contiene la risposta è peggio di
+una griglia sbagliata: sembra che una scelta sia stata fatta, e invece era stata
+impedita.*
+
+### Il punto singolo di rottura, e perché era muto
+
+Le quote delle partite **in arrivo** hanno una fonte sola: il file dei fixture
+di football-data. Il 17 settembre l'archivio diceva `calendario ravvicinato: ok:
+0 partite`, e zero quote su tutte e 350 le partite future — compresa la giornata
+del giorno dopo.
+
+La sonda (`scripts/_sonda_calendario.py`) ha dato la risposta esatta: il file
+c'era e conteneva 30 partite, ma di **otto campionati diversi e nessuno era la
+Serie A**, su una finestra di tre giorni (15-17 settembre, mentre si giocava il
+18-19). Non un errore di lettura: quel file copre pochi giorni e la Serie A ci
+entra tardi, o non ci entra.
+
+Senza quote l'ancoraggio si spegne e il modello parla da solo — che è la sua
+versione **peggiore** (0.19470 contro 0.18959, il 2.6% in più di errore) e
+l'unica che può farsi un'opinione propria contro il mercato, cioè l'unica
+esposta alla maledizione del vincitore. E l'app continuava a mostrare i suoi
+numeri con la stessa faccia di sempre.
+
+Un punto singolo di rottura sull'input più importante è già un problema. Un
+punto singolo di rottura **silenzioso** è *il* problema. L'app adesso lo dice in
+Giornata, con la percentuale presa dal proprio backtest invece che scritta a
+mano.
 
 ### Il mio libro: la parte che non si può chiedere
 
@@ -844,7 +889,7 @@ dire che quello che resta da guadagnare non sta nel modello, sta nel **prezzo**
 | `worker.js` | fa girare il motore fuori dal thread dell'interfaccia, così lo schermo non si blocca |
 | `scripts/build_data.py` | scarica e normalizza i dati da sei fonti (solo libreria standard) |
 | `.github/workflows/aggiorna-dati.yml` | il robot: quattro giri al giorno |
-| `tools/` | generatore di dati sintetici, le tre prove (123 sulle fonti, 130 sul motore, 15 sul backtest), la verifica di una giornata a posteriori e le nove misure (arbitri, indipendenza, valore, regola di selezione, handicap, vantaggio del campo, neopromosse, taratura dei parametri, ancoraggio Over/Under) |
+| `tools/` | generatore di dati sintetici, le tre prove (126 sulle fonti, 141 sul motore, 15 sul backtest), la verifica di una giornata a posteriori e le nove misure (arbitri, indipendenza, valore, regola di selezione, handicap, vantaggio del campo, neopromosse, taratura dei parametri, ancoraggio Over/Under) |
 | `data/` | riempita dalla Action: `serie-a.json` e `meta.json` |
 
 ## Una nota sul senso di tutto questo

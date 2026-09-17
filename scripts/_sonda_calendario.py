@@ -78,6 +78,52 @@ def main():
         riga('  %s' % piene)
 
 
+def sonda_api_football():
+    """C'e' una SECONDA fonte possibile per le quote delle partite in arrivo?
+
+    fixtures.csv di football-data e' l'unica che l'app usa, e la sonda qui sopra
+    ha mostrato che copre una finestra di due o tre giorni e che la Serie A
+    spesso non c'e'. Un punto singolo di rottura sull'input piu' importante.
+
+    API-Football ha un endpoint /odds e la chiave e' gia' nei segreti (la si usa
+    per arbitri e statistiche). Prima di costruirci sopra si chiede: risponde?
+    Con quante partite? Con quali banchi? Quanto costa di quota?
+    """
+    import json as _json
+    chiave = os.environ.get('APIFOOTBALL_KEY', '').strip()
+    riga()
+    riga('== API-Football /odds ==')
+    if not chiave:
+        riga("nessuna chiave APIFOOTBALL_KEY: non si puo' sapere")
+        return
+    conteggio = [0]
+    try:
+        d = B.api_football('odds', {'league': B.LEGA_APIFOOTBALL, 'season': 2026},
+                           chiave, conteggio)
+    except Exception as e:                       # noqa: BLE001
+        riga('NON RISPONDE: %s' % str(e)[:200])
+        return
+    risposte = d.get('response') or []
+    riga('richieste spese: %d' % conteggio[0])
+    riga('partite con quote: %d' % len(risposte))
+    riga('paginazione: %s' % _json.dumps(d.get('paging') or {}))
+    if d.get('errors'):
+        riga('errori dichiarati: %s' % _json.dumps(d['errors'])[:300])
+    if not risposte:
+        riga("risponde ma non porta niente: non e' una fonte utilizzabile.")
+        return
+    r0 = risposte[0]
+    fx = (r0.get('fixture') or {})
+    riga('prima partita: %s  (id %s)' % (fx.get('date'), fx.get('id')))
+    banchi = [(b.get('name'), len(b.get('bets') or [])) for b in (r0.get('bookmakers') or [])]
+    riga('banchi: %d — %s' % (len(banchi), ', '.join('%s(%d mercati)' % b for b in banchi[:8])))
+    for b in (r0.get('bookmakers') or [])[:1]:
+        for bet in (b.get('bets') or [])[:3]:
+            riga('  %s: %s' % (bet.get('name'),
+                               ', '.join('%s=%s' % (v.get('value'), v.get('odd'))
+                                         for v in (bet.get('values') or [])[:4])))
+
+
 if __name__ == '__main__':
     main()
     sonda_api_football()
