@@ -15,6 +15,7 @@ import datetime
 import io
 import json
 import os
+import re
 import sys
 
 QUI = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -132,6 +133,107 @@ def test_quote():
 
 
 # ── Understat ───────────────────────────────────────────────────────────────
+
+def test_odds_api():
+    """The Odds API: la fonte che ha chiuso il punto singolo di rottura.
+
+    Le cose che possono rompersi in silenzio sono due, e sono entrambe brutte.
+    La prima: The Odds API mette il NOME DELLA SQUADRA al posto di "1" e "2",
+    quindi l'ordine casa-pareggio-trasferta va ricostruito dai nomi. Fidarsi
+    della posizione e' il modo piu' silenzioso di scambiare casa e trasferta —
+    nessun errore, solo previsioni al contrario.
+
+    La seconda: la chiave sta nell'URL. Se un'eccezione porta l'URL nel
+    messaggio, e il messaggio finisce nel file pubblicato, la chiave e'
+    pubblica."""
+    casa = {'key': 'h2h', 'outcomes': [
+        {'name': 'Sassuolo', 'price': 2.30},
+        {'name': 'Monza', 'price': 2.75},
+        {'name': 'Draw', 'price': 3.45}]}
+    t = B._terna_h2h(casa, 'Monza', 'Sassuolo')
+    prova('la terna si ricostruisce dai NOMI, non dalla posizione',
+          t == [2.75, 3.45, 2.30], str(t))
+    prova('e invertendo le squadre si inverte la terna',
+          B._terna_h2h(casa, 'Sassuolo', 'Monza') == [2.30, 3.45, 2.75])
+    prova('un nome che non torna non produce una terna sbagliata: non la produce',
+          B._terna_h2h(casa, 'Inter', 'Sassuolo') is None)
+
+    ou = {'key': 'totals', 'outcomes': [
+        {'name': 'Over', 'price': 1.73, 'point': 2.5},
+        {'name': 'Under', 'price': 1.95, 'point': 2.5},
+        {'name': 'Over', 'price': 2.90, 'point': 3.5},
+        {'name': 'Under', 'price': 1.40, 'point': 3.5}]}
+    prova('dell\'Over/Under si prende la linea 2.5 e non un\'altra',
+          B._coppia_ou(ou) == [1.73, 1.95], str(B._coppia_ou(ou)))
+    prova('se la 2.5 non c\'e non si ripiega su una linea diversa',
+          B._coppia_ou({'key': 'totals', 'outcomes': [
+              {'name': 'Over', 'price': 2.9, 'point': 3.5},
+              {'name': 'Under', 'price': 1.4, 'point': 3.5}]}) is None)
+
+    # il giro intero, con la rete finta
+    risposta = json.dumps([{
+        'home_team': 'Monza', 'away_team': 'Sassuolo',
+        'commence_time': '2026-09-18T18:45:00Z',
+        'bookmakers': [
+            {'key': 'betfair_ex_eu', 'markets': [
+                {'key': 'h2h', 'outcomes': [
+                    {'name': 'Monza', 'price': 2.90},
+                    {'name': 'Sassuolo', 'price': 2.50},
+                    {'name': 'Draw', 'price': 3.60}]}]},
+            {'key': 'pinnacle', 'markets': [
+                {'key': 'h2h', 'outcomes': [
+                    {'name': 'Monza', 'price': 2.80},
+                    {'name': 'Sassuolo', 'price': 2.40},
+                    {'name': 'Draw', 'price': 3.50}]},
+                {'key': 'totals', 'outcomes': [
+                    {'name': 'Over', 'price': 1.80, 'point': 2.5},
+                    {'name': 'Under', 'price': 2.00, 'point': 2.5}]}]}]}]).encode()
+    vero = B.scarica
+    B.scarica = lambda *a, **k: risposta
+    os.environ['ODDS_API_KEY'] = 'chiave-finta'
+    try:
+        esiti = {}
+        out = B.prendi_odds_api(esiti)
+    finally:
+        B.scarica = vero
+        os.environ.pop('ODDS_API_KEY', None)
+    prova('una partita torna dalla fonte', len(out) == 1, len(out))
+    m = out[0] if out else {}
+    prova('la media e la media dei banchi', m.get('q') == [2.85, 3.55, 2.45], str(m.get('q')))
+    prova('la migliore e il massimo, non la media', m.get('qmax') == [2.9, 3.6, 2.5], str(m.get('qmax')))
+    prova('Betfair finisce in qex, separata dalla media',
+          m.get('qex') == [2.9, 3.6, 2.5], str(m.get('qex')))
+    prova('e l\'Over/Under arriva', m.get('qou') == [1.8, 2.0], str(m.get('qou')))
+    prova('la data e quella della partita', m.get('d') == '2026-09-18', m.get('d'))
+    prova('l\'esito dice quante e quante con Betfair',
+          'Betfair' in str(esiti.get('The Odds API')), str(esiti.get('The Odds API')))
+
+    # senza chiave non si inventa niente e non si sbatte
+    os.environ.pop('ODDS_API_KEY', None)
+    e2 = {}
+    prova('senza chiave si salta invece di rompersi',
+          B.prendi_odds_api(e2) == [] and 'saltata' in str(e2.get('The Odds API')))
+
+    # la chiave non deve uscire nei messaggi: sta nell'URL
+    def esplode(*a, **k):
+        raise RuntimeError('HTTP 401 su %s/odds?apiKey=SEGRETISSIMA' % B.ODDS_API_BASE)
+    vero2 = B.scarica
+    B.scarica = esplode
+    os.environ['ODDS_API_KEY'] = 'SEGRETISSIMA'
+    try:
+        e3 = {}
+        B.prendi_odds_api(e3)
+    finally:
+        B.scarica = vero2
+        os.environ.pop('ODDS_API_KEY', None)
+    prova('se la chiamata fallisce, la CHIAVE non finisce nel messaggio',
+          'SEGRETISSIMA' not in str(e3.get('The Odds API')), str(e3.get('The Odds API')))
+
+    sorgente = io.open(os.path.join(QUI, 'scripts', 'build_data.py'), encoding='utf-8').read()
+    prova('la chiave si legge dall\'ambiente e non e scritta nel codice',
+          "os.environ.get('ODDS_API_KEY'" in sorgente and
+          not re.search(r"ODDS_API_KEY['\"]?\s*[:=]\s*['\"][0-9a-f]{16}", sorgente))
+
 
 def test_understat():
     dentro = json.dumps([{
@@ -757,6 +859,7 @@ def main():
     test_validatori()
     test_quote()
     test_calendario_ha_le_stesse_quote()
+    test_odds_api()
     test_xg_e_quote_di_chiusura()
     test_understat()
     test_espn()

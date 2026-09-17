@@ -862,6 +862,137 @@ def prendi_calendario(stagioni, esiti):
     return fut
 
 
+# ────────────────────────────── The Odds API ──────────────────────────────
+
+# La fonte che ha risolto il punto singolo di rottura.
+#
+# Per mesi le quote delle partite in arrivo sono arrivate da un file solo,
+# fixtures.csv di football-data, che copre una finestra di due o tre giorni.
+# Il 17 settembre quella finestra conteneva 30 partite di otto campionati e
+# nessuna di Serie A, mentre si giocava il giorno dopo: l'ancoraggio spento,
+# il modello nudo, e nessuno che lo dicesse.
+#
+# Misurato con la sonda prima di scrivere una riga (scripts/_sonda_odds.py):
+#
+#   partite di Serie A con quote : 20
+#   copertura                    : dal 18 settembre al 12 OTTOBRE, 24 giorni
+#   banchi                       : 24, fra cui Betfair Exchange e Pinnacle
+#   costo                        : 2 crediti a chiamata, ~240 al mese su 500
+#
+# Le due cose che contano piu' del resto:
+#
+# BETFAIR EXCHANGE SULLE PARTITE FUTURE. Ancorarsi a Betfair invece che alla
+# quota media era gia' stato misurato come il miglior guadagno della stagione
+# (+0.28%), ma quel guadagno arrivava solo alle partite GIA' GIOCATE, perche'
+# football-data non pubblica l'exchange sui fixture. Adesso arriva dove si
+# gioca. Ricarico 0.5% invece di 5.
+#
+# PINNACLE. Il banco che gli altri guardano per decidere i propri prezzi:
+# margine basso e limiti alti, quindi la sua quota e' la stima piu' onesta che
+# un bookmaker produca. Entra nel calcolo della media come gli altri.
+#
+# La chiave sta in ODDS_API_KEY, un segreto del repository. Questo file e'
+# pubblico: una chiave scritta qui sarebbe una chiave regalata.
+
+ODDS_API_BASE = 'https://api.the-odds-api.com/v4'
+ODDS_API_SPORT = 'soccer_italy_serie_a'
+ODDS_EXCHANGE = 'betfair_ex_eu'
+LINEA_OU = 2.5
+
+
+def _terna_h2h(mercato, squadra_casa, squadra_via):
+    """Le tre quote di un banco, nell'ordine 1-X-2. The Odds API mette il nome
+    della squadra al posto di "1" e "2", quindi l'ordine va ricostruito dai
+    nomi invece che dalla posizione: fidarsi della posizione e' il modo piu'
+    silenzioso di scambiare casa e trasferta."""
+    trovate = {}
+    for o in mercato.get('outcomes') or []:
+        trovate[(o.get('name') or '').strip()] = num(o.get('price'))
+    c = trovate.get(squadra_casa)
+    v = trovate.get(squadra_via)
+    x = trovate.get('Draw')
+    if c and x and v and min(c, x, v) > 1:
+        return [c, x, v]
+    return None
+
+
+def _coppia_ou(mercato):
+    """Over e Under sulla linea 2.5, se il banco la quota."""
+    o = u = None
+    for x in mercato.get('outcomes') or []:
+        if abs((num(x.get('point')) or 0) - LINEA_OU) > 1e-9:
+            continue
+        if (x.get('name') or '') == 'Over':
+            o = num(x.get('price'))
+        elif (x.get('name') or '') == 'Under':
+            u = num(x.get('price'))
+    if o and u and min(o, u) > 1:
+        return [o, u]
+    return None
+
+
+def prendi_odds_api(esiti):
+    """Le quote delle partite in arrivo, da 24 banchi e con 24 giorni di
+    anticipo. Torna voci di calendario pronte da fondere."""
+    chiave = os.environ.get('ODDS_API_KEY', '').strip()
+    if not chiave:
+        esiti['The Odds API'] = 'saltata: nessuna chiave ODDS_API_KEY'
+        return []
+    url = ('%s/sports/%s/odds?regions=eu&markets=h2h,totals&oddsFormat=decimal&apiKey=%s'
+           % (ODDS_API_BASE, ODDS_API_SPORT, chiave))
+    try:
+        log('· The Odds API')
+        grezzo = scarica(url, tentativi=2, attesa=3)
+        partite = json.loads(grezzo.decode('utf-8'))
+    except Exception as e:                        # noqa: BLE001
+        # Il messaggio puo' contenere l'URL, e l'URL contiene la chiave.
+        esiti['The Odds API'] = 'non disponibile: %s' % str(e).replace(chiave, '***')[:80]
+        return []
+    if not isinstance(partite, list):
+        esiti['The Odds API'] = 'risposta inattesa'
+        return []
+
+    fuori, senza_quote = [], 0
+    for p in partite:
+        casa_grezza = (p.get('home_team') or '').strip()
+        via_grezza = (p.get('away_team') or '').strip()
+        c, v = nome(casa_grezza), nome(via_grezza)
+        d = (p.get('commence_time') or '')[:10]
+        if not (c and v and d):
+            continue
+        terne, coppie, exch = [], [], None
+        for b in p.get('bookmakers') or []:
+            for m in b.get('markets') or []:
+                if m.get('key') == 'h2h':
+                    t = _terna_h2h(m, casa_grezza, via_grezza)
+                    if t:
+                        terne.append(t)
+                        if b.get('key') == ODDS_EXCHANGE:
+                            exch = t
+                elif m.get('key') == 'totals':
+                    cp = _coppia_ou(m)
+                    if cp:
+                        coppie.append(cp)
+        if not terne:
+            senza_quote += 1
+            continue
+        m = {'d': d, 'c': c, 'v': v,
+             'q': [round(sum(t[i] for t in terne) / len(terne), 3) for i in range(3)],
+             'qmax': [round(max(t[i] for t in terne), 3) for i in range(3)]}
+        if exch:
+            m['qex'] = [round(x, 3) for x in exch]
+        if coppie:
+            m['qou'] = [round(sum(cp[i] for cp in coppie) / len(coppie), 3) for i in range(2)]
+            m['qoumax'] = [round(max(cp[i] for cp in coppie), 3) for i in range(2)]
+        fuori.append(m)
+
+    conex = sum(1 for m in fuori if m.get('qex'))
+    esiti['The Odds API'] = ('ok: %d partite con quote (%d con Betfair)%s'
+                             % (len(fuori), conex,
+                                ', %d scartate senza quote' % senza_quote if senza_quote else ''))
+    return fuori
+
+
 # ────────────────────────────── API-Football (facoltativa) ──────────────────────────────
 
 _ultima_api_football = [0.0]
@@ -1615,6 +1746,12 @@ def main():
     tenuto = da_tenere(vecchio_cal, oggi_iso)
     calendario = unisci_calendario(stagionale, tenuto)
     calendario = unisci_calendario(calendario, ravvicinato)
+    # The Odds API viene DOPO football-data, quindi vince sui campi che porta:
+    # ha 24 giorni di anticipo invece di due, 24 banchi invece di una manciata,
+    # e soprattutto Betfair Exchange, che sulle partite future non c'era mai
+    # stato. Sui campi che non porta (orario, giornata) non tocca niente,
+    # perche' unisci_calendario scrive solo i valori non nulli.
+    calendario = unisci_calendario(calendario, prendi_odds_api(esiti))
     if tsdb_future:
         calendario = unisci_calendario(calendario, tsdb_future)
     # Una partita che si e' giocata non e' piu' in calendario. Quando una fonte
