@@ -684,9 +684,19 @@ esposta alla maledizione del vincitore. E l'app continuava a mostrare i suoi
 numeri con la stessa faccia di sempre.
 
 Un punto singolo di rottura sull'input più importante è già un problema. Un
-punto singolo di rottura **silenzioso** è *il* problema. L'app adesso lo dice in
-Giornata, con la percentuale presa dal proprio backtest invece che scritta a
-mano.
+punto singolo di rottura **silenzioso** è *il* problema.
+
+**E una seconda fonte?** Chiesto prima di costruire, come per tutto il resto.
+API-Football ha un endpoint `/odds` e la chiave era già nei segreti. Risposta
+del server, testuale: *«Free plans do not have access to this season, try from
+2022 to 2024.»* Il piano gratuito copre le stagioni vecchie, cioè esattamente
+quelle di cui non serve sapere le quote in anticipo. Non è una fonte.
+
+Quindi: la fonte resta una, e non si può fare altrimenti senza pagare. Quello
+che si può fare è **smettere di nasconderlo**. L'app adesso lo dice in Giornata,
+con la percentuale presa dal proprio backtest invece che scritta a mano — e le
+quote, quando finalmente arrivano, vengono conservate da un giro all'altro
+invece di essere riscaricate ogni volta.
 
 ### Il mio libro: la parte che non si può chiedere
 
