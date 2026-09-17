@@ -1,5 +1,5 @@
 {
- "aggiornato": "2026-09-17T19:41:31+00:00",
+ "aggiornato": "2026-09-17T21:26:41+00:00",
  "esito": "ok",
  "ultima_partita": "2026-09-14",
  "partite_totali": 1940,
@@ -13,7 +13,7 @@
  "in_arrivo_con_quote": 0,
  "in_arrivo_con_orario": 90,
  "marcatori": 0,
- "notizie": 56,
+ "notizie": 58,
  "notizie_assenze": 5,
  "stagioni": [
   "2021-22",
@@ -35,6 +35,7 @@
   "TheSportsDB": "ok: 1 giocate di cui 1 col risultato, 1 in arrivo",
   "calendario ravvicinato": "ok: 0 partite",
   "calendario stagione": "ok da openfootball: 350 partite",
+  "The Odds API": "saltata: nessuna chiave ODDS_API_KEY",
   "calendario": "350 partite in tutto, 0 con le quote (0 scaricate adesso, 0 tenute da prima)",
   "TheSportsDB risultati": "1 risultati accolti",
   "Understat 2026-27": "fallita: nella pagina non compare mai datesData (18714 byte): o è cambiato il nome, o quella servita non è la pagina della lega",
@@ -51,9 +52,9 @@
   "API-Football 2021-22": "non disponibile: API-Football dice: {\"plan\": \"Free plans do not have access to this season, try from 2022 to 2024.\"}",
   "API-Football richieste": "6 usate su 70 disponibili",
   "marcatori": "saltati: nessuna chiave FOOTBALL_DATA_TOKEN",
-  "notizie ANSA": "35 titoli tenuti su 69 (scartati: 34 nessuna squadra)",
+  "notizie ANSA": "37 titoli tenuti su 70 (scartati: 33 nessuna squadra)",
   "notizie Football Italia": "17 titoli tenuti su 20 (scartati: 3 nessuna squadra)",
   "notizie Repubblica": "4 titoli tenuti su 25 (scartati: 3 doppio, 18 nessuna squadra)",
-  "notizie": "56 titoli tenuti, 5 segnalano un'assenza, 2 la panchina"
+  "notizie": "58 titoli tenuti, 5 segnalano un'assenza, 2 la panchina"
  }
 }
