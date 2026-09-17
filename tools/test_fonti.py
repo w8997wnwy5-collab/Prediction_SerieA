@@ -11,6 +11,7 @@ la rifiuti invece di trasformarla in dati.
 """
 
 import csv
+import datetime
 import io
 import json
 import os
@@ -22,6 +23,20 @@ sys.path.insert(0, os.path.join(QUI, 'scripts'))
 import build_data as B          # noqa: E402
 
 ESITI = []
+
+
+def _rfc822(giorni_fa):
+    """Una data nel formato dei feed RSS, contata da oggi.
+
+    Serve a non scrivere date a mano nei campioni di prova: il codice che si
+    sta provando scarta le notizie piu' vecchie di dieci giorni, quindi un
+    campione con date fisse smette di funzionare da solo dopo dieci giorni."""
+    q = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=giorni_fa)
+    giorno = ('Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun')[q.weekday()]
+    mese = ('Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+            'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec')[q.month - 1]
+    return '%s, %02d %s %d %02d:%02d:00 +0000' % (
+        giorno, q.day, mese, q.year, q.hour, q.minute)
 
 
 def prova(nome, condizione, dettaglio=''):
@@ -517,16 +532,24 @@ def test_notizie():
     previsione: riguardano che si legga il formato giusto, che si riconosca la
     squadra, e soprattutto che roba scritta da altri non finisca dritta
     nell'app."""
-    rss = b'''<?xml version="1.0"?><rss version="2.0"><channel>
+    # Le date sono RELATIVE a oggi, non scritte a mano.
+    #
+    # Prima erano fisse — "Mon, 07 Sep 2026" — e la prova passava. Poi sono
+    # passati dieci giorni, il filtro che scarta le notizie vecchie ha iniziato
+    # a mangiarsi il campione, e la prova e' esplosa da sola senza che nessuno
+    # avesse toccato niente. Una prova che invecchia e' peggio di una prova che
+    # manca: fallisce quando il codice e' giusto, e insegna a ignorarla.
+    ieri = _rfc822(1)
+    rss = ('''<?xml version="1.0"?><rss version="2.0"><channel>
 <item><title><![CDATA[Roma, Dybala out: lesione al flessore, salta l&apos;Atalanta]]></title>
-<link>https://esempio.it/1</link><pubDate>Mon, 07 Sep 2026 08:00:00 +0200</pubDate></item>
+<link>https://esempio.it/1</link><pubDate>%s</pubDate></item>
 <item><title>Inter-Napoli 2-1: decide Lautaro nel finale</title>
-<link>https://esempio.it/2</link><pubDate>Sun, 06 Sep 2026 22:30:00 +0200</pubDate></item>
+<link>https://esempio.it/2</link><pubDate>%s</pubDate></item>
 <item><title>Calciomercato: il Bayern piomba su un big</title>
-<link>https://esempio.it/3</link><pubDate>Mon, 07 Sep 2026 09:00:00 +0200</pubDate></item>
+<link>https://esempio.it/3</link><pubDate>%s</pubDate></item>
 <item><title>Milan, il tecnico rassicura</title>
-<link>javascript:alert(1)</link><pubDate>Mon, 07 Sep 2026 07:00:00 +0200</pubDate></item>
-</channel></rss>'''
+<link>javascript:alert(1)</link><pubDate>%s</pubDate></item>
+</channel></rss>''' % (ieri, _rfc822(2), ieri, ieri)).encode()
     vero, vera_pausa, vere_fonti = B.scarica, B.time.sleep, B.FONTI_NOTIZIE
     B.scarica = lambda *a, **k: rss
     B.time.sleep = lambda *a: None
@@ -548,6 +571,32 @@ def test_notizie():
           [n for n in out if 'Lautaro' in n['t']][0]['ass'] is False)
     prova('un titolo che non nomina nessuna squadra di A viene lasciato fuori',
           not any('Bayern' in n['t'] for n in out))
+
+    # La finestra dei dieci giorni, provata APPOSTA invece che per caso.
+    # Prima era coperta solo per sbaglio, dalle date fisse del campione che
+    # invecchiavano: quando la copertura di una regola dipende dal giorno in
+    # cui si lancia la prova, non e' copertura.
+    fresco = ('<?xml version="1.0"?><rss version="2.0"><channel>'
+              '<item><title>Roma, Dybala out</title><link>https://e.it/a</link>'
+              '<pubDate>%s</pubDate></item>'
+              '<item><title>Inter, Lautaro out</title><link>https://e.it/b</link>'
+              '<pubDate>%s</pubDate></item>'
+              '</channel></rss>' % (_rfc822(9), _rfc822(11))).encode()
+    vero2, pausa2, fonti2 = B.scarica, B.time.sleep, B.FONTI_NOTIZIE
+    B.scarica = lambda *a, **k: fresco
+    B.time.sleep = lambda *a: None
+    B.FONTI_NOTIZIE = (('Prova', 'http://x'),)
+    try:
+        esiti2 = {}
+        finestra = B.prendi_notizie(['Roma', 'Inter'], esiti2)
+    finally:
+        B.scarica, B.time.sleep, B.FONTI_NOTIZIE = vero2, pausa2, fonti2
+    prova('una notizia di nove giorni fa si tiene',
+          any('Dybala' in n['t'] for n in finestra), [n['t'] for n in finestra])
+    prova('una di undici giorni no',
+          not any('Lautaro' in n['t'] for n in finestra), [n['t'] for n in finestra])
+    prova('e lo scarto viene contato come "vecchio", non sparisce in silenzio',
+          any('vecchio' in str(v) for v in esiti2.values()), str(esiti2))
 
     # La parte che conta: il contenuto lo scrive qualcun altro.
     mil = [n for n in out if n['t'].startswith('Milan')]
