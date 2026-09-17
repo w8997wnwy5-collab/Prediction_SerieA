@@ -104,6 +104,8 @@ h1,h2,h3,h4{margin:0;}
 .match .quando{font-family:var(--mono);font-size:10px;letter-spacing:.7px;color:var(--mute);
   text-transform:uppercase;margin-bottom:7px;display:flex;gap:8px;}
 .match .quando .gg{margin-left:auto;}
+.gg.mie{background:var(--accent-soft);color:var(--accent);}
+.gg.vuoto{background:var(--warn-soft,rgba(180,90,40,.13));color:var(--warn);}
 .match .sfida{display:flex;align-items:center;gap:9px;margin-bottom:11px;}
 .match .sfida .sq{flex:1;min-width:0;font-size:15.5px;font-weight:600;letter-spacing:-.2px;}
 .match .sfida .sq.v{text-align:right;}
@@ -1634,7 +1636,12 @@ function schedaPartita(p, indice){
   var sol = sc ? sc.piuSolida : null;
   return '<div class="match" onclick="apriPartita('+indice+')">'+
     '<div class="quando"><span>'+esc(dataBreve(p.d))+(p.o?' · '+esc(p.o):'')+'</span>'+
-      ((p.qex||p.q)?'<span class="gg">quote incluse</span>':'')+'</div>'+
+      /* Lo stato delle quote si legge DALLA COPERTINA, senza aprire niente:
+         è l'unica cosa che decide se quello che c'è scritto sotto vale il
+         2.6% in più o in meno, e stava nascosta due schermate più in basso. */
+      ((p.qex||p.q) ? '<span class="gg">quote incluse</span>'
+        : (quotaMano(p) ? '<span class="gg mie">quote tue</span>'
+                        : '<span class="gg vuoto">senza quote · scrivile tu</span>'))+'</div>'+
     '<div class="sfida"><div class="sq">'+esc(p.c)+'</div><div class="vs">—</div>'+
       '<div class="sq v">'+esc(p.v)+'</div></div>'+
     barraProb(pr)+
