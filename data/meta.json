@@ -1,5 +1,5 @@
 {
- "aggiornato": "2026-09-17T11:26:46+00:00",
+ "aggiornato": "2026-09-17T17:24:59+00:00",
  "esito": "ok",
  "ultima_partita": "2026-09-14",
  "partite_totali": 1940,
@@ -13,8 +13,8 @@
  "in_arrivo_con_quote": 0,
  "in_arrivo_con_orario": 90,
  "marcatori": 0,
- "notizie": 55,
- "notizie_assenze": 4,
+ "notizie": 60,
+ "notizie_assenze": 5,
  "stagioni": [
   "2021-22",
   "2022-23",
@@ -27,15 +27,16 @@
   "modo": "leggero",
   "riserva 2026-27": "ok: 30 giocate, 350 in calendario (senza tiri né arbitri)",
   "TheSportsDB": "ok: 1 giocate di cui 1 col risultato, 1 in arrivo",
-  "calendario ravvicinato": "fallito: football-data.co.uk → <urlopen error [Errno 111] Connection refused>",
+  "football-data indirizzo": "https://football-data.co.uk",
+  "calendario ravvicinato": "ok: 0 partite",
   "calendario": "350 partite in tutto, 0 con le quote (0 scaricate adesso, 0 tenute da prima)",
   "TheSportsDB risultati": "1 risultati accolti",
   "ESPN calendario": "non disponibile: HTTP Error 403: Forbidden",
   "ESPN arbitri": "800 partite sono senza arbitro, ma nessuna è stata agganciata a ESPN: senza il suo identificativo non posso chiederne il dettaglio",
   "marcatori": "saltati: nessuna chiave FOOTBALL_DATA_TOKEN",
-  "notizie ANSA": "31 titoli tenuti su 67 (scartati: 36 nessuna squadra)",
-  "notizie Football Italia": "20 titoli tenuti su 20",
+  "notizie ANSA": "39 titoli tenuti su 74 (scartati: 35 nessuna squadra)",
+  "notizie Football Italia": "17 titoli tenuti su 20 (scartati: 3 nessuna squadra)",
   "notizie Repubblica": "4 titoli tenuti su 25 (scartati: 3 doppio, 18 nessuna squadra)",
-  "notizie": "55 titoli tenuti, 4 segnalano un'assenza, 2 la panchina"
+  "notizie": "60 titoli tenuti, 5 segnalano un'assenza, 2 la panchina"
  }
 }
