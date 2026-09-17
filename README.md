@@ -692,11 +692,36 @@ del server, testuale: *«Free plans do not have access to this season, try from
 2022 to 2024.»* Il piano gratuito copre le stagioni vecchie, cioè esattamente
 quelle di cui non serve sapere le quote in anticipo. Non è una fonte.
 
-Quindi: la fonte resta una, e non si può fare altrimenti senza pagare. Quello
-che si può fare è **smettere di nasconderlo**. L'app adesso lo dice in Giornata,
-con la percentuale presa dal proprio backtest invece che scritta a mano — e le
-quote, quando finalmente arrivano, vengono conservate da un giro all'altro
-invece di essere riscaricate ogni volta.
+Quindi la fonte scaricata resta una. Tre cose sono state fatte, e la terza è la
+più interessante.
+
+**Primo, dirlo.** L'app adesso lo scrive in Giornata, con la percentuale presa
+dal proprio backtest invece che a mano.
+
+**Secondo, guardare all'ora giusta.** I giri erano distribuiti nella giornata
+(11, 17, 23 UTC). Ma quel file copre due o tre giorni e la Serie A ci entra
+tardi, quindi i giri vanno messi **vicino ai fischi d'inizio**, non sparsi: ora
+sono alle 09:47, 12:47, 15:47 e 17:47 UTC — un'ora scarsa prima di ciascuno dei
+quattro orari in cui si gioca in Serie A.
+
+**Terzo, e questa nessuna API la dà: le quote le può scrivere chi gioca.** Nel
+dettaglio di ogni partita ci sono tre campi — 1, X, 2 — e mentre li si compila
+l'app dice due cose: che probabilità sta esprimendo quel banco una volta tolto
+il ricarico, e **quanto ricarico si sta prendendo**. Se le quote scaricate non
+ci sono, le tue accendono l'ancoraggio subito.
+
+L'ordine di preferenza non è arbitrario e ha una prova che lo protegge:
+
+| | ricarico | perché in quest'ordine |
+|---|---|---|
+| Betfair Exchange | 0.5% | la probabilità più pulita che esista |
+| media dei bookmaker | 4.9% | un **consenso di molti**, meno rumoroso di uno solo |
+| scritte a mano | quella del tuo banco | un banco solo, ma ci sono quando non c'è altro |
+
+Le scritte a mano vengono per ultime non perché valgano meno, ma perché un banco
+solo è una stima più rumorosa di una media. Dove c'è il consenso si usa il
+consenso; dove non c'è niente, **tre numeri battono zero numeri di parecchio** —
+ed è esattamente il caso in cui servono. Restano sul telefono, come il libro.
 
 ### Il mio libro: la parte che non si può chiedere
 
@@ -899,7 +924,7 @@ dire che quello che resta da guadagnare non sta nel modello, sta nel **prezzo**
 | `worker.js` | fa girare il motore fuori dal thread dell'interfaccia, così lo schermo non si blocca |
 | `scripts/build_data.py` | scarica e normalizza i dati da sei fonti (solo libreria standard) |
 | `.github/workflows/aggiorna-dati.yml` | il robot: quattro giri al giorno |
-| `tools/` | generatore di dati sintetici, le tre prove (126 sulle fonti, 141 sul motore, 15 sul backtest), la verifica di una giornata a posteriori e le nove misure (arbitri, indipendenza, valore, regola di selezione, handicap, vantaggio del campo, neopromosse, taratura dei parametri, ancoraggio Over/Under) |
+| `tools/` | generatore di dati sintetici, le tre prove (126 sulle fonti, 154 sul motore, 15 sul backtest), la verifica di una giornata a posteriori e le nove misure (arbitri, indipendenza, valore, regola di selezione, handicap, vantaggio del campo, neopromosse, taratura dei parametri, ancoraggio Over/Under) |
 | `data/` | riempita dalla Action: `serie-a.json` e `meta.json` |
 
 ## Una nota sul senso di tutto questo

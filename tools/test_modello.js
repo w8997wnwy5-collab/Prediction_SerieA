@@ -416,6 +416,63 @@ prova('e nessuna selezione finisce in due schedine',
         sing.atteso - acc.atteso > 5, (sing.atteso - acc.atteso).toFixed(2));
 })();
 
+/* ─── le quote scritte a mano: l'unica fonte che non si puo' comprare ───
+
+   Le quote delle partite in arrivo hanno una fonte sola e a volte manca. Non
+   esiste un secondo canale gratuito (API-Football, misurato: "Free plans do
+   not have access to this season"). Ma chi gioca ha in tasca una cosa che
+   nessuna API puo' dare: le quote che vede davvero sul proprio conto.
+
+   Le prove proteggono l'ordine di preferenza, che e' la parte che puo'
+   rompersi in silenzio: dove c'e' il consenso di molti banchi si usa quello,
+   perche' un banco solo e' una stima piu' rumorosa. Le scritte a mano riempiono
+   il buco, non lo scavalcano. */
+(function () {
+  var html;
+  try { html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8'); } catch (e) { return; }
+  function estrai(n) {
+    var i = html.indexOf('function ' + n + '(');
+    if (i < 0) return null;
+    var d = 0;
+    for (var k = html.indexOf('{', i); k < html.length; k++) {
+      if (html[k] === '{') d++;
+      else if (html[k] === '}') { d--; if (!d) return html.slice(i, k + 1); }
+    }
+    return null;
+  }
+  var src = estrai('quoteDi');
+  prova('quoteDi esiste', !!src);
+  if (!src) return;
+  var quoteDi = new Function('quotaMano', 'return ' + src + ';')(function (p) { return p._mano || null; });
+
+  var mano = { q: [2.45, 3.30, 2.95] };
+  prova('senza niente in archivio si usano le tue',
+        JSON.stringify(quoteDi({ _mano: mano }).q) === JSON.stringify([2.45, 3.30, 2.95]));
+  prova('e viene dichiarato che sono tue', quoteDi({ _mano: mano }).aMano === true);
+  prova('la media dei bookmaker batte le tue: e un consenso, non un banco solo',
+        JSON.stringify(quoteDi({ q: [2.5, 3.4, 2.8], _mano: mano }).q) ===
+        JSON.stringify([2.5, 3.4, 2.8]));
+  prova('e Betfair batte tutti: ricarico 0.5% invece di 5',
+        JSON.stringify(quoteDi({ qex: [2.6, 3.5, 2.9], q: [2.5, 3.4, 2.8], _mano: mano }).q) ===
+        JSON.stringify([2.6, 3.5, 2.9]));
+  prova('con le quote scaricate non si dice che sono a mano',
+        quoteDi({ q: [2.5, 3.4, 2.8], _mano: mano }).aMano === false);
+  prova('senza niente del tutto non si inventa niente',
+        quoteDi({}).q === null && quoteDi({}).aMano === false);
+
+  prova('la scheda per scriverle esiste', /function cardQuoteAMano/.test(html));
+  prova('chiede tre numeri, non cinque: l\'Over e facoltativo',
+        /facoltativo/.test(html) && /function salvaQuoteMano/.test(html));
+  prova('una quota impossibile non viene salvata',
+        /if\(!q\.every\(function\(x\)\{ return x > 1; \}\)\) return;/.test(html));
+  prova('mostra il ricarico mentre si scrive, che e il punto',
+        /function anteprimaQuoteMano[\s\S]{0,700}si sta prendendo/.test(html));
+  prova('restano sul telefono: nessun server',
+        /CHIAVE_QUOTE_MANO[\s\S]{0,400}localStorage/.test(html));
+  prova('e cambiandole si butta la simulazione tenuta in memoria',
+        /function salvaQuoteAMano[\s\S]{0,240}S\._sim = null/.test(html));
+})();
+
 /* ─── quando l'ancoraggio e' spento, l'app deve dirlo ───
 
    Le quote delle partite in arrivo hanno una fonte sola. Quando quel file non

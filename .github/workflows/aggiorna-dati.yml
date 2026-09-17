@@ -8,7 +8,17 @@ on:
     - cron: '17 5 * * *'
     # I giri leggeri servono a una cosa sola: le quote delle partite in arrivo,
     # che si muovono durante il giorno e a cui adesso il modello si ancora.
-    - cron: '17 11,17,23 * * *'
+    #
+    # Le ore non sono sparse a caso: il file dei fixture copre una finestra di
+    # due o tre giorni, e la Serie A ci entra TARDI — il 17 settembre non c'era
+    # ancora, con le partite il 18. Quindi i giri vanno messi vicino ai fischi
+    # d'inizio, non distribuiti nella giornata.
+    #
+    # In Serie A si gioca alle 12:30, 15:00, 18:00 e 20:45 italiane, cioe' alle
+    # 10:30, 13:00, 16:00 e 18:45 UTC d'estate. Questi giri stanno un'ora o poco
+    # meno prima di ciascuno, piu' quello di notte che raccoglie i risultati.
+    - cron: '47 9,12,15,17 * * *'
+    - cron: '17 23 * * *'
   workflow_dispatch:          # bottone "Run workflow" nella scheda Actions
   push:
     branches: [main]

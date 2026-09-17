@@ -380,6 +380,14 @@ select{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:1
 
 /* ── schedine ── */
 .riga-punta{display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
+.tre{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
+.tre label{display:flex;flex-direction:column;gap:4px;}
+.tre label span{font-family:var(--mono);font-size:10px;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--mute);}
+.tre input{width:100%;padding:10px;border:1px solid var(--line);border-radius:10px;
+  background:var(--card2);color:var(--ink);font-size:16px;font-family:var(--mono);
+  text-align:center;}
+.tre input:focus{outline:2px solid var(--accent);outline-offset:1px;}
 .riga-punta input{width:96px;padding:11px 12px;border:1px solid var(--line);border-radius:11px;
   background:var(--bg);color:var(--ink);font-family:var(--mono);font-size:19px;font-weight:700;
   text-align:center;}
@@ -855,8 +863,63 @@ function chiavePartita(p){ return p.d+'|'+p.c+'|'+p.v; }
    Vale +0.28% di precisione (z=2.01): poco, ma gratis e nella direzione
    giusta. E Betfair da solo batte i bookmaker da soli, 0.18938 contro
    0.18992. */
+/* ══════════════════════════════════════════════════════════════
+   LE QUOTE SCRITTE A MANO
+
+   Le quote delle partite in arrivo hanno una fonte sola, e quella fonte a
+   volte non pubblica la Serie A. È stato misurato: quando manca, il modello
+   gira scoperto e sbaglia il 2.6% in più.
+
+   La soluzione più ovvia sarebbe comprare un'API. Ma c'è una cosa che chi
+   gioca ha già in tasca e nessuna API può dare: le quote che vede davvero sul
+   proprio conto, quelle a cui può davvero puntare. Bastano tre numeri.
+
+   Ordine di preferenza, e il perché:
+
+     1. Betfair Exchange (qex) — ricarico 0.5%, la probabilità più pulita
+     2. la media dei bookmaker (q) — ricarico 4.9%, ma è un consenso di molti
+     3. quelle scritte a mano — ricarico del singolo banco, ma ci sono
+
+   Le scritte a mano vengono per ultime non perché valgano meno, ma perché un
+   banco solo è una stima più rumorosa di una media: dove c'è il consenso, si
+   usa il consenso. Dove non c'è niente, tre numeri battono zero numeri di
+   parecchio — ed è esattamente il caso in cui servono.
+
+   Restano sul telefono, come il libro. Non c'è nessun server.
+   ══════════════════════════════════════════════════════════════ */
+var CHIAVE_QUOTE_MANO = 'seriea_quote_mano_v1';
+
+function quoteAMano(){
+  if(S._quoteMano) return S._quoteMano;
+  var m = {};
+  try{ m = JSON.parse(localStorage.getItem(CHIAVE_QUOTE_MANO) || '{}'); }catch(e){ m = {}; }
+  if(!m || typeof m !== 'object') m = {};
+  S._quoteMano = m;
+  return m;
+}
+function salvaQuoteAMano(){
+  try{ localStorage.setItem(CHIAVE_QUOTE_MANO, JSON.stringify(S._quoteMano || {})); }catch(e){}
+  S._sim = null; _mediaGiornata = null;
+}
+function quotaMano(p){
+  var v = quoteAMano()[p.c + '|' + p.v];
+  if(!v || !v.q || v.q.length !== 3) return null;
+  if(!(v.q[0] > 1 && v.q[1] > 1 && v.q[2] > 1)) return null;
+  return v;
+}
+function scordaQuotaMano(p){
+  delete quoteAMano()[p.c + '|' + p.v];
+  salvaQuoteAMano();
+  renderPartita();
+}
+
 function quoteDi(p){
-  return {q: p.qex || p.q || null, qou: p.qou || null};
+  var mia = quotaMano(p);
+  return {
+    q: p.qex || p.q || (mia ? mia.q : null) || null,
+    qou: p.qou || (mia && mia.qou ? mia.qou : null) || null,
+    aMano: !(p.qex || p.q) && !!mia
+  };
 }
 function previsione(p){
   var qq = quoteDi(p);
@@ -3007,9 +3070,11 @@ function renderPartita(){
       'ricadono tutti gli altri mercati, anche quelli che il banco non quota.</div></div>';
   } else if(!p.q){
     h += '<div class="note warn" style="margin-top:12px">Per questa partita non ci sono ancora quote nei '+
-      'dati, quindi vedi il modello da solo. Quando arriveranno, la stima verrà ancorata al mercato e '+
-      'diventerà più precisa.</div>';
+      'dati, quindi vedi il modello da solo — che è la sua versione peggiore, il 2.6% più imprecisa. '+
+      'Quando arriveranno, la stima verrà ancorata al mercato. Oppure <b>scrivile tu</b>, qui sotto: '+
+      'tre numeri dal tuo conto e l\'ancoraggio si accende adesso.</div>';
   }
+  h += cardQuoteAMano(p);
 
   var mk = mercatiDi(p, 4000);
   var sc = sceltePartita(p, 4);
@@ -3187,6 +3252,71 @@ function renderPartita(){
   }
   h += '<button class="btn ghost" style="margin-top:14px" onclick="chiudi()">Chiudi</button>';
   modale(h);
+}
+
+/* La scheda per scriverle. Tre campi e basta: 1, X, 2. L'Over/Under è
+   facoltativo perché è il secondo asse dell'ancoraggio e migliora la stima dei
+   gol, ma chiedere cinque numeri invece di tre è il modo migliore per non
+   farseli dare nessuno dei cinque. */
+function cardQuoteAMano(p){
+  var mia = quotaMano(p);
+  var scaricate = !!(p.qex || p.q);
+  var q = mia ? mia.q : null, qou = mia && mia.qou ? mia.qou : null;
+  var h = '<div class="h2">'+(mia ? 'Le quote che hai scritto tu' : 'Scrivi tu le quote')+'</div><div class="card">';
+  h += '<div class="tre">'+
+    ['1','X','2'].map(function(et, i){
+      return '<label><span>'+et+'</span><input id="qm'+i+'" type="number" step="0.01" min="1.01" '+
+        'inputmode="decimal" value="'+(q ? nu(q[i],2) : '')+'" placeholder="—" '+
+        'oninput="anteprimaQuoteMano(\''+esc(p.c)+'\',\''+esc(p.v)+'\')"></label>';
+    }).join('')+'</div>';
+  h += '<div class="tre" style="margin-top:8px">'+
+    ['Over 2.5','Under 2.5'].map(function(et, i){
+      return '<label><span>'+et+'</span><input id="qmo'+i+'" type="number" step="0.01" min="1.01" '+
+        'inputmode="decimal" value="'+(qou ? nu(qou[i],2) : '')+'" placeholder="facoltativo" '+
+        'oninput="anteprimaQuoteMano(\''+esc(p.c)+'\',\''+esc(p.v)+'\')"></label>';
+    }).join('')+'</div>';
+  h += '<div class="note" id="qmNota" style="margin-top:10px"></div>';
+  h += '<button class="btn acc sm" style="margin-top:10px" onclick="salvaQuoteMano(\''+
+    esc(p.c)+'\',\''+esc(p.v)+'\')">'+(mia ? 'Aggiorna' : 'Usa queste quote')+'</button>';
+  if(mia) h += '<button class="btn ghost sm" style="margin-top:8px" onclick="scordaQuotaMano('+
+    'S._prossime[S._partitaAperta])">Toglile</button>';
+  h += '<div class="note" style="margin-top:10px">'+
+    (scaricate
+      ? 'Per questa partita le quote scaricate ci sono già, e per l\'ancoraggio uso quelle: sono un '+
+        '<b>consenso di molti banchi</b>, quindi una stima meno rumorosa di un banco solo. Le tue '+
+        'servono lo stesso — a misurare quanto ti ricarica il tuo operatore, che è un numero che solo '+
+        'tu puoi darmi.'
+      : 'Per questa partita non c\'è nessuna quota scaricata, quindi <b>userò le tue</b> per '+
+        'ancorare la stima. Tre numeri e il modello smette di andare a naso.')+
+    '<br><br>Restano su questo telefono, come il libro. Non passano da nessun server.</div>';
+  return h + '</div>';
+}
+
+function anteprimaQuoteMano(c, v){
+  var el = document.getElementById('qmNota'); if(!el) return;
+  var q = [0,1,2].map(function(i){ return parseFloat((document.getElementById('qm'+i)||{}).value); });
+  if(!q.every(function(x){ return x > 1; })){
+    el.innerHTML = 'Scrivi le tre quote 1, X e 2 come le vedi sul tuo conto.';
+    return;
+  }
+  var somma = 1/q[0] + 1/q[1] + 1/q[2];
+  var ric = somma - 1;
+  var pr = q.map(function(x){ return (1/x)/somma; });
+  el.innerHTML = 'Tolto il ricarico, il tuo banco sta dicendo <b>'+pc(pr[0])+' · '+pc(pr[1])+' · '+
+    pc(pr[2])+'</b>.<br>E si sta prendendo il <b>'+(100*ric).toFixed(1)+'%</b>'+
+    (ric > 0.08 ? ' — che è parecchio: vale la pena guardare gli altri due banchi prima di puntare.'
+     : (ric < 0.005 ? ' — praticamente niente: questa è una quota da prendere.' : '.'));
+}
+
+function salvaQuoteMano(c, v){
+  var q = [0,1,2].map(function(i){ return parseFloat((document.getElementById('qm'+i)||{}).value); });
+  if(!q.every(function(x){ return x > 1; })) return;
+  var o = [0,1].map(function(i){ return parseFloat((document.getElementById('qmo'+i)||{}).value); });
+  var voce = {q: q.map(function(x){ return Math.round(x*1000)/1000; }), quando: oggiISO()};
+  if(o.every(function(x){ return x > 1; })) voce.qou = o.map(function(x){ return Math.round(x*1000)/1000; });
+  quoteAMano()[c + '|' + v] = voce;
+  salvaQuoteAMano();
+  renderPartita();
 }
 
 function apriSquadra(nome){
