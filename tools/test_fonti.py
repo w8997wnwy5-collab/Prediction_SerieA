@@ -723,14 +723,18 @@ def test_notizie():
     # I titoli veri non chiamano le squadre come le tabelle: "Juve" e' scritto
     # piu' spesso di "Juventus", e "Nerazzurri" non contiene "Inter". Senza i
     # soprannomi la Gazzetta ha dato zero titoli riconosciuti su novantanove.
-    rss2 = b'''<?xml version="1.0"?><rss version="2.0"><channel>
+    # Anche qui le date si contano da oggi. La volta scorsa ne ho sistemato un
+    # campione e lasciato questo, e undici giorni dopo e' fallito uguale: il
+    # difetto non era quella data, era l'abitudine di scriverle a mano. La prova
+    # in fondo al file adesso non la lascia piu' passare.
+    rss2 = ('''<?xml version="1.0"?><rss version="2.0"><channel>
 <item><title>Juve, altro stop: il difensore out un mese</title><link>https://e.it/a</link>
-<pubDate>Mon, 07 Sep 2026 08:00:00 +0200</pubDate></item>
+<pubDate>%s</pubDate></item>
 <item><title>Nerazzurri scatenati sul mercato</title><link>https://e.it/b</link>
-<pubDate>Mon, 07 Sep 2026 08:00:00 +0200</pubDate></item>
+<pubDate>%s</pubDate></item>
 <item><title>Ufficiale: la Fiorentina esonera il tecnico</title><link>https://e.it/c</link>
-<pubDate>Mon, 07 Sep 2026 08:00:00 +0200</pubDate></item>
-</channel></rss>'''
+<pubDate>%s</pubDate></item>
+</channel></rss>''' % (_rfc822(1), _rfc822(1), _rfc822(1))).encode()
     B.scarica = lambda *a, **k: rss2
     B.time.sleep = lambda *a: None
     B.FONTI_NOTIZIE = (('Prova', 'http://x'),)
@@ -875,11 +879,29 @@ def main():
     test_notizie()
     test_notizie_a_ogni_giro()
 
+    # ── la guardia contro le prove che invecchiano ──────────────────────────
+    #
+    # Due volte in due settimane questo file e' esploso da solo, su codice
+    # giusto, perche' un campione aveva una data scritta a mano e il codice
+    # scarta le notizie piu' vecchie di dieci giorni. La prima volta ne ho
+    # corretto uno; il secondo e' scoppiato undici giorni dopo.
+    #
+    # Il difetto non era la data: era l'abitudine. Questa prova guarda il file
+    # stesso e pretende che le date dei campioni si contino da oggi.
+    sorgente_prove = io.open(os.path.abspath(__file__), encoding='utf-8').read()
+    fisse = re.findall(r'<pubDate>[A-Z][a-z][a-z], \d', sorgente_prove)
+    prova('nessun campione ha una data scritta a mano: invecchierebbe',
+          not fisse, '%d trovate' % len(fisse))
+
     larghezza = max(len(n) for n, _, _ in ESITI)
     falliti = 0
     for nome, ok, dettaglio in ESITI:
+        # str() sul dettaglio, non concatenazione diretta: una prova che passa
+        # una lista come dettaglio e' comodissima da scrivere, e faceva
+        # esplodere il REPORTER invece della prova — cioe' nascondeva quale
+        # prova stesse fallendo proprio nel momento in cui serviva saperlo.
         print('%s  %s%s' % ('ok  ' if ok else 'FALLITO', nome.ljust(larghezza),
-                            '' if ok else '   → ' + dettaglio))
+                            '' if ok else '   → %s' % (dettaglio,)))
         if not ok:
             falliti += 1
     print('\n%d prove, %d fallite' % (len(ESITI), falliti))
