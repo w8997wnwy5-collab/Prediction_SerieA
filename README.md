@@ -664,7 +664,7 @@ arriva a 1, e la sceglie. *Una griglia che non contiene la risposta è peggio di
 una griglia sbagliata: sembra che una scelta sia stata fatta, e invece era stata
 impedita.*
 
-### Il punto singolo di rottura, e perché era muto
+### Il punto singolo di rottura, e come è stato chiuso
 
 Le quote delle partite **in arrivo** hanno una fonte sola: il file dei fixture
 di football-data. Il 17 settembre l'archivio diceva `calendario ravvicinato: ok:
@@ -691,6 +691,37 @@ API-Football ha un endpoint `/odds` e la chiave era già nei segreti. Risposta
 del server, testuale: *«Free plans do not have access to this season, try from
 2022 to 2024.»* Il piano gratuito copre le stagioni vecchie, cioè esattamente
 quelle di cui non serve sapere le quote in anticipo. Non è una fonte.
+
+**The Odds API invece sì, e ha chiuso il buco.** Sondata prima di scrivere una
+riga di integrazione:
+
+| | |
+|---|---|
+| partite di Serie A con quote | **20** |
+| copertura | dal 18 settembre al **12 ottobre** — 24 giorni |
+| banchi | **24**, fra cui Betfair Exchange e Pinnacle |
+| costo | 2 crediti a chiamata, ~240 al mese su un piano gratuito da 500 |
+
+Ventiquattro giorni di anticipo contro i due o tre di `fixtures.csv`. Ma la cosa
+che conta di più è un'altra: **Betfair Exchange sulle partite future**.
+Ancorarsi a Betfair invece che alla quota media era già stato misurato come il
+miglior guadagno della stagione (+0.28%), ma quel guadagno arrivava solo alle
+partite *già giocate*, perché football-data l'exchange sui fixture non lo
+pubblica. Adesso arriva dove si gioca. Sulla prima giornata scaricata:
+
+```
+ricarico medio, media dei 24 banchi  : 6.39%
+ricarico medio, Betfair Exchange     : 0.90%
+ricarico medio, migliore del mercato : 0.34%
+```
+
+Due cose potevano rompersi in silenzio, e hanno una prova ciascuna. The Odds API
+mette **il nome della squadra** al posto di «1» e «2», quindi l'ordine
+casa-pareggio-trasferta va ricostruito dai nomi: fidarsi della posizione sarebbe
+il modo più silenzioso di scambiare casa e trasferta — nessun errore, solo
+previsioni al contrario. E **la chiave sta nell'URL**: se un'eccezione porta
+l'URL nel messaggio, e il messaggio finisce nel file pubblicato, la chiave è
+pubblica.
 
 Quindi la fonte scaricata resta una. Tre cose sono state fatte, e la terza è la
 più interessante.
@@ -924,7 +955,7 @@ dire che quello che resta da guadagnare non sta nel modello, sta nel **prezzo**
 | `worker.js` | fa girare il motore fuori dal thread dell'interfaccia, così lo schermo non si blocca |
 | `scripts/build_data.py` | scarica e normalizza i dati da sei fonti (solo libreria standard) |
 | `.github/workflows/aggiorna-dati.yml` | il robot: quattro giri al giorno |
-| `tools/` | generatore di dati sintetici, le tre prove (126 sulle fonti, 154 sul motore, 15 sul backtest), la verifica di una giornata a posteriori e le nove misure (arbitri, indipendenza, valore, regola di selezione, handicap, vantaggio del campo, neopromosse, taratura dei parametri, ancoraggio Over/Under) |
+| `tools/` | generatore di dati sintetici, le tre prove (141 sulle fonti, 154 sul motore, 15 sul backtest), la verifica di una giornata a posteriori e le nove misure (arbitri, indipendenza, valore, regola di selezione, handicap, vantaggio del campo, neopromosse, taratura dei parametri, ancoraggio Over/Under) |
 | `data/` | riempita dalla Action: `serie-a.json` e `meta.json` |
 
 ## Una nota sul senso di tutto questo
