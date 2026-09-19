@@ -1,20 +1,20 @@
 {
- "aggiornato": "2026-09-19T05:23:26+00:00",
+ "aggiornato": "2026-09-19T09:51:20+00:00",
  "esito": "ok",
  "ultima_partita": "2026-09-18",
  "partite_totali": 1941,
  "partite_giocate": 1941,
  "nuove_oggi": 0,
- "partite_in_arrivo": 350,
+ "partite_in_arrivo": 340,
  "con_arbitro": 1140,
  "con_tiri": 1940,
  "con_xg": 40,
  "con_quote": 1940,
  "in_arrivo_con_quote": 20,
- "in_arrivo_con_orario": 90,
+ "in_arrivo_con_orario": 80,
  "marcatori": 0,
- "notizie": 56,
- "notizie_assenze": 3,
+ "notizie": 57,
+ "notizie_assenze": 2,
  "stagioni": [
   "2021-22",
   "2022-23",
@@ -34,9 +34,9 @@
   "2021-22": "ok: 380 partite, 0 con arbitro",
   "TheSportsDB": "ok: 1 giocate di cui 1 col risultato, 1 in arrivo",
   "calendario ravvicinato": "ok: 10 partite",
-  "calendario stagione": "ok da openfootball: 350 partite",
+  "calendario stagione": "ok da openfootball: 340 partite",
   "The Odds API": "ok: 19 partite con quote (9 con Betfair)",
-  "calendario": "350 partite in tutto, 20 con le quote (10 scaricate adesso, 10 tenute da prima)",
+  "calendario": "340 partite in tutto, 20 con le quote (10 scaricate adesso, 10 tenute da prima)",
   "TheSportsDB risultati": "1 risultati accolti",
   "Understat 2026-27": "fallita: nella pagina non compare mai datesData (18714 byte): o è cambiato il nome, o quella servita non è la pagina della lega",
   "Understat 2025-26": "fallita: nella pagina non compare mai datesData (18714 byte): o è cambiato il nome, o quella servita non è la pagina della lega",
@@ -53,8 +53,8 @@
   "API-Football richieste": "6 usate su 70 disponibili",
   "marcatori": "saltati: nessuna chiave FOOTBALL_DATA_TOKEN",
   "notizie ANSA": "42 titoli tenuti su 75 (scartati: 33 nessuna squadra)",
-  "notizie Football Italia": "7 titoli tenuti su 20 (scartati: 13 nessuna squadra)",
+  "notizie Football Italia": "8 titoli tenuti su 20 (scartati: 12 nessuna squadra)",
   "notizie Repubblica": "7 titoli tenuti su 25 (scartati: 1 doppio, 17 nessuna squadra)",
-  "notizie": "56 titoli tenuti, 3 segnalano un'assenza, 1 la panchina"
+  "notizie": "57 titoli tenuti, 2 segnalano un'assenza, 0 la panchina"
  }
 }
