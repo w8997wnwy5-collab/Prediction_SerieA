@@ -1,5 +1,5 @@
 {
- "aggiornato": "2026-09-21T09:52:41+00:00",
+ "aggiornato": "2026-09-21T12:53:51+00:00",
  "esito": "ok",
  "ultima_partita": "2026-09-20",
  "partite_totali": 1948,
@@ -10,11 +10,11 @@
  "con_tiri": 1940,
  "con_xg": 40,
  "con_quote": 1940,
- "in_arrivo_con_quote": 20,
+ "in_arrivo_con_quote": 30,
  "in_arrivo_con_orario": 80,
  "marcatori": 0,
  "notizie": 60,
- "notizie_assenze": 7,
+ "notizie_assenze": 8,
  "stagioni": [
   "2021-22",
   "2022-23",
@@ -35,8 +35,8 @@
   "TheSportsDB": "ok: 1 giocate di cui 1 col risultato, 1 in arrivo",
   "calendario ravvicinato": "ok: 10 partite",
   "calendario stagione": "ok da openfootball: 340 partite",
-  "The Odds API": "ok: 10 partite con quote (0 con Betfair)",
-  "calendario": "340 partite in tutto, 20 con le quote (10 scaricate adesso, 10 tenute da prima)",
+  "The Odds API": "ok: 20 partite con quote (20 con Betfair)",
+  "calendario": "340 partite in tutto, 30 con le quote (10 scaricate adesso, 20 tenute da prima)",
   "TheSportsDB risultati": "1 risultati accolti",
   "Understat 2026-27": "fallita: nella pagina non compare mai datesData (18714 byte): o è cambiato il nome, o quella servita non è la pagina della lega",
   "Understat 2025-26": "fallita: nella pagina non compare mai datesData (18714 byte): o è cambiato il nome, o quella servita non è la pagina della lega",
@@ -52,9 +52,9 @@
   "API-Football 2021-22": "non disponibile: API-Football dice: {\"plan\": \"Free plans do not have access to this season, try from 2022 to 2024.\"}",
   "API-Football richieste": "6 usate su 70 disponibili",
   "marcatori": "saltati: nessuna chiave FOOTBALL_DATA_TOKEN",
-  "notizie ANSA": "38 titoli tenuti su 85 (scartati: 47 nessuna squadra)",
-  "notizie Football Italia": "18 titoli tenuti su 20 (scartati: 2 nessuna squadra)",
+  "notizie ANSA": "37 titoli tenuti su 83 (scartati: 46 nessuna squadra)",
+  "notizie Football Italia": "17 titoli tenuti su 20 (scartati: 3 nessuna squadra)",
   "notizie Repubblica": "7 titoli tenuti su 25 (scartati: 5 doppio, 13 nessuna squadra)",
-  "notizie": "60 titoli tenuti, 7 segnalano un'assenza, 0 la panchina"
+  "notizie": "60 titoli tenuti, 8 segnalano un'assenza, 0 la panchina"
  }
 }
