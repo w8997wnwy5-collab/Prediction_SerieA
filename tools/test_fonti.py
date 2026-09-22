@@ -1082,6 +1082,31 @@ def test_giro_leggero_aggiorna_le_quote():
           'min(restano)' in testo)
 
 
+def test_service_worker():
+    """Il service worker e il traffico che fa fare a un telefono.
+
+    Il file della Serie A va sempre chiesto fresco, e c'e' una ragione
+    misurata: GitHub Pages dice ai browser di tenersi le cose per dieci
+    minuti, e senza saltare la cache si finiva a guardare i dati di ieri
+    chiedendosi perche' non cambiava niente.
+
+    Ma gli archivi degli altri quattro campionati sono 2.9 MB, e la stessa
+    regola li farebbe ri-scaricare a ogni apertura. Tre megabyte di traffico
+    ogni volta che si apre l'app fuori casa, per file che cambiano tre volte
+    al giorno."""
+    percorso = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'sw.js')
+    if not os.path.exists(percorso):
+        return
+    testo = io.open(percorso, encoding='utf-8').read()
+    prova('gli archivi degli altri campionati non saltano la cache del browser',
+          re.search(r"grosso\s*=\s*/\\/data\\/leghe", testo) is not None and
+          '!grosso' in testo)
+    prova('ma la pagina e il campionato di casa si', "e.request.mode === 'navigate'" in testo
+          and 'html|js|json|webmanifest' in testo)
+    prova('e la versione della cache e stata alzata, o il vecchio worker resterebbe',
+          "seriea-v3'" not in testo)
+
+
 def test_orari_del_giro():
     """Gli orari nel workflow e la condizione che decide completo/leggero
     devono parlare della stessa cosa.
@@ -1114,6 +1139,7 @@ def main():
     test_nomi_fra_campionati()
     test_giro_leggero_aggiorna_le_quote()
     test_orari_del_giro()
+    test_service_worker()
     test_validatori()
     test_quote()
     test_calendario_ha_le_stesse_quote()
