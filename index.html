@@ -21,6 +21,11 @@
   --ok:#2D7A4F; --ok-soft:#E6F2EA; --warn:#C4453A; --warn-soft:#FDF0EE;
   --amber:#A96F1F; --amber-soft:#FBF2E4;
   --hero-bg:#16211D; --hero-ink:#FFFFFF;
+  /* La barra 1X2 usava tre colori presi da una tavolozza generica: blu, grigio,
+     arancione. Leggibili, ma di un'altra app. Questi tre nascono dal verde del
+     progetto — casa è il colore di casa, la trasferta è un mattone caldo che ci
+     sta di fronte senza urlare, il pari sta in mezzo e non chiede attenzione. */
+  --sq-casa:#2D6A4F; --sq-pari:#94A09A; --sq-via:#B4593A;
   --c1:#2a78d6; --c2:#eb6834; --c3:#1baf7a; --c4:#eda100; --c5:#e87ba4;
   --c6:#008300; --c7:#4a3aa7; --c8:#e34948; --c9:#8A968F;
   --seq1:#cde2fb; --seq2:#9ec5f4; --seq3:#6da7ec; --seq4:#3987e5; --seq5:#256abf; --seq6:#184f95;
@@ -30,6 +35,7 @@
 }
 @media (prefers-color-scheme:dark){
   :root{
+    --sq-casa:#4E9E78; --sq-pari:#77857F; --sq-via:#CC7355;
     --bg:#121714; --card:#1C221F; --card2:#232A26; --ink:#ECF1EE; --mute:#95A29B;
     --line:#2C3531; --line2:#242B27; --accent:#6BC49A; --accent-soft:#1B2C24;
     --ok:#5FBF88; --ok-soft:#172A20; --warn:#F08A80; --warn-soft:#2E1D1B;
@@ -79,7 +85,7 @@ h1,h2,h3,h4{margin:0;}
 .card.tap{cursor:pointer;}
 .card.tap:active{opacity:.8;}
 .h2{font-size:11.5px;font-weight:600;letter-spacing:.9px;text-transform:uppercase;color:var(--mute);
-  margin:22px 0 9px;display:flex;align-items:baseline;gap:8px;}
+  margin:26px 0 10px;display:flex;align-items:baseline;gap:8px;}
 .h2:first-child{margin-top:0;}
 .h2 .r{margin-left:auto;font-family:var(--mono);font-size:11px;letter-spacing:.2px;text-transform:none;}
 .lede{font-size:13px;line-height:1.55;color:var(--mute);margin:0 0 12px;}
@@ -89,7 +95,7 @@ h1,h2,h3,h4{margin:0;}
 .kpi>div{flex:1;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 11px;min-width:0;}
 .kpi .l{font-family:var(--mono);font-size:9px;letter-spacing:.7px;text-transform:uppercase;color:var(--mute);
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.kpi .v{font-family:var(--mono);font-size:19px;font-weight:600;letter-spacing:-.6px;margin-top:4px;}
+.kpi .v{white-space:nowrap;font-variant-numeric:tabular-nums;font-family:var(--mono);font-size:19px;font-weight:600;letter-spacing:-.6px;margin-top:4px;}
 .kpi .s{font-size:10.5px;color:var(--mute);margin-top:2px;line-height:1.3;}
 .kpi .v.pos{color:var(--ok);} .kpi .v.neg{color:var(--warn);}
 
@@ -99,24 +105,45 @@ h1,h2,h3,h4{margin:0;}
 .hero .s{font-size:12.5px;line-height:1.5;opacity:.85;}
 
 /* ── partita ── */
-.match{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 15px;margin-bottom:10px;cursor:pointer;}
+.match{background:var(--card);border:1px solid var(--line);border-radius:15px;padding:13px 14px;margin-bottom:9px;cursor:pointer;}
 .match:active{opacity:.82;}
 .match .quando{font-family:var(--mono);font-size:10px;letter-spacing:.7px;color:var(--mute);
   text-transform:uppercase;margin-bottom:7px;display:flex;gap:8px;}
 .match .quando .gg{margin-left:auto;}
+.gg.ok{color:var(--mute);opacity:.75;background:none;padding:0;}
 .gg.mie{background:var(--accent-soft);color:var(--accent);}
 .gg.vuoto{background:var(--warn-soft,rgba(180,90,40,.13));color:var(--warn);}
 .match .sfida{display:flex;align-items:center;gap:9px;margin-bottom:11px;}
 .match .sfida .sq{flex:1;min-width:0;font-size:15.5px;font-weight:600;letter-spacing:-.2px;}
 .match .sfida .sq.v{text-align:right;}
 .match .sfida .vs{font-family:var(--mono);font-size:11px;color:var(--mute);flex:none;}
-.prob{display:flex;height:26px;gap:2px;margin-bottom:7px;}
-.prob i{display:block;border-radius:5px;position:relative;min-width:3px;
+.prob{display:flex;height:9px;gap:2.5px;margin-bottom:7px;}
+.prob i{display:block;border-radius:6px;position:relative;min-width:3px;
   font-family:var(--mono);font-size:10.5px;font-weight:600;color:#fff;
   display:flex;align-items:center;justify-content:center;overflow:hidden;}
-.prob i.c{background:var(--c1);} .prob i.p{background:var(--c9);} .prob i.v{background:var(--c2);}
-.probl{display:flex;font-family:var(--mono);font-size:10px;color:var(--mute);}
-.probl span{flex:1;} .probl span:nth-child(2){text-align:center;} .probl span:nth-child(3){text-align:right;}
+.prob i.c{background:var(--sq-casa);} .prob i.p{background:var(--sq-pari);} .prob i.v{background:var(--sq-via);}
+.probl{display:flex;font-family:var(--mono);font-size:12px;color:var(--ink);
+  font-variant-numeric:tabular-nums;}
+.probl span{flex:1;display:flex;align-items:baseline;gap:5px;}
+.probl span:nth-child(2){justify-content:center;} .probl span:nth-child(3){justify-content:flex-end;}
+.probl em{font-style:normal;font-size:10px;color:var(--mute);letter-spacing:.5px;}
+.probl span:nth-child(1) em{color:var(--sq-casa);}
+.probl span:nth-child(2) em{color:var(--sq-pari);}
+.probl span:nth-child(3) em{color:var(--sq-via);}
+/* La riga della giocata: nome, probabilità, quota, e la freccia che dice
+   "qui sotto c'è dell'altro". Tre numeri e un verso, su una riga sola. */
+.match .pick{display:flex;align-items:center;gap:10px;margin-top:11px;
+  padding:9px 11px;background:var(--accent-soft);border-radius:10px;}
+.match .pick .pt{flex:1;min-width:0;font-size:14px;font-weight:600;color:var(--ink);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.match .pick .pp{font-family:var(--mono);font-size:15px;font-weight:700;color:var(--accent);
+  flex:none;font-variant-numeric:tabular-nums;}
+.match .pick .pq{font-family:var(--mono);font-size:11.5px;color:var(--mute);flex:none;
+  font-variant-numeric:tabular-nums;}
+.match .pick .pv{width:15px;height:15px;flex:none;color:var(--mute);opacity:.6;}
+.match:active{transform:scale(.988);}
+.match{transition:transform .12s ease,opacity .12s ease;}
+
 .mini{display:flex;gap:7px;margin-top:10px;}
 .mini>div{flex:1;background:var(--card2);border-radius:9px;padding:7px 8px;text-align:center;min-width:0;}
 .mini .l{font-family:var(--mono);font-size:8.5px;letter-spacing:.5px;text-transform:uppercase;color:var(--mute);}
@@ -140,6 +167,26 @@ h1,h2,h3,h4{margin:0;}
 .note.ok{background:var(--ok-soft);border-left-color:var(--ok);}
 .note.amber{background:var(--amber-soft);border-left-color:var(--amber);}
 .note p{margin:0 0 8px;} .note p:last-child{margin-bottom:0;}
+
+/* LA NOTA CHE SI APRE.
+   Il testo di quest'app è la parte migliore del progetto, e mostrarlo tutto
+   sempre era il modo più sicuro di non farlo leggere a nessuno: in Giornata
+   una spiegazione occupava lo schermo intero prima di far vedere una partita.
+   Adesso la prima frase resta, il resto si apre toccando. Non si toglie una
+   parola: si sceglie quando leggerla. <details> lo fa da solo, senza
+   javascript, e sopravvive a un render. */
+details.note{padding:0;}
+details.note>summary{list-style:none;cursor:pointer;padding:11px 13px;
+  display:flex;align-items:flex-start;gap:9px;}
+details.note>summary::-webkit-details-marker{display:none;}
+details.note>summary>span{flex:1;min-width:0;}
+details.note>summary::after{content:'';flex:none;width:7px;height:7px;margin-top:5px;
+  border-right:1.6px solid currentColor;border-bottom:1.6px solid currentColor;
+  transform:rotate(45deg);opacity:.5;transition:transform .18s ease;}
+details.note[open]>summary::after{transform:rotate(225deg);margin-top:8px;}
+details.note>.dentro{padding:0 13px 12px;}
+details.note>.dentro>p:first-child{margin-top:0;}
+details.note>summary:active{opacity:.7;}
 
 .btn{width:100%;padding:13px;border:0;border-radius:12px;background:var(--ink);color:var(--bg);
   font-size:15px;font-weight:600;cursor:pointer;}
@@ -436,6 +483,10 @@ body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;
 .card{border-radius:16px;box-shadow:0 1px 2px rgba(22,33,29,.05),0 1px 1px rgba(22,33,29,.03);}
 @media (prefers-color-scheme:dark){ .card{box-shadow:none;border:1px solid var(--line2);} }
 .top h1{letter-spacing:-1px;}
+/* Il titolo occupava un sesto dello schermo. Serve a sapere dove sei, non a
+   fare da copertina: il contenuto è la cosa interessante. */
+.top h1{font-size:26px;}
+.top{padding-bottom:10px;}
 .h2{margin-top:26px;}
 .h2:first-child{margin-top:4px;}
 .match{transition:transform .12s ease, box-shadow .12s ease;}
@@ -557,6 +608,13 @@ function scaffale(id){
   if(MERCATI_PROBABILI.indexOf(id) >= 0) return 'probabile';
   return 'raro';
 }
+/* Una nota lunga, chiusa. `apri` è quello che si vede sempre — deve bastare
+   da solo, perché la maggior parte delle volte nessuno aprirà il resto. */
+function notaPiega(classe, apri, dentro){
+  return '<details class="note '+classe+'"><summary><span>'+apri+'</span></summary>'+
+         '<div class="dentro">'+dentro+'</div></details>';
+}
+
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){
   return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
 function pc(x, dec){ return (x*100).toFixed(dec==null?0:dec)+'%'; }
@@ -1462,12 +1520,17 @@ function rigaMercato(m){
 /* ══════════════════════════════════════════════════════════════
    VISTA: GIORNATA
    ══════════════════════════════════════════════════════════════ */
+/* La barra dice la PROPORZIONE, la riga sotto dice i NUMERI. Prima li diceva
+   tutti e due, e il numero dentro la barra spariva quando la fetta era troppo
+   stretta — cioè proprio sugli esiti improbabili, quelli che uno va a cercare.
+   Separare i due compiti li rende tutti e due leggibili sempre. */
 function barraProb(pr){
-  var v = [pr.casa, pr.pari, pr.via], cl = ['c','p','v'];
+  var v = [pr.casa, pr.pari, pr.via], cl = ['c','p','v'], et = ['1','X','2'];
   return '<div class="prob">'+v.map(function(x,i){
-    return '<i class="'+cl[i]+'" style="flex:'+Math.max(0.06,x).toFixed(4)+'">'+(x>=0.14?pc(x):'')+'</i>';
-  }).join('')+'</div><div class="probl"><span>1 '+pc(v[0])+'</span><span>X '+pc(v[1])+
-    '</span><span>2 '+pc(v[2])+'</span></div>';
+    return '<i class="'+cl[i]+'" style="flex:'+Math.max(0.05,x).toFixed(4)+'"></i>';
+  }).join('')+'</div><div class="probl">'+v.map(function(x,i){
+    return '<span><em>'+et[i]+'</em>'+pc(x)+'</span>';
+  }).join('')+'</div>';
 }
 function scartoTesto(pr, mercato){
   var mie = [pr.casa, pr.pari, pr.via], nomi = ['la vittoria in casa','il pareggio','la vittoria fuori'];
@@ -1551,21 +1614,21 @@ function avvisoSenzaQuote(partite){
     if(nudo > 0 && anc > 0) quanto = 100 * (nudo - anc) / anc;
   }
   var tutte = senza === partite.length;
-  return '<div class="note warn" style="margin-bottom:14px">'+
+  return '<div style="margin-bottom:14px">'+notaPiega('warn',
     '<b>'+(tutte ? 'Nessuna partita di questa giornata ha le quote.'
                  : senza+' partite su '+partite.length+' non hanno le quote.')+'</b> '+
-    'Quindi su quelle il modello parla <b>da solo</b>, ed è la sua versione peggiore: '+
+    'Su quelle il modello parla <b>da solo</b>, ed è la sua versione peggiore: '+
     (quanto != null
-      ? 'nel backtest sbaglia il <b>'+nu(quanto,1)+'% in più</b> di quando si ancora al mercato.'
-      : 'nel backtest sbaglia il <b>2.6% in più</b> di quando si ancora al mercato.')+
-    '<br><br>Conta più di quel che sembra. Il modello ancorato non ha opinioni proprie contro il '+
+      ? 'sbaglia il <b>'+nu(quanto,1)+'% in più</b>.'
+      : 'sbaglia il <b>2.6% in più</b>.'),
+    '<p>Conta più di quel che sembra. Il modello ancorato non ha opinioni proprie contro il '+
     'mercato; quello nudo sì — ed è esattamente lì che si è misurata la <b>maledizione del '+
     'vincitore</b>: dove crede di avere più vantaggio, rende il <b>−35%</b>. Le giocate di oggi '+
-    'vengono da quella versione.'+
-    '<br><br>Le quote delle partite in arrivo hanno una fonte sola, e oggi non ha pubblicato la '+
+    'vengono da quella versione.</p>'+
+    '<p>Le quote delle partite in arrivo hanno una fonte sola, e oggi non ha pubblicato la '+
     'Serie A. Non posso inventarmele. Quello che posso fare è dirtelo invece di lasciartelo '+
-    'credere: <b>tratta i numeri di questa giornata come indicativi</b>, e se puoi aspetta un giro '+
-    'di aggiornamento — le quote a volte arrivano poche ore prima.</div>';
+    'credere: <b>tratta i numeri di questa giornata come indicativi</b>, e se puoi aspetta un '+
+    'giro di aggiornamento — le quote a volte arrivano poche ore prima.</p>')+'</div>';
 }
 
 /* Quando la stessa selezione esce su quasi tutte le partite, l'app sta
@@ -1589,15 +1652,15 @@ function avvisoMonotonia(partite){
   if(!tot) return '';
   var top = Object.keys(conta).sort(function(a,b){ return conta[b] - conta[a]; })[0];
   if(!top || conta[top] / tot < 0.6) return '';
-  return '<div class="note warn" style="margin-bottom:12px"><b>'+esc(nomi[top])+
-    ' esce su '+conta[top]+' partite su '+tot+'.</b> Non è un\'osservazione su queste partite: '+
-    'è quanto vale quel mercato <b>sempre</b>, in ogni giornata. La regola che sceglie "la più '+
-    'solida" ordina per pavimento, e un mercato che sta all\'80% ovunque ha il pavimento più alto '+
-    'ovunque — quindi vince ovunque.<br><br>'+
-    'Misurato su 93 giornate, non è rotto: prende il 79.9% contro il 79.4% promesso. È onesto e '+
-    'monotono insieme. Se vuoi che ogni partita dica qualcosa di <b>suo</b>, accendi '+
-    '<b>selezioni distintive</b> qui sotto — costa dieci punti di probabilità e li vedi scritti.'+
-    '</div>';
+  return '<div style="margin-bottom:12px">'+notaPiega('warn',
+    '<b>'+esc(nomi[top])+' esce su '+conta[top]+' partite su '+tot+'.</b> Non è un\'osservazione '+
+    'su queste partite: è quanto vale quel mercato <b>sempre</b>.',
+    '<p>La regola che sceglie "la più solida" ordina per pavimento, e un mercato che sta '+
+    'all\'80% ovunque ha il pavimento più alto ovunque — quindi vince ovunque.</p>'+
+    '<p>Misurato su 93 giornate, non è rotto: prende il 79.9% contro il 79.4% promesso. È onesto '+
+    'e monotono insieme. Se vuoi che ogni partita dica qualcosa di <b>suo</b>, accendi '+
+    '<b>selezioni distintive</b> qui sotto — costa dieci punti di probabilità e li vedi '+
+    'scritti.</p>')+'</div>';
 }
 
 function sceltaDistintiva(){
@@ -1630,35 +1693,32 @@ function sceltaDistintiva(){
 function schedaPartita(p, indice){
   var pr = previsione(p);
   if(!pr) return '';
-  var k = chiavePartita(p);
-  var mercato = (p.qex || p.q) ? M.daQuote(p.qex || p.q) : null;
   var sc = sceltePartita(p, 3);
   var sol = sc ? sc.piuSolida : null;
+  var ha = !!(p.qex || p.q);
+  /* La carta è COMPATTA apposta: prima ne entrava una per schermata e le
+     dieci partite della giornata erano dieci schermate di scorrimento. I gol
+     attesi, l'Over, il Gol/Gol e il confronto col mercato non sono spariti —
+     stanno nel dettaglio, che si apre toccando, e lì hanno lo spazio per
+     essere letti davvero invece che sbirciati dieci volte. */
   return '<div class="match" onclick="apriPartita('+indice+')">'+
     '<div class="quando"><span>'+esc(dataBreve(p.d))+(p.o?' · '+esc(p.o):'')+'</span>'+
-      /* Lo stato delle quote si legge DALLA COPERTINA, senza aprire niente:
-         è l'unica cosa che decide se quello che c'è scritto sotto vale il
-         2.6% in più o in meno, e stava nascosta due schermate più in basso. */
-      ((p.qex||p.q) ? '<span class="gg">quote incluse</span>'
-        : (quotaMano(p) ? '<span class="gg mie">quote tue</span>'
-                        : '<span class="gg vuoto">senza quote · scrivile tu</span>'))+'</div>'+
+      /* Quando le quote ci sono è la normalità e non merita attenzione: un
+         puntino basta. Quando mancano è la cosa più importante della carta. */
+      (ha ? '<span class="gg ok">✓ quote</span>'
+          : (quotaMano(p) ? '<span class="gg mie">quote tue</span>'
+                          : '<span class="gg vuoto">scrivile tu</span>'))+'</div>'+
     '<div class="sfida"><div class="sq">'+esc(p.c)+'</div><div class="vs">—</div>'+
       '<div class="sq v">'+esc(p.v)+'</div></div>'+
     barraProb(pr)+
-    '<div class="mini">'+
-      '<div><div class="l">Gol attesi</div><div class="v">'+nu(pr.golCasa,1)+'–'+nu(pr.golVia,1)+'</div></div>'+
-      '<div><div class="l">Over 2.5</div><div class="v">'+pc(pr.over25)+'</div></div>'+
-      '<div><div class="l">Gol/Gol</div><div class="v">'+pc(pr.gol)+'</div></div>'+
-    '</div>'+
     (sol
-      ? '<div class="solida"><div class="solt">La più solida</div>'+
-        '<div class="solr"><b>'+esc(sol.nome)+'</b>'+
-        '<span>'+pc(sol.p)+'</span></div>'+
-        '<div class="solq">quota equa '+nu(sol.quota,2)+' · non scende sotto il '+pc(sol.p05)+
-        ' nemmeno nello scenario sfavorevole</div></div>'
+      ? '<div class="pick"><div class="pt">'+esc(sol.nome)+'</div>'+
+        '<div class="pp">'+pc(sol.p)+'</div>'+
+        '<div class="pq">'+nu(sol.quota,2)+'</div>'+
+        '<svg class="pv" viewBox="0 0 24 24" fill="none" stroke="currentColor" '+
+        'stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+
+        '<path d="M9 5l7 7-7 7"/></svg></div>'
       : '')+
-    (mercato ? '<div class="note" style="margin-top:10px">Il mercato dice '+pc(mercato[0])+' · '+
-      pc(mercato[1])+' · '+pc(mercato[2])+'. '+scartoTesto(pr.puro||pr, mercato)+'</div>' : '')+
   '</div>';
 }
 
@@ -1771,9 +1831,8 @@ function tabGiornata(){
   segnaPronostici();
   h += avvisoRitardo();
   h += '<div class="h2">Prossime partite<span class="r">'+g.partite.length+'</span></div>';
-  h += '<p class="lede">Dal '+esc(dataLunga(g.inizio))+(g.fine!==g.inizio?' al '+esc(dataLunga(g.fine)):'')+
-    '. Su ogni partita trovi <b>la più solida</b>: la giocata più sicura fra quelle che pagano '+
-    'qualcosa. Tocca la partita per tutte le altre.</p>';
+  h += '<p class="lede">Dal '+esc(dataBreve(g.inizio))+(g.fine!==g.inizio?' al '+esc(dataBreve(g.fine)):'')+
+    '. Su ogni partita <b>la più solida</b> — tocca per tutte le altre.</p>';
   h += avvisoSenzaQuote(g.partite);
   h += avvisoMonotonia(g.partite);
   h += g.partite.map(function(p){ return schedaPartita(p, prossime.indexOf(p)); }).join('');
@@ -3071,10 +3130,11 @@ function renderPartita(){
         pc(anc.pesoUsato)+'</em></div>'+
         '<div class="v" style="font-size:12.5px;color:var(--accent)">'+pc(pr.casa)+' · '+pc(pr.pari)+' · '+
         pc(pr.via)+'<span>over '+pc(pr.over25)+'</span></div></div>'+
-      '<div class="note">Il peso non è una scelta di gusto: è il numero che ha reso il backtest più '+
-      'preciso, ed è alto perché le quote di chiusura contengono formazioni e infortuni che a un modello '+
-      'statistico mancano. L\'ancoraggio non tocca solo l\'1X2: sposta i <b>gol attesi</b>, e da lì '+
-      'ricadono tutti gli altri mercati, anche quelli che il banco non quota.</div></div>';
+      notaPiega('', 'Il peso non è una scelta di gusto: è il numero che ha reso il backtest '+
+      'più preciso.',
+      '<p>È alto perché le quote di chiusura contengono formazioni e infortuni che a un modello '+
+      'statistico mancano. L\'ancoraggio non tocca solo l\'1X2: sposta i <b>gol attesi</b>, e da '+
+      'lì ricadono tutti gli altri mercati, anche quelli che il banco non quota.</p>')+'</div>';
   } else if(!p.q){
     h += '<div class="note warn" style="margin-top:12px">Per questa partita non ci sono ancora quote nei '+
       'dati, quindi vedi il modello da solo — che è la sua versione peggiore, il 2.6% più imprecisa. '+
