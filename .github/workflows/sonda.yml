@@ -23,6 +23,7 @@ jobs:
           python3 scripts/_sonda_colonne.py
           python3 scripts/_sonda_calendario.py
           python3 scripts/_sonda_odds.py
+          python3 scripts/_sonda_leghe.py
       - uses: actions/upload-artifact@v4
         if: always()
         with:
