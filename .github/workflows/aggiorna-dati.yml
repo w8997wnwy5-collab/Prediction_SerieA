@@ -50,9 +50,19 @@ jobs:
           FOOTBALL_DATA_TOKEN: ${{ secrets.FOOTBALL_DATA_TOKEN }}
           APIFOOTBALL_KEY: ${{ secrets.APIFOOTBALL_KEY }}
           ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
-          # solo il giro delle 05:17 rilegge tutto l'archivio; gli altri
-          # aggiornano calendario, quote e arbitri e basta
-          MODO: ${{ (github.event.schedule == '17 11,17,23 * * *') && 'leggero' || 'completo' }}
+          # Solo il giro delle 05:17 rilegge tutto l'archivio; gli altri
+          # aggiornano calendario, quote e arbitri e basta.
+          #
+          # Qui c'era scritto '17 11,17,23 * * *', che non e' nessuno degli
+          # orari qui sopra: gli orari sono stati cambiati e questa riga no.
+          # Risultato, la condizione non era MAI vera e tutti e sei i giri
+          # rileggevano l'archivio intero — sei volte il lavoro che serviva,
+          # tutti i giorni, in silenzio. Con cinque campionati sarebbero
+          # centottanta CSV al giorno contro una fonte che chiede gentilezza.
+          # Adesso la condizione nomina i giri LEGGERI invece del completo:
+          # cosi' anche il bottone a mano e i push fanno il giro completo,
+          # che e' quello che uno si aspetta quando lo lancia apposta.
+          MODO: ${{ (github.event.schedule == '47 9,12,15,17 * * *' || github.event.schedule == '17 23 * * *') && 'leggero' || 'completo' }}
         run: python scripts/build_data.py
 
       - name: Committa se qualcosa è cambiato
@@ -60,7 +70,7 @@ jobs:
           FOOTBALL_DATA_TOKEN: ${{ secrets.FOOTBALL_DATA_TOKEN }}
           APIFOOTBALL_KEY: ${{ secrets.APIFOOTBALL_KEY }}
           ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
-          MODO: ${{ (github.event.schedule == '17 11,17,23 * * *') && 'leggero' || 'completo' }}
+          MODO: ${{ (github.event.schedule == '47 9,12,15,17 * * *' || github.event.schedule == '17 23 * * *') && 'leggero' || 'completo' }}
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"

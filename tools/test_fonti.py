@@ -921,7 +921,199 @@ def test_calendario_ha_le_stesse_quote():
           B.da_tenere([p], '2026-09-01')[0].get('qex') == [2.62, 3.55, 2.9])
 
 
+def test_cinque_campionati():
+    """Cinque campionati indipendenti, e i confini fra loro.
+
+    Il rischio qui non e' che non funzioni: e' che funzioni MESCOLANDO. Un
+    filtro sbagliato e le partite della Premier finiscono nell'archivio della
+    Serie A, il modello impara che l'Arsenal gioca in Italia, e nessun errore
+    lo dice. Le prove qui sotto guardano i confini, non le funzionalita'.
+    """
+    prova('i campionati sono cinque', len(B.LEGHE) == 5, len(B.LEGHE))
+    prova('e la Serie A e la prima, quella con tutto l\'arricchimento',
+          B.LEGHE[0]['id'] == 'I1' and B.LEGA_CASA is B.LEGHE[0])
+    chiavi = ('id', 'nome', 'paese', 'of', 'odds', 'file')
+    prova('ognuno dichiara codice, nome, paese, calendario, sport e file',
+          all(all(k in l and l[k] for k in chiavi) for l in B.LEGHE))
+    prova('i codici e i file sono tutti diversi',
+          len({l['id'] for l in B.LEGHE}) == 5 and len({l['file'] for l in B.LEGHE}) == 5)
+
+    # un CSV con due campionati dentro: e' esattamente come arriva fixtures.csv
+    testa = ('Div,Date,HomeTeam,AwayTeam,FTHG,FTAG,HS,AS,HST,AST,'
+             'AvgCH,AvgCD,AvgCA\n')
+    righe = ('I1,22/08/2026,Inter,Lecce,2,0,15,6,7,2,1.30,5.50,9.00\n'
+             'E0,22/08/2026,Arsenal,Chelsea,1,1,12,10,4,5,2.10,3.40,3.60\n'
+             'D1,22/08/2026,Bayern Munich,Mainz,3,1,20,5,9,1,1.20,7.00,12.0\n')
+    csv_misto = testa + righe
+    soloI1 = B.leggi_csv(csv_misto, '2026-27', 'I1')
+    soloE0 = B.leggi_csv(csv_misto, '2026-27', 'E0')
+    prova('il lettore prende solo il campionato che gli si chiede',
+          len(soloI1) == 1 and len(soloE0) == 1 and
+          soloI1[0]['c'] != soloE0[0]['c'],
+          '%d di I1, %d di E0' % (len(soloI1), len(soloE0)))
+    prova('e la Premier non finisce nell\'archivio della Serie A',
+          all('Arsenal' not in (p['c'], p['v']) for p in soloI1))
+    prova('il valore predefinito resta la Serie A, cosi\' il vecchio codice non cambia',
+          len(B.leggi_csv(csv_misto, '2026-27')) == 1 and
+          B.leggi_csv(csv_misto, '2026-27')[0]['c'] == soloI1[0]['c'])
+
+    # il controllo sul file scaricato deve rifiutare il campionato sbagliato
+    dati = (testa + righe).encode('utf-8') + b' ' * 500
+    prova('un file senza il campionato chiesto viene rifiutato',
+          B.pare_csv_lega('SP1')(dati) is not None and
+          B.pare_csv_lega('I1')(dati) is None,
+          str(B.pare_csv_lega('SP1')(dati))[:60])
+
+    # Bundesliga e Ligue 1 hanno diciotto squadre: la soglia stava a venti
+    diciotto = []
+    squadre = ['S%02d' % i for i in range(18)]
+    for g in range(40):
+        for i in range(0, 18, 2):
+            diciotto.append({'d': '2026-01-%02d' % (1 + g % 28), 's': '2026-27',
+                             'c': squadre[i], 'v': squadre[i + 1], 'gc': 1, 'gv': 0})
+    prova('un campionato da diciotto squadre non viene scambiato per un file rotto',
+          not B.controlla(diciotto), B.controlla(diciotto))
+
+
+def test_nomi_fra_campionati():
+    """Il pezzo piu' rischioso dei cinque campionati, e non si vede.
+
+    Tre fonti scrivono gli stessi club in tre modi: football-data dice "Man
+    City", openfootball "Manchester City FC", The Odds API "Manchester City".
+    Per la Serie A c'e' una tabella scritta a mano; per quattro campionati in
+    piu' sarebbero ottanta squadre l'anno.
+
+    Il risolutore indovina, quindi queste prove guardano il modo in cui puo'
+    sbagliare. E i due errori non sono simmetrici: un nome NON riconosciuto e'
+    una partita senza quote, che si vede e si conta; un nome riconosciuto MALE
+    sono due club fusi in uno, che non da' nessun errore e avvelena il modello
+    in silenzio. La prima versione di questo codice ne faceva quattro, di
+    fusioni, e l'ha detto solo una prova contro i nomi veri.
+    """
+    inglesi = ['Arsenal', 'Man City', 'Man United', 'Tottenham', 'Coventry',
+               'Hull', 'Sheffield United', "Nott'm Forest", 'West Ham', 'Wolves']
+    r = B.RisolutoreNomi(inglesi)
+    prova('"Manchester City FC" trova "Man City"',
+          r.risolvi('Manchester City FC') == 'Man City', r.risolvi('Manchester City FC'))
+    prova('"Tottenham Hotspur FC" trova "Tottenham"',
+          r.risolvi('Tottenham Hotspur FC') == 'Tottenham')
+    prova('"Spurs" trova "Tottenham" passando dalla tabella',
+          r.risolvi('Spurs') == 'Tottenham', r.risolvi('Spurs'))
+
+    # LE FUSIONI: il caso che conta davvero
+    prova('"Hull City AFC" NON diventa "Man City"',
+          r.risolvi('Hull City AFC') in (None, 'Hull'), r.risolvi('Hull City AFC'))
+    prova('"Coventry City FC" NON diventa "Man City"',
+          r.risolvi('Coventry City FC') in (None, 'Coventry'), r.risolvi('Coventry City FC'))
+    prova('un club mai visto non viene attaccato al piu somigliante',
+          r.risolvi('Real Madrid CF') is None, r.risolvi('Real Madrid CF'))
+
+    spagnoli = ['Barcelona', 'Real Madrid', 'Espanol', 'Ath Bilbao', 'Ath Madrid',
+                'Betis', 'Sociedad', 'Santander']
+    r2 = B.RisolutoreNomi(spagnoli)
+    prova('"RCD Espanyol de Barcelona" NON diventa "Barcelona"',
+          r2.risolvi('RCD Espanyol de Barcelona') == 'Espanol',
+          r2.risolvi('RCD Espanyol de Barcelona'))
+    prova('"Real Racing Club de Santander" NON diventa "Real Madrid"',
+          r2.risolvi('Real Racing Club de Santander') in (None, 'Santander'),
+          r2.risolvi('Real Racing Club de Santander'))
+    prova('"Club Atletico de Madrid" trova l\'Atletico e non il Real',
+          r2.risolvi('Club Atletico de Madrid') == 'Ath Madrid',
+          r2.risolvi('Club Atletico de Madrid'))
+    prova('gli accenti non contano: "Atlético" vale "Atletico"',
+          r2.risolvi('Club Atl\u00e9tico de Madrid') == 'Ath Madrid')
+
+    francesi = ['Paris SG', 'Paris FC', 'Le Havre', 'Le Mans', 'Rennes', 'Lyon']
+    r3 = B.RisolutoreNomi(francesi)
+    prova('"Le Mans FC" NON diventa "Le Havre"',
+          r3.risolvi('Le Mans FC') == 'Le Mans', r3.risolvi('Le Mans FC'))
+    prova('"Paris Saint-Germain FC" NON diventa "Paris FC"',
+          r3.risolvi('Paris Saint-Germain FC') == 'Paris SG',
+          r3.risolvi('Paris Saint-Germain FC'))
+    prova('"Stade Rennais FC 1901" trova "Rennes"',
+          r3.risolvi('Stade Rennais FC 1901') == 'Rennes',
+          r3.risolvi('Stade Rennais FC 1901'))
+
+    tedeschi = ['Bayern Munich', 'Dortmund', "M'gladbach", 'Leverkusen', 'FC Koln']
+    r4 = B.RisolutoreNomi(tedeschi)
+    prova('"FC Bayern Munchen" trova "Bayern Munich"',
+          r4.risolvi('FC Bayern M\u00fcnchen') == 'Bayern Munich',
+          r4.risolvi('FC Bayern M\u00fcnchen'))
+    prova('"Borussia Monchengladbach" trova il Gladbach e non il Dortmund',
+          r4.risolvi('Borussia M\u00f6nchengladbach') == "M'gladbach",
+          r4.risolvi('Borussia M\u00f6nchengladbach'))
+    # "Borussia" da sola: con un archivio che ne contiene DUE deve rinunciare.
+    # (Con l'archivio di football-data, che scrive "Dortmund" senza "Borussia",
+    # ce n'e' una sola e risolverla e' giusto: l'ambiguita' e' una proprieta'
+    # dell'elenco, non del nome.)
+    r5 = B.RisolutoreNomi(['Borussia Dortmund', "M'gladbach", 'Bayern Munich'])
+    prova('con due Borussia in archivio, "Borussia" da sola rinuncia',
+          r5.risolvi('Borussia') is None, r5.risolvi('Borussia'))
+    prova('ma "Borussia Dortmund" per intero si risolve lo stesso',
+          r5.risolvi('Borussia Dortmund') == 'Borussia Dortmund')
+
+    # e chi non si risolve deve USCIRE, non entrare con un nome a caso
+    righe = [{'d': '2026-10-10', 'c': 'Manchester City FC', 'v': 'Arsenal FC', 'q': [2, 3, 4]},
+             {'d': '2026-10-10', 'c': 'Squadra Inventata', 'v': 'Arsenal FC', 'q': [2, 3, 4]}]
+    fuori = r.applica(righe)
+    prova('una partita con un nome non riconosciuto non entra',
+          len(fuori) == 1 and fuori[0]['c'] == 'Man City', fuori)
+    prova('e il numero dei non riconosciuti finisce nel resoconto',
+          'NON riconosciuti' in r.resoconto(), r.resoconto())
+
+
+def test_giro_leggero_aggiorna_le_quote():
+    """Il giro leggero esiste per le quote, e deve farlo per TUTTI i campionati.
+
+    Se aggiornasse solo la Serie A, gli altri quattro mostrerebbero i prezzi di
+    stanotte mentre si gioca — cioe' l'ancoraggio spento proprio dove serve, e
+    spento in silenzio, che e' il guasto peggiore di questo progetto.
+    """
+    sorgente = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                            'scripts', 'build_data.py')
+    testo = io.open(sorgente, encoding='utf-8').read()
+    prova('il giro leggero aggiorna le quote anche degli altri campionati',
+          'aggiorna_lega_leggero' in testo and
+          re.search(r'else:[\s\S]{0,900}aggiorna_lega_leggero\(lega', testo) is not None)
+    prova('e non riscarica sei stagioni di CSV per farlo',
+          'prendi_football_data' not in testo.split('def aggiorna_lega_leggero')[1]
+          .split('def ')[0])
+    prova('il conto dei crediti guarda tutte e cinque le leghe, e prende il piu basso',
+          'min(restano)' in testo)
+
+
+def test_orari_del_giro():
+    """Gli orari nel workflow e la condizione che decide completo/leggero
+    devono parlare della stessa cosa.
+
+    Non e' pedanteria: la condizione diceva '17 11,17,23 * * *', che non era
+    nessuno degli orari programmati. Non ha mai fatto match, quindi TUTTI i
+    giri hanno riletto l'archivio intero, sei volte al giorno, per mesi, in
+    silenzio. Con cinque campionati sarebbero centottanta CSV al giorno.
+
+    Questa prova non guarda il comportamento: guarda che i due elenchi si
+    nominino a vicenda. E' l'unica cosa che avrebbe trovato quel difetto.
+    """
+    percorso = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                            '.github', 'workflows', 'aggiorna-dati.yml')
+    if not os.path.exists(percorso):
+        return
+    testo = io.open(percorso, encoding='utf-8').read()
+    programmati = set(re.findall(r"- cron: '([^']+)'", testo))
+    nominati = set(re.findall(r"github\.event\.schedule == '([^']+)'", testo))
+    prova('ci sono degli orari programmati', bool(programmati), programmati)
+    prova('ogni orario nominato dalla condizione esiste davvero fra quelli programmati',
+          nominati and nominati <= programmati,
+          'nominati ma non programmati: %s' % (nominati - programmati))
+    prova('e almeno un giro resta completo',
+          programmati - nominati, 'tutti leggeri: %s' % programmati)
+
+
 def main():
+    test_cinque_campionati()
+    test_nomi_fra_campionati()
+    test_giro_leggero_aggiorna_le_quote()
+    test_orari_del_giro()
     test_validatori()
     test_quote()
     test_calendario_ha_le_stesse_quote()

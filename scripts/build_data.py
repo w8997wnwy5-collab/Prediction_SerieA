@@ -36,6 +36,47 @@ DATA = os.path.join(QUI, 'data')
 FILE_DATI = os.path.join(DATA, 'serie-a.json')
 FILE_META = os.path.join(DATA, 'meta.json')
 
+# ────────────────────────────── i campionati ──────────────────────────────
+#
+# Cinque, e sono INDIPENDENTI: non si scommette su Inter-Arsenal, quindi le
+# forze di due campionati non devono essere confrontabili fra loro. Ogni lega
+# ha il suo modello, la sua calibrazione dei tiri, il suo vantaggio di campo.
+# E' molto piu' semplice — e molto piu' solido — del lavoro sulla Champions,
+# che aveva bisogno di ponti stimati sulle coppe per rendere paragonabili le
+# forze di paesi diversi.
+#
+# Sondato prima di scrivere (scripts/_sonda_leghe.py), su sei stagioni:
+#
+#   Serie A     I1   1950 partite    tiri 100%  quote 100%  O/U 100%  handicap 100%
+#   Premier     E0   1950 partite    tiri 100%  quote 100%  O/U 100%  handicap 100%
+#   Bundesliga  D1   1566 partite    tiri 100%  quote 100%  O/U 100%  handicap 100%
+#   Liga        SP1  1969 partite    tiri 100%  quote 100%  O/U 100%  handicap 100%
+#   Ligue 1     F1   1723 partite    tiri 100%  quote 100%  O/U 100%  handicap 100%
+#
+# Tutto quello che il modello usa c'e' dappertutto. Mancano due cose, e
+# nessuna delle due pesa: gli xG veri ci sono solo nella stagione in corso —
+# ma anche in Serie A e' cosi', ed e' stato MISURATO che gli xG dedotti dai
+# tiri non si distinguono da quelli veri nel prevedere i gol (z = -1.40 su 100
+# osservazioni, tools/misura_xg.js) — e l'arbitro manca a tutte tranne la
+# Premier, ma l'effetto dell'arbitro e' stato misurato ed e' nullo, per quello
+# non e' nel modello.
+#
+# 9158 partite in un file solo farebbero 3.9 MB, che un telefono scarica a
+# ogni apertura. Quindi un file per lega, e un indice che dice quali ci sono.
+LEGHE = [
+    {'id': 'I1',  'nome': 'Serie A',        'paese': 'Italia',
+     'of': 'it.1', 'odds': 'soccer_italy_serie_a',      'file': 'serie-a.json'},
+    {'id': 'E0',  'nome': 'Premier League', 'paese': 'Inghilterra',
+     'of': 'en.1', 'odds': 'soccer_epl',                'file': 'leghe/E0.json'},
+    {'id': 'D1',  'nome': 'Bundesliga',     'paese': 'Germania',
+     'of': 'de.1', 'odds': 'soccer_germany_bundesliga', 'file': 'leghe/D1.json'},
+    {'id': 'SP1', 'nome': 'Liga',           'paese': 'Spagna',
+     'of': 'es.1', 'odds': 'soccer_spain_la_liga',      'file': 'leghe/SP1.json'},
+    {'id': 'F1',  'nome': 'Ligue 1',        'paese': 'Francia',
+     'of': 'fr.1', 'odds': 'soccer_france_ligue_one',   'file': 'leghe/F1.json'},
+]
+LEGA_CASA = LEGHE[0]            # la Serie A: quella con tutto l'arricchimento
+
 N_STAGIONI = 6
 PAUSA = 5           # secondi fra un download e l'altro: la fonte non ama le raffiche
 UA = ('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) '
@@ -113,15 +154,24 @@ def _pare_csv(dati, byte_minimi=400):
     return None
 
 
+def pare_csv_lega(div):
+    """Il controllo per il file di UN campionato: deve essere un CSV, e nelle
+    prime righe deve comparire il suo codice. Prima era scritto su misura per
+    'I1', che e' il motivo per cui questa funzione ora prende un argomento."""
+    def controllo(dati):
+        problema = _pare_csv(dati)
+        if problema:
+            return problema
+        testa = dati[:3000].decode('utf-8-sig', errors='replace')
+        if div not in testa:
+            return 'nessuna riga di %s nelle prime righe' % div
+        return None
+    return controllo
+
+
 def pare_csv_seriea(dati):
     """None se va bene, altrimenti il motivo del rifiuto."""
-    problema = _pare_csv(dati)
-    if problema:
-        return problema
-    testa = dati[:3000].decode('utf-8-sig', errors='replace')
-    if 'I1' not in testa:
-        return 'nessuna riga di Serie A nelle prime righe'
-    return None
+    return pare_csv_lega('I1')(dati)
 
 
 def pare_csv_calendario(dati):
@@ -412,7 +462,7 @@ def quote_da_riga(r):
     return fuori
 
 
-def leggi_csv(testo, stagione):
+def leggi_csv(testo, stagione, div='I1'):
     fuori = []
     lettore = csv.DictReader(io.StringIO(testo.replace('\r\n', '\n')))
     # Il BOM in testa al file diventerebbe parte del nome della prima colonna:
@@ -421,7 +471,7 @@ def leggi_csv(testo, stagione):
     if lettore.fieldnames:
         lettore.fieldnames = [(c or '').replace('\ufeff', '').strip() for c in lettore.fieldnames]
     for r in lettore:
-        if (r.get('Div') or '').strip() != 'I1':
+        if (r.get('Div') or '').strip() != div:
             continue
         casa, via, d = nome(r.get('HomeTeam')), nome(r.get('AwayTeam')), data_iso(r.get('Date'))
         if not (casa and via and d):
@@ -491,19 +541,21 @@ def scarica_football_data(percorso, esiti, controllo=None, tentativi=2, attesa=4
     raise RuntimeError(ultimo or 'nessun indirizzo ha risposto')
 
 
-def prendi_football_data(stagioni):
+def prendi_football_data(stagioni, div='I1', nome_lega='Serie A', pausa=None):
     partite, esiti = [], {}
+    if pausa is None:
+        pausa = PAUSA
     for i, (codice, etichetta) in enumerate(stagioni):
         if i:
-            time.sleep(PAUSA)
-        log('· football-data.co.uk %s' % etichetta)
+            time.sleep(pausa)
+        log('· football-data.co.uk %s %s' % (div, etichetta))
         try:
-            testo = scarica_football_data('mmz4281/%s/I1.csv' % codice, esiti,
-                                          controllo=pare_csv_seriea).decode('utf-8-sig',
-                                                                           errors='replace')
-            p = leggi_csv(testo, etichetta)
+            testo = scarica_football_data('mmz4281/%s/%s.csv' % (codice, div), esiti,
+                                          controllo=pare_csv_lega(div)).decode('utf-8-sig',
+                                                                               errors='replace')
+            p = leggi_csv(testo, etichetta, div)
             if not p:
-                raise RuntimeError('CSV scaricato ma nessuna partita di Serie A dentro')
+                raise RuntimeError('CSV scaricato ma nessuna partita di %s dentro' % nome_lega)
             arb = len([x for x in p if x.get('arb')])
             log('  %d partite (%d con arbitro)' % (len(p), arb))
             partite.extend(p)
@@ -820,9 +872,9 @@ def _punteggio_openfootball(m):
     return finale, _coppia([m.get('score1i'), m.get('score2i')])
 
 
-def prendi_openfootball(etichetta):
+def prendi_openfootball(etichetta, of='it.1'):
     url = ('https://raw.githubusercontent.com/openfootball/football.json/'
-           'master/%s/it.1.json' % etichetta)
+           'master/%s/%s.json' % (etichetta, of))
     d = json.loads(scarica(url, tentativi=2, attesa=3).decode('utf-8'))
     giocate, future = [], []
     for m in d.get('matches', []):
@@ -852,14 +904,14 @@ def prendi_openfootball(etichetta):
 
 # ────────────────────────────── calendario ──────────────────────────────
 
-def prendi_calendario(stagioni, esiti):
+def prendi_calendario(stagioni, esiti, div='I1'):
     fut = []
     try:
         log('· football-data.co.uk calendario')
         testo = scarica_football_data('fixtures.csv', esiti,
                                       controllo=pare_csv_calendario).decode('utf-8-sig', 'replace')
         for r in csv.DictReader(io.StringIO(testo)):
-            if (r.get('Div') or '').strip() != 'I1':
+            if (r.get('Div') or '').strip() != div:
                 continue
             d = data_iso(r.get('Date'))
             if not d:
@@ -955,20 +1007,34 @@ def _coppia_ou(mercato):
 
 
 def _crediti_rimasti(esiti):
-    """Il numero di crediti che restano, tirato fuori dal riepilogo per finire
-    nel meta: l'app lo mostra in Dati, cosi' la fine della quota si vede
-    arrivare invece di scoprirla dall'ancoraggio che si spegne."""
-    testo = str(esiti.get('The Odds API crediti') or '')
-    m = re.search(r'restano (\d+)', testo)
-    return int(m.group(1)) if m else None
+    """I crediti che restano, tirati fuori dal riepilogo per finire nel meta:
+    l'app lo mostra in Dati, cosi' la fine della quota si vede arrivare invece
+    di scoprirla dall'ancoraggio che si spegne.
 
+    Con cinque campionati le righe sono cinque, una per lega. Si prende la piu'
+    BASSA, che e' quella dell'ultima chiamata fatta: e' l'unica che dice quanto
+    ne resta davvero. Prendere la prima direbbe quanti ce n'erano prima di
+    spendere gli altri quattro."""
+    restano = []
+    for chiave, testo in esiti.items():
+        if not str(chiave).endswith('crediti'):
+            continue
+        m = re.search(r'restano (\d+)', str(testo or ''))
+        if m:
+            restano.append(int(m.group(1)))
+    return min(restano) if restano else None
 
-def prendi_odds_api(esiti):
+def prendi_odds_api(esiti, sport=None, etichetta=None):
     """Le quote delle partite in arrivo, da 24 banchi e con 24 giorni di
-    anticipo. Torna voci di calendario pronte da fondere."""
+    anticipo. Torna voci di calendario pronte da fondere.
+
+    Con cinque campionati costa cinque crediti a giro invece di uno: la chiave
+    dello sport e' un argomento, e chi chiama tiene il conto."""
+    sport = sport or ODDS_API_SPORT
+    etichetta = etichetta or 'The Odds API'
     chiave = os.environ.get('ODDS_API_KEY', '').strip()
     if not chiave:
-        esiti['The Odds API'] = 'saltata: nessuna chiave ODDS_API_KEY'
+        esiti[etichetta] = 'saltata: nessuna chiave ODDS_API_KEY'
         return []
     # Perche' solo la regione 'eu' e non anche 'uk'. Misurato con la sonda:
     #   eu      20 banchi, 20 partite con l'exchange, 1 credito
@@ -979,17 +1045,17 @@ def prendi_odds_api(esiti):
     # media dei banchi e' solo il ripiego. Con sei giri al giorno, eu costa 360
     # crediti al mese su 500; eu,uk ne costerebbe 540, cioe' piu' del piano.
     url = ('%s/sports/%s/odds?regions=eu&markets=h2h,totals&oddsFormat=decimal&apiKey=%s'
-           % (ODDS_API_BASE, ODDS_API_SPORT, chiave))
+           % (ODDS_API_BASE, sport, chiave))
     try:
         log('· The Odds API')
         grezzo, intestazioni = scarica_con_intestazioni(url, tentativi=2, attesa=3)
         partite = json.loads(grezzo.decode('utf-8'))
     except Exception as e:                        # noqa: BLE001
         # Il messaggio puo' contenere l'URL, e l'URL contiene la chiave.
-        esiti['The Odds API'] = 'non disponibile: %s' % str(e).replace(chiave, '***')[:80]
+        esiti[etichetta] = 'non disponibile: %s' % str(e).replace(chiave, '***')[:80]
         return []
     if not isinstance(partite, list):
-        esiti['The Odds API'] = 'risposta inattesa'
+        esiti[etichetta] = 'risposta inattesa'
         return []
 
     fuori, senza_quote = [], 0
@@ -1034,8 +1100,8 @@ def prendi_odds_api(esiti):
     restano = intestazioni.get('x-requests-remaining') if intestazioni else None
     usati = intestazioni.get('x-requests-used') if intestazioni else None
     if restano is not None:
-        esiti['The Odds API crediti'] = 'restano %s (usati %s)' % (restano, usati)
-    esiti['The Odds API'] = ('ok: %d partite con quote (%d con Betfair)%s'
+        esiti[etichetta + ' crediti'] = 'restano %s (usati %s)' % (restano, usati)
+    esiti[etichetta] = ('ok: %d partite con quote (%d con Betfair)%s'
                              % (len(fuori), conex,
                                 ', %d scartate senza quote' % senza_quote if senza_quote else ''))
     return fuori
@@ -1693,7 +1759,10 @@ def controlla(partite):
     if len(giocate) < 300:
         problemi.append('solo %d partite con risultato' % len(giocate))
     squadre = {p['c'] for p in giocate} | {p['v'] for p in giocate}
-    if len(squadre) < 20:
+    # Sedici, non venti: Bundesliga e Ligue 1 ne schierano diciotto. Questo
+    # controllo serve a dire "il file e' rotto", non "il campionato e' piccolo",
+    # e su sei stagioni anche una lega da diciotto ne accumula una trentina.
+    if len(squadre) < 16:
         problemi.append('solo %d squadre distinte' % len(squadre))
     if [p for p in giocate if not (0 <= p['gc'] <= 15 and 0 <= p['gv'] <= 15)]:
         problemi.append('punteggi fuori scala')
@@ -1739,6 +1808,378 @@ def scrivi_meta(meta):
     with open(FILE_META, 'w', encoding='utf-8') as f:
         json.dump(meta, f, ensure_ascii=False, indent=1)
     riepilogo(meta)
+
+
+# ────────────────────────────── i nomi delle squadre ──────────────────────────────
+#
+# Il pezzo piu' rischioso di tutto il lavoro sui cinque campionati, e non si
+# vede: tre fonti scrivono gli stessi club in tre modi diversi.
+#
+#   football-data   Bayern Munich      Man City        Ein Frankfurt
+#   openfootball    FC Bayern Munchen  Manchester City Eintracht Frankfurt
+#   The Odds API    Bayern Munich      Manchester City Eintracht Frankfurt
+#
+# Per la Serie A c'e' ALIAS, una tabella scritta a mano club per club. Per
+# quattro campionati in piu' sarebbero ottanta squadre l'anno, riscritte ogni
+# volta che una promossa cambia le carte. Non regge.
+#
+# La strada e' un'altra: l'archivio di football-data e' la verita', e i nomi
+# delle altre fonti si RISOLVONO contro quelli. Chi non si risolve non entra e
+# viene CONTATO — un nome non riconosciuto e' una partita senza quote, che si
+# vede; un nome riconosciuto male e' due club fusi in uno, che non si vede
+# affatto e avvelena il modello in silenzio.
+#
+# Per questo, davanti a un caso ambiguo, questo codice rinuncia invece di
+# scegliere. Una partita senza quote e' un danno piccolo e visibile. Due club
+# fusi sono un danno grande e invisibile.
+
+_SENZA_ACCENTI = {
+    'á': 'a', 'à': 'a', 'ä': 'a', 'â': 'a', 'ã': 'a', 'å': 'a',
+    'é': 'e', 'è': 'e', 'ë': 'e', 'ê': 'e',
+    'í': 'i', 'ì': 'i', 'ï': 'i', 'î': 'i',
+    'ó': 'o', 'ò': 'o', 'ö': 'o', 'ô': 'o', 'õ': 'o', 'ø': 'o',
+    'ú': 'u', 'ù': 'u', 'ü': 'u', 'û': 'u',
+    'ñ': 'n', 'ç': 'c', 'ß': 'ss', 'ł': 'l', 'š': 's', 'ž': 'z', 'ć': 'c', 'č': 'c',
+}
+
+# Le sigle societarie: dicono la forma giuridica del club, non quale club e'.
+# "1. FSV Mainz 05" e "Mainz" sono la stessa squadra; "FC" non distingue niente
+# perche' ce l'hanno quasi tutti.
+_SIGLE = ('fc', 'afc', 'cf', 'ac', 'sc', 'sv', 'tsv', 'vfb', 'vfl', 'bsc', 'tsg',
+          'spvgg', 'rc', 'rcd', 'ud', 'cd', 'sd', 'ca', 'as', 'ss', 'ssc', 'us',
+          'usl', 'acf', 'bc', 'cfc', 'sk', 'fk', 'fsv', 'msv', 'ogc', 'osc',
+          'rcs', 'sco', 'asse', 'club', 'calcio', 'futbol', 'fussball')
+
+
+def _normalizza_nome(n):
+    """La chiave con cui due scritture dello stesso club si incontrano."""
+    n = (n or '').strip().lower()
+    n = ''.join(_SENZA_ACCENTI.get(c, c) for c in n)
+    n = re.sub(r'[^a-z0-9 ]+', ' ', n)
+    n = re.sub(r'\b(18|19|20)\d\d\b', ' ', n)      # anni di fondazione
+    n = re.sub(r'\b\d+\b', ' ', n)                  # "1. FSV", "05"
+    pezzi = [x for x in n.split() if x and x not in _SIGLE]
+    return ' '.join(pezzi) or n.strip()
+
+
+# I casi che nessuna regola puo' indovinare, perche' i due nomi non hanno
+# NIENTE in comune. "Spurs" e "Tottenham Hotspur" sono la stessa squadra e non
+# condividono una lettera utile; nessun punteggio di somiglianza li mettera'
+# mai insieme, e va bene cosi' — si scrivono a mano, sono pochi, e l'elenco si
+# completa guardando cosa il primo giro vero dichiara come non riconosciuto,
+# invece che indovinando da qui.
+ALIAS_EUROPA = {
+    'spurs': 'tottenham',
+    'nottm forest': 'nottingham forest',
+    'sheffield weds': 'sheffield wednesday',
+    'paris sg': 'paris saint germain',
+    'ath bilbao': 'athletic',
+    'ath madrid': 'atletico madrid',
+    'sociedad': 'real sociedad',
+    'espanol': 'espanyol',
+    'betis': 'real betis',
+    'vallecano': 'rayo vallecano',
+    'celta': 'celta vigo',
+    'la coruna': 'deportivo la coruna',
+    'ein frankfurt': 'eintracht frankfurt',
+    'leverkusen': 'bayer leverkusen',
+    'm gladbach': 'borussia monchengladbach',
+    'monchengladbach': 'borussia monchengladbach',
+    'st etienne': 'saint etienne',
+    # Trovati provando il risolutore contro i nomi veri di openfootball: tre
+    # coppie che nessuna regola puo' unire perche' le due scritture non
+    # condividono abbastanza lettere.
+    'bayern munchen': 'bayern munich',
+    'espanyol de barcelona': 'espanol',
+    'espanyol': 'espanol',
+    'stade rennais': 'rennes',
+    'rennais': 'rennes',
+}
+
+
+def _token_uguali(a, b):
+    """Due pezzi di nome sono la stessa parola?
+
+    Uguali; oppure uno e' l'inizio dell'altro per almeno tre lettere ("man" e
+    "manchester", "ath" e "athletic"); oppure uno sta dentro l'altro per almeno
+    cinque ("gladbach" dentro "monchengladbach")."""
+    if a == b:
+        return True
+    corto, lungo = (a, b) if len(a) <= len(b) else (b, a)
+    if len(corto) >= 3 and lungo.startswith(corto):
+        return True
+    return len(corto) >= 5 and corto in lungo
+
+
+class RisolutoreNomi(object):
+    """Riporta i nomi di una fonte su quelli dell'archivio, o rinuncia.
+
+    Dal piu' sicuro al meno sicuro, e ci si ferma appena un passaggio e' ambiguo:
+      1. il nome e' identico
+      2. la chiave normalizzata e' identica (anche passando per ALIAS_EUROPA,
+         che viene applicato da tutte e due le parti)
+      3. OGNI pezzo del nome piu' corto si ritrova nell'altro, e il vincitore
+         e' uno solo
+
+    Il punto (3) e' l'unico che indovina, e la regola che lo rende sicuro e'
+    "ogni pezzo", non "abbastanza pezzi". La prima versione chiedeva che si
+    somigliasse meta' del nome, ed e' stata provata contro i nomi veri delle
+    quattro leghe: faceva quattro FUSIONI. "Hull City" e "Coventry City"
+    diventavano "Man City" perche' condividevano "city"; "Espanyol de
+    Barcelona" diventava "Barcelona"; "Real Racing Santander" diventava "Real
+    Madrid"; "Le Mans" diventava "Le Havre". Tutte e quattro sono il disastro
+    che questo codice esiste per evitare — due club diversi fusi in uno, senza
+    un errore, con il modello che impara i gol sbagliati.
+
+    Chiedendo che TUTTI i pezzi del nome corto trovino casa, "Hull City" non
+    passa piu': "hull" non somiglia a niente in "man city". E "Borussia" da
+    sola pesca Dortmund e Monchengladbach: due candidati, si rinuncia.
+
+    Una partita senza quote e' un danno piccolo e visibile. Due club fusi sono
+    un danno grande e invisibile.
+    """
+
+    def __init__(self, nomi):
+        self.noti = set(n for n in nomi if n)
+        self.per_chiave = {}
+        for n in self.noti:
+            k = _normalizza_nome(n)
+            for variante in {k, ALIAS_EUROPA.get(k)}:
+                if variante:
+                    self.per_chiave.setdefault(variante, []).append(n)
+        self.ambigue = {k for k, v in self.per_chiave.items() if len(set(v)) > 1}
+        self.risolti, self.persi, self.esempi = 0, 0, []
+        self._memoria = {}
+
+    def _cerca(self, n):
+        if n in self.noti:
+            return n
+        k = _normalizza_nome(n)
+        if not k:
+            return None
+        for prova_chiave in (k, ALIAS_EUROPA.get(k)):
+            if prova_chiave and prova_chiave in self.per_chiave and prova_chiave not in self.ambigue:
+                return self.per_chiave[prova_chiave][0]
+        miei = [x for x in k.split() if x]
+        if not miei:
+            return None
+        vincitori = set()
+        for altra, nomi in self.per_chiave.items():
+            if altra in self.ambigue:
+                continue
+            suoi = [x for x in altra.split() if x]
+            if not suoi:
+                continue
+            corto, lungo = (miei, suoi) if len(miei) <= len(suoi) else (suoi, miei)
+            if all(any(_token_uguali(a, b) for b in lungo) for a in corto):
+                vincitori.update(nomi)
+        return vincitori.pop() if len(vincitori) == 1 else None
+
+    def risolvi(self, n):
+        n = (n or '').strip()
+        if not n:
+            return None
+        if n not in self._memoria:
+            self._memoria[n] = self._cerca(n)
+        trovato = self._memoria[n]
+        if trovato:
+            self.risolti += 1
+            return trovato
+        self.persi += 1
+        if len(self.esempi) < 8 and n not in self.esempi:
+            self.esempi.append(n)
+        return None
+
+    def applica(self, righe):
+        """Riscrive c e v sui nomi dell'archivio. Chi non si risolve esce."""
+        fuori = []
+        for r in righe:
+            c = self.risolvi(r.get('c'))
+            v = self.risolvi(r.get('v'))
+            if not c or not v:
+                continue
+            nuova = dict(r)
+            nuova['c'], nuova['v'] = c, v
+            fuori.append(nuova)
+        return fuori
+
+    def resoconto(self):
+        tot = self.risolti + self.persi
+        if not tot:
+            return 'nessun nome da risolvere'
+        return '%d su %d risolti%s' % (
+            self.risolti, tot,
+            '; NON riconosciuti: %s' % ', '.join(self.esempi) if self.esempi else '')
+
+
+# ────────────────────────────── gli altri campionati ──────────────────────────────
+
+def costruisci_lega(lega, stagioni, esiti):
+    """Un campionato che non sia la Serie A: solo il cuore.
+
+    La Serie A ha addosso mezza dozzina di fonti in piu' — ESPN per gli orari e
+    gli stadi, API-Football per le statistiche, tre strade per l'arbitro, le
+    notizie, i marcatori. Qui no, e non e' pigrizia: e' quello che la sonda ha
+    detto che serve. Il modello gira su risultati, tiri e quote, e quelle tre
+    cose ci sono al 100% in tutti e cinque i campionati. L'arbitro manca a
+    tutte tranne la Premier, ma l'effetto dell'arbitro e' stato misurato ed e'
+    nullo — per quello non e' nel modello. Gli xG veri ci sono solo nella
+    stagione in corso, ma anche in Serie A e' cosi', ed e' stato misurato che
+    quelli dedotti dai tiri non si distinguono nel prevedere i gol.
+
+    Cosi' la Serie A resta intoccata: se questo pezzo si rompe, si rompe da
+    solo e il campionato di casa continua a funzionare.
+    """
+    mie = {}
+    partite, esiti_fd = prendi_football_data(stagioni, lega['id'], lega['nome'])
+    for k, v in esiti_fd.items():
+        mie['%s %s' % (lega['id'], k)] = v
+    if not partite:
+        esiti['%s' % lega['nome']] = 'nessuna partita: salto il campionato'
+        return None
+
+    indice = unisci(None, partite)
+
+    # I nomi dell'archivio sono la verita': tutto il resto si riporta su questi.
+    risolutore = RisolutoreNomi({p['c'] for p in partite} | {p['v'] for p in partite})
+
+    # openfootball: il calendario delle partite in arrivo, con l'orario gia'
+    # italiano, e i risultati come riserva quando football-data e' indietro.
+    calendario = []
+    for _, etichetta in stagioni[:2]:
+        try:
+            giocate, future = prendi_openfootball(etichetta, lega['of'])
+            giocate, future = risolutore.applica(giocate), risolutore.applica(future)
+            if giocate:
+                innesta(indice, giocate, ('gc', 'gv', 'ptc', 'ptv'), solo_se_vuoto=('gc', 'gv'))
+            if future:
+                calendario = unisci_calendario(calendario, future)
+            mie['%s openfootball %s' % (lega['id'], etichetta)] = (
+                'ok: %d giocate, %d in arrivo' % (len(giocate), len(future)))
+        except Exception as e:                    # noqa: BLE001
+            mie['%s openfootball %s' % (lega['id'], etichetta)] = 'fallita: %s' % str(e)[:90]
+
+    # il calendario ravvicinato di football-data, con le sue quote
+    vicine = prendi_calendario(stagioni, mie, lega['id'])
+    if vicine:
+        calendario = unisci_calendario(calendario, vicine)
+
+    # e le quote vere, che sono il motivo per cui tutto questo vale la pena:
+    # l'ancoraggio al mercato e' la cosa piu' forte che l'app abbia.
+    quote = risolutore.applica(prendi_odds_api(mie, lega['odds'], '%s quote' % lega['id']))
+    if quote:
+        calendario = unisci_calendario(calendario, quote)
+    mie['%s nomi' % lega['id']] = risolutore.resoconto()
+
+    partite_ord = sorted(indice.values(), key=lambda x: (x['d'], x.get('c', '')))
+    problemi = controlla(partite_ord)
+    if problemi:
+        mie['%s controlli' % lega['id']] = 'RIFIUTATO: %s' % '; '.join(problemi)
+        esiti.update(mie)
+        return None
+
+    calendario = sorted([x for x in calendario if x.get('c') and x.get('v')],
+                        key=lambda x: (x['d'], x.get('c', '')))
+    esiti.update(mie)
+    return {'lega': lega['nome'], 'legaId': lega['id'], 'paese': lega['paese'],
+            'aggiornato': datetime.now(timezone.utc).isoformat(timespec='seconds'),
+            'versione_orari': VERSIONE_ORARI,
+            'fonte': 'football-data.co.uk + openfootball + The Odds API',
+            'stagioni': sorted({x['s'] for x in partite_ord if x.get('s')}),
+            'partite': partite_ord, 'calendario': calendario}
+
+
+def scrivi_lega(lega, doc):
+    """Un file per campionato. Tutti insieme farebbero 3.9 MB — misurati — e un
+    telefono li scaricherebbe a ogni apertura."""
+    percorso = os.path.join(DATA, *lega['file'].split('/'))
+    os.makedirs(os.path.dirname(percorso), exist_ok=True)
+    with open(percorso, 'w', encoding='utf-8') as f:
+        json.dump(doc, f, ensure_ascii=False, separators=(',', ':'))
+    return os.path.getsize(percorso)
+
+
+def scrivi_indice(voci):
+    """L'elenco dei campionati disponibili, che l'app legge per prima per
+    sapere cosa puo' caricare. Senza, ogni lega nuova vorrebbe una riga scritta
+    a mano dentro l'app."""
+    percorso = os.path.join(DATA, 'leghe.json')
+    with open(percorso, 'w', encoding='utf-8') as f:
+        json.dump({'aggiornato': datetime.now(timezone.utc).isoformat(timespec='seconds'),
+                   'leghe': voci}, f, ensure_ascii=False, separators=(',', ':'))
+
+
+def aggiorna_lega_leggero(lega, stagioni, esiti):
+    """Il giro svelto per un campionato: le quote, e nient'altro.
+
+    Le quote sono la cosa piu' deperibile dell'archivio — si muovono durante il
+    giorno, e il modello ci si ancora con peso UNO su tutto quello che il
+    mercato quota. Riscaricare sei stagioni di CSV per aggiornarle sarebbe
+    ventiquattro file per accorgersi che nessun risultato del 2021 e' cambiato.
+
+    Quindi qui si rilegge il file di ieri, gli si rifa' solo il calendario, e
+    lo si riscrive. Costa un credito di The Odds API per lega.
+    """
+    percorso = os.path.join(DATA, *lega['file'].split('/'))
+    if not os.path.exists(percorso):
+        return None
+    try:
+        with open(percorso, encoding='utf-8') as f:
+            doc = json.load(f)
+    except Exception as e:                        # noqa: BLE001
+        esiti['%s (leggero)' % lega['nome']] = 'file illeggibile: %s' % str(e)[:80]
+        return None
+
+    calendario = doc.get('calendario') or []
+    risolutore = RisolutoreNomi({p['c'] for p in (doc.get('partite') or [])} |
+                                {p['v'] for p in (doc.get('partite') or [])})
+    vicine = prendi_calendario(stagioni, esiti, lega['id'])
+    if vicine:
+        calendario = unisci_calendario(calendario, vicine)
+    quote = risolutore.applica(prendi_odds_api(esiti, lega['odds'], '%s quote' % lega['id']))
+    if quote:
+        calendario = unisci_calendario(calendario, quote)
+    esiti['%s nomi (leggero)' % lega['id']] = risolutore.resoconto()
+
+    # Le partite gia' giocate escono dal calendario da sole: unisci_calendario
+    # tiene solo quelle in arrivo, e qui si ripulisce comunque il vecchio.
+    oggi = datetime.now(timezone.utc).date().isoformat()
+    calendario = sorted([x for x in calendario
+                         if x.get('c') and x.get('v') and x.get('d', '') >= oggi],
+                        key=lambda x: (x['d'], x.get('c', '')))
+    doc['calendario'] = calendario
+    doc['aggiornato'] = datetime.now(timezone.utc).isoformat(timespec='seconds')
+    scrivi_lega(lega, doc)
+    con_quote = len([x for x in calendario if x.get('q') or x.get('qex')])
+    log('  %s: %d in arrivo, %d con quote' % (lega['nome'], len(calendario), con_quote))
+    return {'id': lega['id'], 'nome': lega['nome'], 'paese': lega['paese'],
+            'file': lega['file'], 'partite': len(doc.get('partite') or []),
+            'inArrivo': len(calendario), 'conQuote': con_quote}
+
+
+def costruisci_altre_leghe(stagioni, esiti, voci):
+    """Le quattro oltre la Serie A. Una che cade non porta giu' le altre."""
+    for lega in LEGHE[1:]:
+        log('')
+        log('── %s (%s) ──' % (lega['nome'], lega['id']))
+        try:
+            doc = costruisci_lega(lega, stagioni, esiti)
+        except Exception as e:                    # noqa: BLE001
+            log('  FALLITO: %s' % str(e)[:150])
+            esiti[lega['nome']] = 'fallito: %s' % str(e)[:150]
+            continue
+        if not doc:
+            continue
+        peso = scrivi_lega(lega, doc)
+        in_arrivo = len(doc['calendario'])
+        con_quote = len([x for x in doc['calendario'] if x.get('q') or x.get('qex')])
+        log('  %d partite, %d in arrivo (%d con quote), %.0f KB'
+            % (len(doc['partite']), in_arrivo, con_quote, peso / 1024.0))
+        esiti[lega['nome']] = ('ok: %d partite, %d in arrivo, %d con quote'
+                               % (len(doc['partite']), in_arrivo, con_quote))
+        voci.append({'id': lega['id'], 'nome': lega['nome'], 'paese': lega['paese'],
+                     'file': lega['file'], 'partite': len(doc['partite']),
+                     'inArrivo': in_arrivo, 'conQuote': con_quote})
 
 
 def main():
@@ -1941,7 +2382,8 @@ def main():
         esiti['notizie'] = 'fallite: %s' % e
         notizie = ((vecchio or {}).get('notizie') or [])
 
-    doc = {'lega': 'Serie A', 'aggiornato': adesso,
+    doc = {'lega': LEGA_CASA['nome'], 'legaId': LEGA_CASA['id'],
+           'paese': LEGA_CASA['paese'], 'aggiornato': adesso,
            'versione_orari': VERSIONE_ORARI,
            'fonte': ' + '.join(['football-data.co.uk', 'openfootball']
                                + (['understat'] if xg else [])
@@ -1955,6 +2397,32 @@ def main():
         doc['notizie'] = notizie
     with open(FILE_DATI, 'w', encoding='utf-8') as f:
         json.dump(doc, f, ensure_ascii=False, separators=(',', ':'))
+
+    # ── gli altri quattro campionati ──
+    # Vengono DOPO, e apposta: se qualcosa qui sotto si rompe, la Serie A e'
+    # gia' scritta su disco e l'app continua a funzionare come prima. Nei giri
+    # leggeri si saltano — sei stagioni per quattro campionati sono ventiquattro
+    # file, e il giro leggero esiste per essere svelto.
+    voci = [{'id': LEGA_CASA['id'], 'nome': LEGA_CASA['nome'], 'paese': LEGA_CASA['paese'],
+             'file': LEGA_CASA['file'], 'partite': len(partite),
+             'inArrivo': len(calendario),
+             'conQuote': len([x for x in calendario if x.get('q') or x.get('qex')])}]
+    if not leggero:
+        costruisci_altre_leghe(stagioni, esiti, voci)
+    else:
+        # Nel giro leggero l'archivio degli altri campionati resta quello di
+        # ieri — nessun risultato del 2021 e' cambiato stanotte — ma le QUOTE
+        # si aggiornano, perche' sono l'unica cosa per cui il giro leggero
+        # esiste: si muovono durante il giorno e il modello ci si ancora.
+        for lega in LEGHE[1:]:
+            try:
+                voce = aggiorna_lega_leggero(lega, stagioni, esiti)
+            except Exception as e:                # noqa: BLE001
+                esiti['%s (leggero)' % lega['nome']] = 'fallito: %s' % str(e)[:120]
+                voce = None
+            if voce:
+                voci.append(voce)
+    scrivi_indice(voci)
 
     scrivi_meta({
         'aggiornato': adesso, 'esito': 'ok',
