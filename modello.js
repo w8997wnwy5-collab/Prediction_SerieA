@@ -1484,6 +1484,66 @@ function struttureGiocata(n) {
   return fuori;
 }
 
+/* Tutti i modi di dividere n selezioni in m schedine da L gambe.
+
+   Serve perche' l'app, per anni, ne ha usato uno solo senza saperlo: le
+   selezioni arrivavano ordinate dalla piu' solida alla meno solida e si
+   riempiva la prima schedina, poi la seconda. Le tre piu' solide finivano
+   insieme. Non era una scelta, era l'ordine dell'array — e nessuno se n'era
+   accorto perche' non sembrava una decisione.
+
+   Invece decide, e si vede in due righe. Ogni schedina esce con la probabilita'
+   P_j che e' il prodotto delle sue gambe, e paga (punti/m) / (P_j (1+ric)^L):
+   il pagamento e' INVERSO alla probabilita'. Il prodotto di tutte le P_j e'
+   fisso — e' il prodotto delle gambe usate — quindi ripartire non cambia il
+   valore atteso di un centesimo (misurato: scarto 0.0e+0). Sposta soltanto
+   massa fra una schedina probabile che paga poco e una improbabile che paga
+   molto, ed e' esattamente quello che cambia la probabilita' di chiudere in
+   attivo, che ha bisogno di un NUMERO INTERO di schedine vincenti.
+
+   L'enumerazione ancora sempre il primo elemento ancora libero al gruppo che
+   sta formando: cosi' ogni ripartizione esce una volta sola invece di m!
+   volte. Le quantita' restano piccole dove serve — 10 modi per due schedine da
+   tre, 35 per due da quattro, 280 per tre da tre — e il limite taglia le
+   esplosioni prima che rallentino un telefono. */
+function ripartizioni(n, L, limite) {
+  if (!(n > 0) || !(L > 0) || n % L !== 0) return [];
+  limite = limite || 400;
+  var fuori = [];
+  function giu(resto, acc) {
+    if (fuori.length >= limite) return;
+    if (!resto.length) { fuori.push(acc.slice()); return; }
+    var testa = resto[0], altri = resto.slice(1);
+    (function comb(da, presi) {
+      if (fuori.length >= limite) return;
+      if (presi.length === L - 1) {
+        var gruppo = [testa].concat(presi), dentro = {};
+        gruppo.forEach(function (x) { dentro[x] = 1; });
+        giu(resto.filter(function (x) { return !dentro[x]; }), acc.concat([gruppo]));
+        return;
+      }
+      for (var i = da; i < altri.length; i++) comb(i + 1, presi.concat([altri[i]]));
+    })(0, []);
+  }
+  var l = [];
+  for (var i = 0; i < n; i++) l.push(i);
+  giu(l, []);
+  return fuori;
+}
+
+/* Quante ripartizioni ci sono, senza costruirle: n! / (L!^m · m!).
+   Si usa per decidere PRIMA se conviene enumerarle tutte o tenersi l'ordine
+   che c'e' gia'. Il conto si fa coi logaritmi perche' 10! sta in un double ma
+   il prossimo passo no. */
+function quanteRipartizioni(n, L) {
+  if (!(n > 0) || !(L > 0) || n % L !== 0) return 0;
+  var m = n / L, s = 0, i;
+  for (i = 2; i <= n; i++) s += Math.log(i);
+  for (i = 2; i <= L; i++) s -= m * Math.log(i);
+  for (i = 2; i <= m; i++) s -= Math.log(i);
+  return Math.round(Math.exp(s));
+}
+
 function kelly(p, quota) {
   if (!(quota > 1) || !(p > 0)) return 0;
   var b = quota - 1;
@@ -2040,6 +2100,7 @@ var API = {
   distribuzioneEsiti: distribuzioneEsiti, profiloGiocata: profiloGiocata,
   distribuzioneRitorni: distribuzioneRitorni, probMeseInAttivo: probMeseInAttivo,
   struttureGiocata: struttureGiocata,
+  ripartizioni: ripartizioni, quanteRipartizioni: quanteRipartizioni,
   mercatiDaMatrice: mercatiDaMatrice, elencoMercati: elencoMercati, piuSicure: piuSicure,
   campiMercato: campiMercato, mercatiTempi: mercatiTempi, primoFinale: primoFinale,
   tempiDaMatrici: tempiDaMatrici, matriceSecca: matriceSecca,

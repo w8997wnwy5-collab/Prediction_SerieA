@@ -456,6 +456,46 @@ select{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:1
 .vincita .v.big{font-size:23px;color:var(--accent);}
 .vincita .s{font-size:9.5px;color:var(--mute);margin-top:1px;line-height:1.3;}
 
+.tabimp tr.scegli{cursor:pointer;}
+.timr.scegli{cursor:pointer;}
+.timr.scegli:active{background:var(--accent-soft);}
+.tabimp tr.scegli:active td{background:var(--accent-soft);}
+
+/* le schedine scritte per esteso: quale partita, in quale, a quanto */
+.forme{display:flex;gap:7px;overflow-x:auto;padding:2px 0 10px;
+  -webkit-overflow-scrolling:touch;scrollbar-width:none;}
+.forme::-webkit-scrollbar{display:none;}
+.formab{flex:0 0 auto;min-width:74px;padding:9px 12px;border-radius:12px;cursor:pointer;
+  border:1px solid var(--line);background:var(--card);color:var(--ink);text-align:center;}
+.formab b{display:block;font-size:13px;font-weight:600;}
+.formab em{display:block;font-family:var(--mono);font-size:11px;font-style:normal;
+  color:var(--mute);margin-top:2px;}
+.formab.on{border-color:var(--accent);background:var(--accent-soft);}
+.formab.on em{color:var(--accent);}
+.sq{padding:13px 14px 12px;}
+.sqt{display:flex;align-items:baseline;gap:10px;margin-bottom:9px;}
+.sqt h3{flex:1;font-size:12px;font-weight:600;letter-spacing:.9px;text-transform:uppercase;
+  color:var(--mute);}
+.sqp{font-family:var(--mono);font-size:14px;font-weight:700;}
+.sqg{display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--line);}
+.sqn{flex:1;min-width:0;font-size:14px;font-weight:600;line-height:1.3;}
+.sqn em{display:block;font-style:normal;font-size:11px;font-weight:400;color:var(--mute);
+  margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.sqq{flex:none;text-align:right;font-family:var(--mono);font-size:14px;font-weight:600;
+  font-variant-numeric:tabular-nums;}
+.sqq i{display:block;font-style:normal;font-size:11px;font-weight:400;color:var(--mute);margin-top:2px;}
+.sqf{display:flex;align-items:flex-start;gap:14px;margin-top:10px;padding:10px 12px;
+  background:var(--card2);border-radius:11px;}
+.sqf > div{min-width:0;}
+.sqf span{display:block;font-size:9px;letter-spacing:.5px;text-transform:uppercase;color:var(--mute);}
+.sqf b{display:block;font-family:var(--mono);font-size:16px;font-weight:700;line-height:1.15;
+  margin-top:3px;font-variant-numeric:tabular-nums;}
+.sqf b.big{color:var(--accent);}
+.copia{margin-left:auto;align-self:center;flex:none;padding:8px 13px;border-radius:9px;cursor:pointer;
+  border:1px solid var(--line);background:var(--card);color:var(--mute);
+  font-family:var(--mono);font-size:11px;letter-spacing:.4px;}
+.copia:active{transform:scale(.95);}
+
 .esi{font-size:9.5px;font-weight:600;padding:2px 6px;border-radius:6px;white-space:nowrap;flex:none;}
 .esi.ok{background:var(--ok-soft);color:var(--ok);}
 .esi.ko{background:var(--warn-soft);color:var(--warn);}
@@ -1885,6 +1925,8 @@ function impostaPuntata(v){
   if(el) el.innerHTML = elencoSchedine();
   var pf = document.getElementById('schedProfilo');
   if(pf) pf.innerHTML = cardQuanteNePrendi() + cardMeseInAttivo() + cardComeGiocarle();
+  var ts = document.getElementById('leTueSchedine');
+  if(ts) ts.innerHTML = cardLeTueSchedine();
 }
 
 function cercaSchedine(candidati, maxSel){
@@ -1954,6 +1996,31 @@ function migliora(scelte, candidati, min, max){
   }
   return attuale;
 }
+/* La selezione che l'app propone DAVVERO per ogni partita — la stessa,
+   identica, che leggi in copertina nella Giornata.
+
+   Serviva perche' il conto del mese non la usava. Pescava il massimo pavimento
+   fra TUTTI i mercati, saltando la manopola della prudenza, e cosi' finiva per
+   consigliare cose che in Giornata non compaiono: su Torino-Udinese proponeva
+   Under 4.5 all'87%, che a quota 1.09 non e' una giocata ma una constatazione,
+   ed e' esattamente il motivo per cui la manopola la esclude.
+
+   Nessun errore, nessun numero sbagliato: due sezioni che dicevano due cose
+   diverse sulla stessa partita. Che e' il difetto peggiore che possa avere
+   quest'app, perche' toglie l'unica cosa che le da' valore — che di una
+   partita ci sia UNA risposta sola. */
+function ancoreGiornata(){
+  var fuori = [];
+  partiteGiornata().forEach(function(p, i){
+    var sc = sceltePartita(p, 1);
+    if(!sc || !sc.ancora) return;
+    var m = sc.ancora;
+    fuori.push({iPartita: i, partita: p, id: m.id, nome: m.nome,
+                p: m.p, p05: m.p05, p95: m.p95});
+  });
+  return fuori.sort(function(a, b){ return b.p05 - a.p05; });
+}
+
 function candidatiGiornata(){
   var partite = partiteGiornata();
   var fuori = [];
@@ -2297,6 +2364,236 @@ function cardQuanteNePrendi(){
    stai comprando una lotteria a quel prezzo, e non un pronostico a quel
    prezzo.
    ══════════════════════════════════════════════════════════════ */
+/* ══════════════════════════════════════════════════════════════
+   LE TUE SCHEDINE
+
+   Questa sezione ha sempre risposto alla domanda giusta nel modo piu' inutile
+   possibile. "2 schedine da 3 gambe" e' la risposta esatta a "come le
+   impacchetto", e resta inservibile finche' non dice QUALI — il salto da fare
+   per usarla era tutto a carico di chi legge, ogni domenica, a mano, e infatti
+   non lo faceva nessuno. Un consiglio che va tradotto prima di poter essere
+   seguito non e' un consiglio: e' un compito.
+
+   Qui la struttura migliore viene scritta per esteso: quale partita in quale
+   schedina, quanto ci metti sopra, a che quota, e cosa torna se esce. Le
+   partite sono le stesse della Giornata, prese dalla stessa funzione — se li'
+   una partita dice una cosa, qui non puo' dirne un'altra.
+
+   La manopola e' una sola, ed e' quella giusta: quante gambe per schedina. Il
+   resto — quante schedine, e quali partite in quale — lo decide il conto,
+   perche' su quello il conto sa piu' di chiunque. Due gambe o quattro invece
+   e' una scelta legittima su cui la matematica non ha l'ultima parola: una
+   singola non si racconta, e questo non e' un argomento sciocco.
+   ══════════════════════════════════════════════════════════════ */
+var CHIAVE_FORMA = 'seriea_forma_v2';
+function formaScelta(){
+  if(S.forma != null) return S.forma;
+  var v = null;
+  try{ v = localStorage.getItem(CHIAVE_FORMA); }catch(e){}
+  var pezzi = String(v || '').split(',');
+  S.forma = (pezzi.length === 2 && pezzi[0] > 0 && pezzi[1] > 0)
+    ? {L: parseInt(pezzi[0], 10), m: parseInt(pezzi[1], 10)} : null;
+  return S.forma;
+}
+/* m facoltativo: dal selettore arriva solo la lunghezza e il numero di
+   schedine lo sceglie il conto; dalla tabella del mese arrivano tutti e due,
+   perche' li' la riga E' la struttura. */
+function impostaForma(L, m){
+  S.forma = {L: L, m: m || 0};
+  try{ localStorage.setItem(CHIAVE_FORMA, L + ',' + (m || 0)); }catch(e){}
+  var el = document.getElementById('leTueSchedine');
+  if(el) el.innerHTML = cardLeTueSchedine();
+  var pf = document.getElementById('schedProfilo');
+  if(pf) pf.innerHTML = cardQuanteNePrendi() + cardMeseInAttivo() + cardComeGiocarle();
+  if(el) el.scrollIntoView({behavior: 'smooth', block: 'start'});
+}
+/* La migliore struttura per ogni lunghezza di schedina: e' l'unico asse su cui
+   ha senso far scegliere: quante schedine, e quali partite dentro, sono conti
+   e non gusti. */
+function formeDisponibili(r){
+  var perL = {};
+  r.opzioni.forEach(function(o){
+    if(!perL[o.L] || o.pAttivo > perL[o.L].pAttivo) perL[o.L] = o;
+  });
+  return Object.keys(perL).map(function(k){ return perL[k]; })
+               .sort(function(a,b){ return a.L - b.L; });
+}
+
+function testoSchedina(o, k){
+  var righe = ['SCHEDINA ' + (k+1) + ' — ' + nu(o.perSchedina,0) + ' chf'];
+  o.gruppi[k].forEach(function(i, n){
+    var c = o.selezioni[i];
+    righe.push('  ' + (n+1) + '. ' + c.nome + '  —  ' + c.partita.c + ' - ' + c.partita.v +
+               ' (' + dataBreve(c.partita.d) + ')');
+  });
+  righe.push('  quota attesa ' + nu(o.quote[k],2) + ' — vincita ' +
+             nu(o.perSchedina * o.quote[k], 0) + ' chf — esce il ' + pc(o.probSchedine[k]) +
+             ' delle volte');
+  return righe.join('\n');
+}
+function copiaSchedina(b){
+  var t = b.getAttribute('data-t') || '';
+  var fine = function(){ b.textContent = 'copiata'; setTimeout(function(){ b.textContent = 'copia'; }, 1400); };
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(t).then(fine, function(){ b.textContent = 'non riesco'; });
+  } else {
+    /* Senza Clipboard API — succede su http e su qualche browser vecchio — si
+       usa la strada di prima invece di lasciare il bottone che non fa niente. */
+    var a = document.createElement('textarea');
+    a.value = t; a.style.position = 'fixed'; a.style.opacity = '0';
+    document.body.appendChild(a); a.select();
+    try{ document.execCommand('copy'); fine(); }catch(e){ b.textContent = 'non riesco'; }
+    document.body.removeChild(a);
+  }
+}
+
+function cardLeTueSchedine(){
+  var r = cercaStruttureMese();
+  if(!r || !r.opzioni.length) return '';
+  var forme = formeDisponibili(r);
+  if(!forme.length) return '';
+  var best = r.opzioni[0];
+  /* Il valore predefinito NON e' l'ottimo assoluto, ed e' una scelta. L'ottimo
+     assoluto e' spesso la singola piu' solida giocata e rigiocata, che e' la
+     risposta giusta alla domanda posta e una risposta inutile alla persona che
+     la legge: le multiple corte le gioca perche' una singola non si racconta,
+     e un consiglio che nessuno seguira' non e' un buon consiglio. Quindi si
+     parte da li' e si dice, in chiaro, quanto costa. */
+  var corte = forme.filter(function(x){ return x.L >= 2 && x.L <= 4; })
+                   .sort(function(a,b){ return b.pAttivo - a.pAttivo; })[0];
+  var predef = corte || best;
+  /* La forma chiesta puo' non esistere: le altre tabelle dell'app propongono
+     anche spezzoni disuguali (dieci selezioni a gruppi di tre fanno tre
+     schedine da tre piu' una da una), che qui non hanno un posto. Si ripiega
+     sulla stessa lunghezza, e SI DICE — un ripiego silenzioso e' peggio di un
+     rifiuto: tocchi "2 da 5" e ti compare altro senza una parola. */
+  var vuole = formaScelta(), o = null, ripiego = null;
+  if(vuole){
+    var perL = r.opzioni.filter(function(x){ return x.L === vuole.L; })
+                        .sort(function(a,b){ return b.pAttivo - a.pAttivo; });
+    o = perL.filter(function(x){ return !vuole.m || x.m === vuole.m; })[0] || null;
+    if(!o && perL.length){
+      o = perL[0];
+      ripiego = vuole.m + ' schedin' + (vuole.m===1?'a':'e') + ' da ' + vuole.L;
+    }
+  }
+  var scelta = !!o;
+  if(!o) o = predef;
+  var pt = puntata();
+
+  var titolo = o.m + ' schedin' + (o.m===1?'a':'e') + ' da ' + o.L + ' gamb' + (o.L===1?'a':'e');
+  var nUsate = o.selezioni.length;
+  var h = '<div class="h2">Le tue schedine<span class="r">' + nUsate +
+    (nUsate === 1 ? ' partita' : ' partite') + ' su ' + r.tutte.length + '</span></div>';
+
+  h += '<div class="hero"><div class="l">come giocarle, questa giornata</div>' +
+    '<div class="v">' + o.m + ' × ' + o.L + '</div>' +
+    '<div class="s"><b>' + esc(titolo) + '</b>, ' +
+    (o.m === 1
+      ? nu(pt,0) + ' chf sopra'
+      : nu(o.perSchedina,0) + ' chf l\'una — ' + nu(pt,0) + ' chf in tutto') +
+    '. Ripetuta per quattro giornate, chiude il mese in attivo il <b>' +
+    pc(o.pAttivo) + '</b> delle volte' +
+    (o === best
+      ? ', ed è la forma che ci riesce più spesso fra tutte quelle che ho provato.'
+      : '. Fa meglio <b>' + best.m + ' da ' + best.L + '</b> (' + pc(best.pAttivo) + ')' +
+        (scelta
+          ? (ripiego
+              ? '. Di <b>' + esc(ripiego) + '</b> non ce n\'è abbastanza in questa giornata — ' +
+                'servirebbero ' + (vuole.L * vuole.m) + ' partite e ce ne sono ' + r.tutte.length +
+                ' — quindi ti do la migliore con schedine da ' + o.L + '.'
+              : ', ma questa l\'hai scelta tu ed è una scelta legittima.')
+          : (best.L === 1
+              ? ' — ma è una singola, e le singole non si giocano. Parto dalle multiple corte perché sono quelle che giochi: cambia qui sotto quando vuoi.'
+              : ' — qui parto dalle multiple corte perché sono quelle che giochi. Cambia qui sotto quando vuoi.'))) +
+    '</div></div>';
+
+  /* Il bottone della lunghezza scelta mostra la struttura che stai davvero
+     guardando, non la migliore a quella lunghezza: altrimenti il selettore
+     diceva "1 da 3, 29%" mentre sopra c'era scritto "2 da 3, 27%", e due
+     numeri diversi per la stessa cosa sono peggio di nessun numero. */
+  h += '<div class="forme">' + forme.map(function(f){
+    var q = (f.L === o.L) ? o : f;
+    return '<button class="formab' + (f.L===o.L?' on':'') + '" onclick="impostaForma(' + f.L + ',0)">' +
+      '<b>' + q.m + ' da ' + q.L + '</b><em>' + pc(q.pAttivo) + '</em></button>';
+  }).join('') + '</div>' +
+  '<div class="note" style="margin:-4px 0 12px">Scegli tu quante gambe per schedina — su quello la ' +
+  'matematica non ha l\'ultima parola, una singola non si racconta. Quante schedine e quali partite ' +
+  'dentro invece li decide il conto. La percentuale è quella del <b>mese</b>, non della giornata.</div>';
+
+  o.gruppi.forEach(function(gr, k){
+    var testo = testoSchedina(o, k);
+    h += '<div class="card sq">' +
+      '<div class="sqt"><h3>Schedina ' + (k+1) + '</h3>' +
+        '<span class="sqp">' + nu(o.perSchedina,0) + ' chf</span></div>';
+    gr.forEach(function(i){
+      var c = o.selezioni[i];
+      h += '<div class="sqg"><span class="sqn">' + esc(c.nome) +
+        '<em>' + esc(c.partita.c) + ' – ' + esc(c.partita.v) + ' · ' + esc(dataBreve(c.partita.d)) +
+        '</em></span><span class="sqq">' + pc(c.p) +
+        '<i>' + nu(quotaBanco(1/c.p, 1), 2) + '</i></span></div>';
+    });
+    h += '<div class="sqf">' +
+      '<div><span>quota</span><b>' + nu(o.quote[k],2) + '</b></div>' +
+      '<div><span>esce</span><b>' + pc(o.probSchedine[k]) + '</b></div>' +
+      '<div><span>prendi</span><b class="big">' + nu(o.perSchedina * o.quote[k], 0) + '</b></div>' +
+      '<button class="copia" data-t="' + esc(testo) + '" onclick="copiaSchedina(this)">copia</button>' +
+      '</div></div>';
+  });
+
+  /* Le cose che servono per giocarle davvero, e che nessuna app scrive perché
+     sembrano ovvie: non lo sono, e sbagliarne una annulla tutto il conto. */
+  h += notaPiega('', 'Come si giocano, in pratica',
+    '<p><b>Sono ' + o.m + ' schedine separate, non una.</b> Se le unisci in una sola da ' +
+    (o.m * o.L) + ' gambe stai giocando un\'altra cosa: la quota si moltiplica, ma la probabilità ' +
+    'crolla e il ricarico del banco si applica ' + (o.m * o.L) + ' volte invece di ' + o.L + '. ' +
+    'La divisione <b>è</b> il punto — è quella che compra la probabilità di chiudere il mese sopra.</p>' +
+    '<p><b>' + nu(o.perSchedina,0) + ' chf su ciascuna</b>, uguali. Non ' + nu(pt,0) + ' su quella ' +
+    'che ti convince di più: se ne fossi più convinto, il conto l\'avrebbe già messa da sola in una ' +
+    'schedina più corta.</p>' +
+    '<p><b>Prima delle formazioni ufficiali</b>, come già fai. Le quote sono più alte prima che il ' +
+    'mercato sappia chi gioca, e quel margine è tuo. Quanto vale davvero lo misura il ' +
+    '<b>valore contro la chiusura</b> nel libro: è l\'unico numero che dice se stai comprando bene ' +
+    'invece che se sei stato fortunato.</p>' +
+    '<p><b>Ogni giornata, per quattro giornate.</b> Il ' + pc(o.pAttivo) + ' è la probabilità del ' +
+    'MESE, non di una domenica. Saltare una giornata non "risparmia": cambia il conto, e ' +
+    'quasi sempre in peggio, perché toglie proprio le occasioni di rifarsi.</p>' +
+    '<p><b>Non aggiungere una gamba per arrotondare la quota.</b> È la mossa che sembra gratis e ' +
+    'costa di più: una gamba in più moltiplica il ricarico un\'altra volta, e il ' +
+    'ricarico è l\'unica cosa di cui si è sicuri in tutta questa faccenda.</p>');
+
+  h += notaPiega('', 'Le quote qui sopra sono le mie, non quelle del banco',
+    '<p>Accanto a ogni partita c\'è la quota che mi aspetto: la mia quota equa, meno il ricarico ' +
+    'che hai impostato (' + (100*ricarico().v).toFixed(1) + '% per selezione). ' +
+    '<b>Serve da metro, non da promessa.</b> Quando apri la schedina vera, confronta: se il banco ' +
+    'ti offre di meno, quella giocata vale meno di quanto scritto qui, e il conto del mese è ' +
+    'ottimista di conseguenza. Se ti offre di più, hai trovato qualcosa.</p>' +
+    '<p>È anche il motivo per cui vale la pena segnare le giocate nel <b>libro</b>: da otto in poi ' +
+    'il ricarico smette di essere una media europea e diventa il tuo, misurato sulle quote che ' +
+    'prendi davvero.</p>');
+
+  h += notaPiega('', 'Perché proprio queste partite in queste schedine',
+    '<p>Le ' + o.selezioni.length + ' selezioni sono le più solide della giornata, una per partita, ' +
+    'le stesse che vedi nella <b>Giornata</b>. Ma <i>quale</i> finisce in <i>quale</i> schedina non ' +
+    'è l\'ordine in cui capitano: ' +
+    (o.esatta
+      ? 'le ho provate <b>tutte e ' + o.provate + '</b> le ripartizioni possibili e questa è quella ' +
+        'che chiude il mese in attivo più spesso.'
+      : 'a ' + o.L + ' gamb' + (o.L===1?'a':'e') + ' per schedina le ripartizioni possibili sono ' +
+        'troppe da provare tutte su un telefono — e non serve: misurato su 25 giornate vere, a ' +
+        'questa lunghezza l\'ordine dalla più solida in giù coincide con la migliore in assoluto.') +
+    '</p>' +
+    '<p>Perché cambi qualcosa: ogni schedina paga <b>al contrario</b> della sua probabilità. ' +
+    'Il prodotto di tutte le probabilità è fisso — sono sempre le stesse gambe — quindi spostare ' +
+    'una partita da una schedina all\'altra <b>non cambia di un centesimo</b> quanto ti torna in ' +
+    'media. Sposta solo massa fra una schedina probabile che paga poco e una improbabile che paga ' +
+    'molto. E siccome per chiudere sopra ti serve un <b>numero intero</b> di schedine vincenti, ' +
+    'quello sposta eccome la probabilità di riuscirci: fino a 0.73 punti, gratis. Per anni sono ' +
+    'stati buttati via da un ordinamento che nessuno aveva scelto.</p>');
+
+  return h;
+}
+
 function cardComeGiocarle(){
   var sel = selezioniGiornata();
   if(sel.length < 4) return '';
@@ -2321,13 +2618,21 @@ function cardComeGiocarle(){
       '<span>al massimo</span></div>';
   righe.forEach(function(r){
     var perso = q - r.atteso;
-    h += '<div class="timr'+(r===migliore?' best':'')+(r===acc?' acc':'')+'">'+
+    /* Questa e' la tabella che si guarda per prima, ed e' quella che diceva
+       "2 da 5" senza dire MAI quali cinque. Adesso ogni riga porta alle
+       schedine scritte per esteso: era l'unico pezzo che mancava, e mancava
+       da sempre. */
+    h += '<div class="timr scegli'+(r===migliore?' best':'')+(r===acc?' acc':'')+'" '+
+      'onclick="impostaForma('+r.taglio+','+r.schedine+')">'+
       '<span class="tnome">'+esc(r.nome)+'</span>'+
       '<span>'+Math.round(100*r.pAttivo)+'%</span>'+
       '<span class="tsoldi">'+nu(r.atteso,2)+'<em>−'+nu(perso,2)+'</em></span>'+
       '<span>'+nu(r.massimo,0)+'</span></div>';
   });
   h += '</div>'+
+    '<div class="note" style="margin-top:8px">Tocca una riga e te la scrivo per esteso in cima: '+
+    '<b>quali</b> partite, in quale schedina, a quanto. Finora questa tabella diceva "2 da 5" '+
+    'e poi ti lasciava il lavoro di capire quali cinque.</div>'+
     '<div class="note"><b>"Ti torna"</b> è quanto ti resta in media ogni volta che giochi '+
     nu(q,0)+' chf così, ripetuto tante volte. Non è il rischio: è il prezzo.<br><br>'+
     'La differenza fra <b>'+nu(acc.atteso,2)+'</b> e <b>'+nu(migliore.atteso,2)+'</b> non viene dal '+
@@ -2389,50 +2694,126 @@ function cardComeGiocarle(){
    ══════════════════════════════════════════════════════════════ */
 var GIORNATE_MESE = 4;
 
-function cercaStruttureMese(){
-  var cand = candidatiGiornata();
-  if(!cand.length) return null;
-  var migliori = {};
-  cand.forEach(function(c){
-    if(!migliori[c.iPartita] || c.p05 > migliori[c.iPartita].p05) migliori[c.iPartita] = c;
+/* QUALI selezioni in QUALE schedina.
+
+   Per tutta la vita di quest'app la risposta e' stata una sola, e nessuno
+   l'aveva scelta: le selezioni arrivavano ordinate dalla piu' solida in giu' e
+   si riempiva la prima schedina, poi la seconda. Le tre piu' solide finivano
+   insieme. Non era una decisione, era l'ordine dell'array.
+
+   Invece decide. Ogni schedina esce con la probabilita' P che e' il prodotto
+   delle sue gambe, e paga (punti/m) / (P · (1+ricarico)^gambe): il pagamento e'
+   INVERSO alla probabilita'. Il prodotto di tutte le P e' fisso — e' il
+   prodotto delle gambe usate — quindi ripartire non cambia il valore atteso di
+   un centesimo. Sposta soltanto massa fra una schedina probabile che paga poco
+   e una improbabile che paga molto, ed e' proprio quello che muove la
+   probabilita' di chiudere in attivo, che ha bisogno di un NUMERO INTERO di
+   schedine vincenti.
+
+   Misurato su 25 giornate vere (tools/misura_ripartizione.js): fino a 0.73
+   punti di probabilita', gratis. Poco — ma gratis, e finora buttati via.
+
+   Quando enumerare e quando no, anche questo misurato: a due gambe per
+   schedina l'ordine di sempre coincideva con la migliore in assoluto su tutte
+   e 25 le giornate, ed e' proprio il caso che costa di piu' da enumerare (945
+   ripartizioni, 700 ms). Sopra il tetto quindi si tiene l'ordine, e non si
+   perde niente. Sotto — due schedine da tre sono 10 modi, da quattro 35, tre
+   da tre 280 — si enumerano tutte e si prende la migliore per davvero.
+
+   La scorciatoia che rende il conto sostenibile su un telefono: le schedine
+   non condividono gambe e le gambe sono indipendenti, quindi le SCHEDINE sono
+   indipendenti. Ognuna diventa UNA gamba con la sua probabilita' composta:
+   2^schedine scenari invece di 2^gambe. Verificato a 1e-16, non assunto. */
+var TETTO_RIPARTIZIONI = 300;
+
+function valutaRipartizione(sel, gruppi, pt){
+  var finte = gruppi.map(function(gr){
+    var P = 1;
+    gr.forEach(function(i){ P *= sel[i].p; });
+    return {p: P, quota: quotaBanco(1/P, gr.length), gambe: gr};
   });
-  var tutte = Object.keys(migliori).map(function(k){ return migliori[k]; })
-                    .sort(function(a,b){ return b.p05 - a.p05; });
+  var d = M.distribuzioneRitorni(finte, finte.map(function(_, i){ return [i]; }), pt);
+  if(!d) return null;
+  var r = M.probMeseInAttivo(d, GIORNATE_MESE);
+  if(!r) return null;
+  r.schedine = finte;
+  return r;
+}
+
+function ripartizioneMigliore(sel, L, m, pt){
+  var n = L * m, ordine = [], g, j;
+  for(g = 0; g < m; g++){
+    var gr = [];
+    for(j = 0; j < L; j++) gr.push(g * L + j);
+    ordine.push(gr);
+  }
+  var quante = M.quanteRipartizioni(n, L);
+  var prove = (L > 1 && m > 1 && quante > 1 && quante <= TETTO_RIPARTIZIONI)
+    ? M.ripartizioni(n, L, TETTO_RIPARTIZIONI)
+    : [ordine];
+  var meglio = null;
+  prove.forEach(function(gruppi){
+    var r = valutaRipartizione(sel, gruppi, pt);
+    if(r && (!meglio || r.pAttivo > meglio.r.pAttivo)){
+      meglio = {gruppi: gruppi, r: r};
+    }
+  });
+  if(meglio){
+    meglio.provate = prove.length;
+    meglio.esatta = prove.length > 1;
+  }
+  return meglio;
+}
+
+/* Il conto e' lo stesso per la tabella del mese e per le schedine scritte per
+   esteso, e rifarlo due volte si sente sul telefono. La firma comprende tutto
+   quello che puo' cambiarlo — la puntata, il ricarico, e le selezioni stesse
+   con la loro probabilita' — cosi' la cache non puo' servire un piatto vecchio
+   dopo che hai spento un mercato. */
+var _meseCache = null;
+function cercaStruttureMese(){
+  var tutte = ancoreGiornata();
   var n = tutte.length;
   if(n < 2) return null;
-  var pt = puntata(), fuori = [], L, m;
-  for(L = 1; L <= Math.min(6, n); L++){
-    for(m = 1; m <= Math.min(6, Math.floor(n / L)); m++){
+  var pt = puntata();
+  var firma = pt + '|' + ricarico().v + '|' + tutte.map(function(c){
+    return c.iPartita + ':' + c.id + ':' + c.p.toFixed(5);
+  }).join(',');
+  if(_meseCache && _meseCache.firma === firma) return _meseCache.v;
+
+  var fuori = [], L, m;
+  /* Il tetto era sei, e per sei anche le altre tabelle dell'app proponevano
+     "una da 10": toccarla non trovava niente e si ripiegava in silenzio su
+     un'altra struttura. Il costo non era il motivo — una schedina lunga e'
+     UNA gamba finta con la sua probabilita' composta — quindi il tetto sale
+     fino a tutte le partite della giornata. */
+  for(L = 1; L <= n; L++){
+    for(m = 1; m <= Math.floor(n / L); m++){
       var usate = tutte.slice(0, L * m);
-      /* Il ricarico si applica UNA VOLTA per gamba: distribuzioneRitorni
-         moltiplica le quote delle gambe fra loro, quindi la composizione
-         avviene da sola. Applicarlo qui L volte lo avrebbe applicato L volte
-         per gamba, cioè L² volte per schedina — e l'errore non si vedeva:
-         dava semplicemente numeri più bassi, tutti plausibili. L'ha trovato
-         una prova che confronta l'atteso con budget/(1+ricarico)^gambe. */
+      /* Il ricarico si applica UNA VOLTA per gamba: la composizione avviene
+         da sola quando le quote delle gambe si moltiplicano fra loro.
+         Applicarlo qui L volte lo avrebbe applicato L volte per gamba, cioe'
+         L² volte per schedina — e l'errore non si vedeva: dava semplicemente
+         numeri piu' bassi, tutti plausibili. L'ha trovato una prova che
+         confronta l'atteso con budget/(1+ricarico)^gambe. */
       var sel = usate.map(function(c){
         return {p: c.p, quota: quotaBanco(1 / c.p, 1)};
       });
-      var gruppi = [], g;
-      for(g = 0; g < m; g++){
-        var gr = [];
-        for(var j = 0; j < L; j++) gr.push(g * L + j);
-        gruppi.push(gr);
-      }
-      var d = M.distribuzioneRitorni(sel, gruppi, pt);
-      if(!d) continue;
-      var r = M.probMeseInAttivo(d, GIORNATE_MESE);
-      if(!r) continue;
+      var best = ripartizioneMigliore(sel, L, m, pt);
+      if(!best) continue;
       fuori.push({L:L, m:m, usate:usate.length,
-                  pAttivo:r.pAttivo, atteso:r.atteso, speso:r.speso,
+                  selezioni: usate, gruppi: best.gruppi,
+                  quote: best.r.schedine.map(function(x){ return x.quota; }),
+                  probSchedine: best.r.schedine.map(function(x){ return x.p; }),
+                  esatta: best.esatta, provate: best.provate,
+                  pAttivo:best.r.pAttivo, atteso:best.r.atteso, speso:best.r.speso,
                   perSchedina: pt/m,
-                  /* la quota di UNA schedina: qui sì il ricarico va L volte,
-                     perché è una schedina da L gambe */
-                  quotaTipo: quotaBanco(1/prodP(usate.slice(0, L)), L)});
+                  quotaTipo: best.r.schedine[0].quota});
     }
   }
   fuori.sort(function(a,b){ return b.pAttivo - a.pAttivo; });
-  return {opzioni: fuori, tutte: tutte};
+  _meseCache = {firma: firma, v: {opzioni: fuori, tutte: tutte}};
+  return _meseCache.v;
 }
 function prodP(l){ var q = 1; l.forEach(function(c){ q *= c.p; }); return q; }
 
@@ -2458,9 +2839,15 @@ function cardMeseInAttivo(){
     '<th>ti torna in media</th></tr>'+
     r.opzioni.slice(0, 8).map(function(o){
       var eti = o === best ? ' style="color:var(--accent);font-weight:700"' : '';
-      return '<tr'+eti+'><td>'+o.m+' da '+o.L+'</td><td>'+pc(o.pAttivo,1)+'</td><td>'+
+      /* Ogni riga porta alle schedine scritte per esteso. Era la cosa che
+         mancava: questa tabella dava la risposta giusta in una lingua che
+         bisognava ancora tradurre a mano, ogni domenica. */
+      return '<tr class="scegli"'+eti+' onclick="impostaForma('+o.L+','+o.m+')">'+
+        '<td>'+o.m+' da '+o.L+'</td><td>'+pc(o.pAttivo,1)+'</td><td>'+
         nu(o.atteso,1)+' su '+nu(o.speso,0)+'</td></tr>';
-    }).join('')+'</table></div>';
+    }).join('')+'</table></div>'+
+    '<div class="note" style="margin-top:8px">Tocca una riga e te la scrivo per esteso qui sopra: '+
+    'quale partita in quale schedina, a quanto, e cosa torna.</div>';
 
   /* Il testo lo scrivono i numeri, non io. Le due cose — massimizzare il
      ritorno medio e massimizzare la probabilità di chiudere in attivo — di
@@ -2545,6 +2932,7 @@ function tabSchedine(){
       '<span>chf. È l\'unica cosa che ti chiedo di scrivere in tutta l\'app: '+
       'da qui in giù i conti sono fatti su questa cifra.</span>'+
     '</div></div>';
+  h += '<div id="leTueSchedine">'+cardLeTueSchedine()+'</div>';
   h += sceltaRicarico();
   h += '<div id="schedProfilo">'+cardQuanteNePrendi()+cardMeseInAttivo()+cardComeGiocarle()+'</div>';
   h += '<div class="note" style="margin-bottom:14px">Le selezioni sono le stesse che vedi nella '+

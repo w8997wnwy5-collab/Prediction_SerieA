@@ -679,6 +679,123 @@ prova('e nessuna selezione finisce in due schedine',
         /costo > 0\.05[\s\S]{0,400}comprando/.test(html));
 })();
 
+/* ─── QUALI partite in QUALE schedina ───
+
+   Per anni l'app ne ha usata una sola, senza saperlo: le selezioni arrivavano
+   ordinate dalla piu' solida in giu' e si riempiva la prima schedina, poi la
+   seconda. Non era una scelta, era l'ordine dell'array. Misurato su 25
+   giornate vere (tools/misura_ripartizione.js), ripartire cambia fino a 0.73
+   punti di probabilita' di chiudere il mese in attivo, e non costa NIENTE in
+   valore atteso — e quella gratuita' e' esattamente la cosa che va protetta da
+   una prova, perche' se un giorno si rompe non da' errori: da' numeri
+   plausibili e sbagliati. */
+(function () {
+  var casi = [[4, 2, 3], [6, 2, 15], [8, 2, 105], [10, 2, 945],
+              [6, 3, 10], [9, 3, 280], [8, 4, 35], [12, 4, 5775],
+              [5, 5, 1], [3, 1, 1]];
+  var tutteOk = true, formulaOk = true;
+  casi.forEach(function (c) {
+    var l = M.ripartizioni(c[0], c[1], 100000);
+    if (l.length !== c[2]) tutteOk = false;
+    if (M.quanteRipartizioni(c[0], c[1]) !== c[2]) formulaOk = false;
+  });
+  prova('le ripartizioni sono quelle che dice il calcolo combinatorio', tutteOk);
+  prova('e contarle senza costruirle da lo stesso numero', formulaOk);
+
+  var l9 = M.ripartizioni(9, 3, 100000);
+  var copre = l9.every(function (g) {
+    var visti = {}, quanti = 0;
+    g.forEach(function (gr) { gr.forEach(function (i) { visti[i] = 1; quanti++; }); });
+    return quanti === 9 && Object.keys(visti).length === 9 &&
+           g.length === 3 && g.every(function (gr) { return gr.length === 3; });
+  });
+  prova('ogni ripartizione usa ogni selezione una volta sola', copre);
+
+  var chiavi = {};
+  l9.forEach(function (g) {
+    chiavi[g.map(function (gr) { return gr.slice().sort().join(','); }).sort().join('|')] = 1;
+  });
+  prova('e non ce ne sono due uguali travestite da diverse',
+        Object.keys(chiavi).length === l9.length,
+        Object.keys(chiavi).length + ' distinte su ' + l9.length);
+
+  prova('il limite taglia prima di esplodere, invece di piantare il telefono',
+        M.ripartizioni(12, 4, 50).length === 50);
+  prova('una richiesta impossibile torna vuota, non a meta',
+        M.ripartizioni(7, 3, 100).length === 0 && M.quanteRipartizioni(7, 3) === 0);
+
+  /* Il cuore: a parita' di gambe il valore atteso NON si muove di un
+     centesimo, qualunque ripartizione si scelga, mentre la probabilita' di
+     chiudere in attivo si muove. E' il motivo per cui questa scelta esiste. */
+  var ric = 0.056, B = 20, G = 4;
+  var ps = [0.84, 0.80, 0.77, 0.74, 0.70, 0.62];
+  function valuta(gruppi) {
+    var finte = gruppi.map(function (g) {
+      var P = 1;
+      g.forEach(function (i) { P *= ps[i]; });
+      return { p: P, quota: (1 / P) / Math.pow(1 + ric, g.length) };
+    });
+    var soli = finte.map(function (_, i) { return [i]; });
+    return M.probMeseInAttivo(M.distribuzioneRitorni(finte, soli, B), G);
+  }
+  var tutte = M.ripartizioni(6, 3, 100).map(valuta);
+  var attesi = tutte.map(function (r) { return r.atteso; });
+  var pAttivi = tutte.map(function (r) { return r.pAttivo; });
+  var scartoAtteso = Math.max.apply(null, attesi) - Math.min.apply(null, attesi);
+  var scartoP = Math.max.apply(null, pAttivi) - Math.min.apply(null, pAttivi);
+  prova('ripartire non sposta il valore atteso di un centesimo',
+        scartoAtteso < 1e-9, scartoAtteso.toExponential(1));
+  prova('e vale budget / (1+ricarico)^gambe, ripartizione qualunque',
+        Math.abs(attesi[0] - B * G / Math.pow(1 + ric, 3)) < 0.05,
+        attesi[0].toFixed(3));
+  prova('ma sposta la probabilita di chiudere in attivo, ed e gratis',
+        scartoP > 0.005, (100 * scartoP).toFixed(2) + ' punti fra la migliore e la peggiore');
+
+  /* Le schedine non condividono gambe e le gambe sono indipendenti, quindi le
+     SCHEDINE sono indipendenti: la giornata si puo' enumerare su 2^schedine
+     invece che su 2^gambe. E' la scorciatoia che rende il conto sostenibile su
+     un telefono, e qui si controlla che non menta. */
+  var gruppi = [[0, 1, 2], [3, 4, 5]];
+  var gambe = ps.map(function (p) { return { p: p, quota: (1 / p) / (1 + ric) }; });
+  var lungo = M.probMeseInAttivo(M.distribuzioneRitorni(gambe, gruppi, B), G);
+  var corto = valuta(gruppi);
+  prova('enumerare le schedine invece delle gambe da lo stesso identico numero',
+        Math.abs(lungo.pAttivo - corto.pAttivo) < 1e-6 &&
+        Math.abs(lungo.atteso - corto.atteso) < 1e-6,
+        lungo.pAttivo.toFixed(8) + ' vs ' + corto.pAttivo.toFixed(8));
+
+  var html;
+  try { html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8'); } catch (e) { return; }
+  prova('l\'app cerca la ripartizione invece di prendere l\'ordine dell\'array',
+        /ripartizioneMigliore/.test(html) && /M\.ripartizioni\(/.test(html));
+  prova('e le schedine hanno un nome e delle partite, non solo "2 da 3"',
+        /function cardLeTueSchedine/.test(html));
+
+  /* Il difetto peggiore che quest'app possa avere e' dire due cose diverse
+     sulla stessa partita, e per un pezzo l'ha fatto: il conto del mese pescava
+     il massimo pavimento fra TUTTI i mercati, saltando la manopola della
+     prudenza, mentre la Giornata mostrava la selezione filtrata. Su
+     Torino-Udinese il mese proponeva Under 4.5 all'87%, che in Giornata non
+     compare. Nessun errore e nessun numero sbagliato: solo due risposte. */
+  prova('il conto del mese pesca le stesse selezioni della Giornata',
+        /function cercaStruttureMese\(\)\{\s*\n\s*var tutte = ancoreGiornata\(\);/.test(html));
+  prova('e quelle selezioni sono la scelta della copertina, manopola compresa',
+        /function ancoreGiornata\(\)[\s\S]{0,400}sceltePartita\(p, 1\)[\s\S]{0,120}sc\.ancora/.test(html));
+  prova('dalla tabella del mese si arriva alle schedine scritte per esteso',
+        /tr class="scegli"[\s\S]{0,120}impostaForma\(/.test(html));
+  prova('e anche dalla tabella "come le impacchetti", che era quella guardata per prima',
+        /timr scegli[\s\S]{0,200}impostaForma\(/.test(html));
+
+  /* Il tetto a sei era la causa di un ripiego silenzioso: "una da 10" non
+     esisteva fra le strutture, toccarla mostrava altro e non lo diceva. */
+  prova('la ricerca non si ferma a sei gambe, o "una da 10" non troverebbe niente',
+        /for\(L = 1; L <= n; L\+\+\)/.test(html) &&
+        /for\(m = 1; m <= Math\.floor\(n \/ L\); m\+\+\)/.test(html));
+  prova('e quando una forma non ci sta davvero, il ripiego si dichiara',
+        /ripiego = vuole\.m/.test(html) &&
+        /non ce n\\'è abbastanza in questa giornata/.test(html));
+})();
+
 /* ─── il libro: la parte che non si puo' chiedere ───
 
    Tutto il resto di quest'app due persone lo ottengono uguale. Il libro no: e'
