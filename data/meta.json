@@ -1,5 +1,5 @@
 {
- "aggiornato": "2026-09-22T05:24:24+00:00",
+ "aggiornato": "2026-09-22T07:15:08+00:00",
  "esito": "ok",
  "ultima_partita": "2026-09-20",
  "partite_totali": 1950,
@@ -11,6 +11,7 @@
  "con_xg": 50,
  "con_quote": 1950,
  "in_arrivo_con_quote": 30,
+ "crediti_quote": 431,
  "in_arrivo_con_orario": 80,
  "marcatori": 0,
  "notizie": 51,
@@ -35,6 +36,7 @@
   "TheSportsDB": "ok: 1 giocate di cui 1 col risultato, 1 in arrivo",
   "calendario ravvicinato": "ok: 10 partite",
   "calendario stagione": "ok da openfootball: 340 partite",
+  "The Odds API crediti": "restano 431 (usati 69)",
   "The Odds API": "ok: 20 partite con quote (20 con Betfair)",
   "calendario": "340 partite in tutto, 30 con le quote (10 scaricate adesso, 20 tenute da prima)",
   "TheSportsDB risultati": "1 risultati accolti",
