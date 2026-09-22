@@ -188,14 +188,17 @@ def test_odds_api():
                 {'key': 'totals', 'outcomes': [
                     {'name': 'Over', 'price': 1.80, 'point': 2.5},
                     {'name': 'Under', 'price': 2.00, 'point': 2.5}]}]}]}]).encode()
-    vero = B.scarica
-    B.scarica = lambda *a, **k: risposta
+    # si finge scarica_con_intestazioni, non scarica: i crediti rimasti
+    # stanno nelle INTESTAZIONI, ed e' l'unico posto dove sono scritti
+    vero = B.scarica_con_intestazioni
+    B.scarica_con_intestazioni = lambda *a, **k: (
+        risposta, {'x-requests-remaining': '438', 'x-requests-used': '62'})
     os.environ['ODDS_API_KEY'] = 'chiave-finta'
     try:
         esiti = {}
         out = B.prendi_odds_api(esiti)
     finally:
-        B.scarica = vero
+        B.scarica_con_intestazioni = vero
         os.environ.pop('ODDS_API_KEY', None)
     prova('una partita torna dalla fonte', len(out) == 1, len(out))
     m = out[0] if out else {}
@@ -207,6 +210,15 @@ def test_odds_api():
     prova('la data e quella della partita', m.get('d') == '2026-09-18', m.get('d'))
     prova('l\'esito dice quante e quante con Betfair',
           'Betfair' in str(esiti.get('The Odds API')), str(esiti.get('The Odds API')))
+    # I crediti: se finiscono a meta' mese la fonte smette di rispondere e
+    # l'ancoraggio torna spento. Un numero leggibile che non si legge e' un
+    # guasto che si sceglie di non vedere.
+    prova('i crediti rimasti vengono letti dalle intestazioni',
+          '438' in str(esiti.get('The Odds API crediti')), str(esiti.get('The Odds API crediti')))
+    prova('e finiscono in un numero, pronti per il meta',
+          B._crediti_rimasti(esiti) == 438, B._crediti_rimasti(esiti))
+    prova('senza intestazioni non si inventa un numero',
+          B._crediti_rimasti({}) is None)
 
     # senza chiave non si inventa niente e non si sbatte
     os.environ.pop('ODDS_API_KEY', None)
@@ -217,14 +229,14 @@ def test_odds_api():
     # la chiave non deve uscire nei messaggi: sta nell'URL
     def esplode(*a, **k):
         raise RuntimeError('HTTP 401 su %s/odds?apiKey=SEGRETISSIMA' % B.ODDS_API_BASE)
-    vero2 = B.scarica
-    B.scarica = esplode
+    vero2 = B.scarica_con_intestazioni
+    B.scarica_con_intestazioni = esplode
     os.environ['ODDS_API_KEY'] = 'SEGRETISSIMA'
     try:
         e3 = {}
         B.prendi_odds_api(e3)
     finally:
-        B.scarica = vero2
+        B.scarica_con_intestazioni = vero2
         os.environ.pop('ODDS_API_KEY', None)
     prova('se la chiamata fallisce, la CHIAVE non finisce nel messaggio',
           'SEGRETISSIMA' not in str(e3.get('The Odds API')), str(e3.get('The Odds API')))
@@ -233,6 +245,56 @@ def test_odds_api():
     prova('la chiave si legge dall\'ambiente e non e scritta nel codice',
           "os.environ.get('ODDS_API_KEY'" in sorgente and
           not re.search(r"ODDS_API_KEY['\"]?\s*[:=]\s*['\"][0-9a-f]{16}", sorgente))
+
+
+def test_prima_quota():
+    """La prima quota vista non si sovrascrive mai.
+
+    E' la meta' di una misura che finora era impossibile: il valore contro la
+    linea di chiusura. Se il prezzo preso batte quello con cui la partita e'
+    andata in campo, si e' comprato meglio del mercato — e quella misura
+    converge in cinquanta giocate invece che in mille, perche' il risultato di
+    una scommessa e' quasi tutto fortuna mentre il prezzo no.
+
+    La cosa che puo' rompersi in silenzio e' una sola, ed e' fatale: che un
+    giro successivo riscriva la prima quota con quella di adesso. Allora i due
+    estremi diventano lo stesso numero, il CLV viene zero sempre, e sembra solo
+    che non ci sia segnale."""
+    nuovo = [{'c': 'Monza', 'v': 'Sassuolo', 'd': '2026-09-18',
+              'q': [2.90, 3.50, 2.40], 'qex': [3.00, 3.55, 2.56]}]
+    primo = B.ricorda_prima_quota([], [dict(x) for x in nuovo])
+    prova('al primo giro la quota di adesso diventa la prima',
+          primo[0].get('qprimo') == [2.90, 3.50, 2.40], str(primo[0].get('qprimo')))
+    prova('e anche quella di Betfair', primo[0].get('qexprimo') == [3.00, 3.55, 2.56])
+    prova('con la data di quando e stata vista', bool(primo[0].get('qprimoVisto')))
+
+    # il giro dopo, il mercato si e' mosso
+    dopo = [{'c': 'Monza', 'v': 'Sassuolo', 'd': '2026-09-18',
+             'q': [2.60, 3.45, 2.70], 'qex': [2.70, 3.50, 2.80]}]
+    secondo = B.ricorda_prima_quota(primo, [dict(x) for x in dopo])
+    prova('al secondo giro la prima quota NON viene riscritta',
+          secondo[0].get('qprimo') == [2.90, 3.50, 2.40], str(secondo[0].get('qprimo')))
+    prova('e quella di adesso e la nuova', secondo[0].get('q') == [2.60, 3.45, 2.70])
+    prova('anche Betfair tiene la sua prima',
+          secondo[0].get('qexprimo') == [3.00, 3.55, 2.56], str(secondo[0].get('qexprimo')))
+    prova('la data della prima resta quella della prima',
+          secondo[0].get('qprimoVisto') == primo[0].get('qprimoVisto'))
+
+    # una partita diversa non eredita niente da un'altra
+    altra = B.ricorda_prima_quota(primo, [{'c': 'Roma', 'v': 'Inter', 'd': '2026-09-19',
+                                           'q': [2.69, 3.43, 2.55]}])
+    prova('un\'altra partita non eredita la prima quota di quella prima',
+          altra[0].get('qprimo') == [2.69, 3.43, 2.55], str(altra[0].get('qprimo')))
+
+    # e senza quote non si inventa una prima quota
+    vuota = B.ricorda_prima_quota([], [{'c': 'Lazio', 'v': 'Milan', 'd': '2026-09-26'}])
+    prova('senza quote non si inventa una prima quota', 'qprimo' not in vuota[0])
+
+    # la prima quota sopravvive anche se le quote di adesso spariscono
+    tenuta = B.da_tenere([{'c': 'Monza', 'v': 'Sassuolo', 'd': '2099-01-01',
+                           'qprimo': [2.9, 3.5, 2.4]}], '2026-09-18')
+    prova('e sopravvive anche quando le quote di adesso spariscono',
+          len(tenuta) == 1 and tenuta[0].get('qprimo') == [2.9, 3.5, 2.4], str(tenuta))
 
 
 def test_understat():
@@ -864,6 +926,7 @@ def main():
     test_quote()
     test_calendario_ha_le_stesse_quote()
     test_odds_api()
+    test_prima_quota()
     test_xg_e_quote_di_chiusura()
     test_understat()
     test_espn()

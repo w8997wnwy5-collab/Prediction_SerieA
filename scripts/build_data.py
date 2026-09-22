@@ -76,6 +76,29 @@ def scarica(url, tentativi=4, attesa=6, controllo=None, intestazioni=None):
     raise RuntimeError(str(ultimo))
 
 
+def scarica_con_intestazioni(url, tentativi=4, attesa=6):
+    """Come scarica(), ma torna anche le intestazioni della risposta.
+
+    Serve a una cosa sola e importante: The Odds API dichiara i crediti rimasti
+    in un'intestazione, non nel corpo. Se quei crediti finiscono a meta' mese la
+    fonte smette di rispondere e l'ancoraggio torna spento — cioe' esattamente
+    il guasto silenzioso che questa fonte era venuta a chiudere. Un numero che
+    si puo' leggere e non si legge e' un guasto che si sceglie di non vedere."""
+    ultimo = None
+    for i in range(tentativi):
+        try:
+            testa = {'User-Agent': UA, 'Accept': '*/*', 'Accept-Language': 'it,en;q=0.8'}
+            req = urllib.request.Request(url, headers=testa)
+            with urllib.request.urlopen(req, timeout=60) as r:
+                return r.read(), dict(r.headers)
+        except Exception as e:            # noqa: BLE001
+            ultimo = e
+            log('    tentativo %d: %s' % (i + 1, e))
+            if i < tentativi - 1:
+                time.sleep(attesa * (i + 1))
+    raise RuntimeError(str(ultimo))
+
+
 def _pare_csv(dati, byte_minimi=400):
     """Controlli comuni a tutti i CSV di football-data.co.uk."""
     if not dati or len(dati) < byte_minimi:
@@ -931,6 +954,15 @@ def _coppia_ou(mercato):
     return None
 
 
+def _crediti_rimasti(esiti):
+    """Il numero di crediti che restano, tirato fuori dal riepilogo per finire
+    nel meta: l'app lo mostra in Dati, cosi' la fine della quota si vede
+    arrivare invece di scoprirla dall'ancoraggio che si spegne."""
+    testo = str(esiti.get('The Odds API crediti') or '')
+    m = re.search(r'restano (\d+)', testo)
+    return int(m.group(1)) if m else None
+
+
 def prendi_odds_api(esiti):
     """Le quote delle partite in arrivo, da 24 banchi e con 24 giorni di
     anticipo. Torna voci di calendario pronte da fondere."""
@@ -938,11 +970,19 @@ def prendi_odds_api(esiti):
     if not chiave:
         esiti['The Odds API'] = 'saltata: nessuna chiave ODDS_API_KEY'
         return []
+    # Perche' solo la regione 'eu' e non anche 'uk'. Misurato con la sonda:
+    #   eu      20 banchi, 20 partite con l'exchange, 1 credito
+    #   uk      19 banchi, 20 partite con l'exchange, 1 credito
+    #   eu,uk   37 banchi, 20 partite con l'exchange, 2 crediti
+    # Raddoppiare i banchi raddoppia il costo e non aggiunge un solo exchange.
+    # E l'exchange e' quello che conta: l'ancoraggio usa qex quando c'e', e la
+    # media dei banchi e' solo il ripiego. Con sei giri al giorno, eu costa 360
+    # crediti al mese su 500; eu,uk ne costerebbe 540, cioe' piu' del piano.
     url = ('%s/sports/%s/odds?regions=eu&markets=h2h,totals&oddsFormat=decimal&apiKey=%s'
            % (ODDS_API_BASE, ODDS_API_SPORT, chiave))
     try:
         log('· The Odds API')
-        grezzo = scarica(url, tentativi=2, attesa=3)
+        grezzo, intestazioni = scarica_con_intestazioni(url, tentativi=2, attesa=3)
         partite = json.loads(grezzo.decode('utf-8'))
     except Exception as e:                        # noqa: BLE001
         # Il messaggio puo' contenere l'URL, e l'URL contiene la chiave.
@@ -987,6 +1027,14 @@ def prendi_odds_api(esiti):
         fuori.append(m)
 
     conex = sum(1 for m in fuori if m.get('qex'))
+    # I crediti rimasti non sono un dettaglio da curiosi: se finiscono a meta'
+    # mese questa fonte smette di rispondere e l'ancoraggio torna spento —
+    # esattamente il guasto silenzioso che questa fonte e' venuta a chiudere.
+    # Quindi il numero si pubblica, e l'app lo mostra prima che serva.
+    restano = intestazioni.get('x-requests-remaining') if intestazioni else None
+    usati = intestazioni.get('x-requests-used') if intestazioni else None
+    if restano is not None:
+        esiti['The Odds API crediti'] = 'restano %s (usati %s)' % (restano, usati)
     esiti['The Odds API'] = ('ok: %d partite con quote (%d con Betfair)%s'
                              % (len(fuori), conex,
                                 ', %d scartate senza quote' % senza_quote if senza_quote else ''))
@@ -1458,6 +1506,43 @@ def innesta(indice, righe, campi, solo_se_vuoto=()):
     return tocche, orfane
 
 
+def ricorda_prima_quota(vecchio, nuovo):
+    """La PRIMA quota mai vista per ogni partita, conservata da un giro
+    all'altro.
+
+    Serve alla misura piu' onesta che esista su chi scommette, e che finora era
+    impossibile perche' le quote future non c'erano: il CLV, il valore contro la
+    linea di chiusura.
+
+    L'idea, in una riga: se il prezzo che hai preso batte quello con cui la
+    partita e' andata in campo, hai comprato meglio del mercato. E quella misura
+    converge in cinquanta giocate, mentre il guadagno vero ne chiede un
+    migliaio — perche' il risultato di una scommessa e' quasi tutto fortuna,
+    mentre il prezzo no.
+
+    Qui si conserva solo il primo estremo. Il secondo — la chiusura — arriva da
+    se', perche' l'ultimo giro prima del fischio scrive l'ultima quota vista.
+    Due numeri per partita, e si puo' misurare una cosa che di solito richiede
+    un abbonamento."""
+    per_sfida = {}
+    for p in (vecchio or []):
+        per_sfida[(p.get('c'), p.get('v'))] = p
+    for p in (nuovo or []):
+        vecchia = per_sfida.get((p.get('c'), p.get('v')))
+        if vecchia and vecchia.get('qprimo'):
+            # gia' vista: si tiene la prima, non la si sovrascrive mai
+            p['qprimo'] = vecchia['qprimo']
+            p['qprimoVisto'] = vecchia.get('qprimoVisto')
+            if vecchia.get('qexprimo'):
+                p['qexprimo'] = vecchia['qexprimo']
+        elif p.get('q'):
+            p['qprimo'] = list(p['q'])
+            p['qprimoVisto'] = datetime.now(timezone.utc).isoformat(timespec='minutes')
+            if p.get('qex'):
+                p['qexprimo'] = list(p['qex'])
+    return nuovo
+
+
 def da_tenere(calendario, oggi_iso):
     """Cosa sopravvive a una fonte irraggiungibile.
 
@@ -1477,7 +1562,7 @@ def da_tenere(calendario, oggi_iso):
     di ieri è una partita che il calendario non sa essere finita."""
     return [{k: v for k, v in p.items() if k != 'o'}
             for p in (calendario or [])
-            if p.get('d', '') >= oggi_iso and p.get('q')]
+            if p.get('d', '') >= oggi_iso and (p.get('q') or p.get('qprimo'))]
 
 
 def unisci_calendario(base, extra):
@@ -1619,6 +1704,7 @@ ETICHETTE = {'aggiornato': 'Aggiornato', 'esito': 'Esito', 'ultima_partita': 'Ul
              'partite_totali': 'Partite totali', 'partite_giocate': 'Partite giocate',
              'partite_in_arrivo': 'Partite in arrivo', 'con_arbitro': 'Con arbitro',
              'con_tiri': 'Con tiri', 'con_xg': 'Con xG veri', 'con_quote': 'Con quote',
+             'crediti_quote': 'Crediti quote rimasti',
              'in_arrivo_con_quote': 'In arrivo con quote',
              'in_arrivo_con_orario': 'In arrivo con orario', 'marcatori': 'Marcatori',
              'notizie': 'Titoli raccolti', 'notizie_assenze': 'Titoli che segnalano assenze',
@@ -1752,6 +1838,7 @@ def main():
     # stato. Sui campi che non porta (orario, giornata) non tocca niente,
     # perche' unisci_calendario scrive solo i valori non nulli.
     calendario = unisci_calendario(calendario, prendi_odds_api(esiti))
+    calendario = ricorda_prima_quota(vecchio_cal, calendario)
     if tsdb_future:
         calendario = unisci_calendario(calendario, tsdb_future)
     # Una partita che si e' giocata non e' piu' in calendario. Quando una fonte
@@ -1880,6 +1967,10 @@ def main():
         'con_xg': len([p for p in giocate if p.get('xgc') is not None]),
         'con_quote': len([p for p in giocate if p.get('q')]),
         'in_arrivo_con_quote': len([p for p in calendario if p.get('q')]),
+        # Se i crediti finiscono a meta' mese questa fonte smette di rispondere
+        # e l'ancoraggio torna spento. Il numero si pubblica per vederlo
+        # arrivare, invece di scoprirlo dall'app che ricomincia ad andare a naso.
+        'crediti_quote': _crediti_rimasti(esiti),
         'in_arrivo_con_orario': len([p for p in calendario if p.get('o')]),
         'marcatori': len((marcatori or {}).get('lista', [])),
         'notizie': len(notizie),

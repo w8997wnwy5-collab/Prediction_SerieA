@@ -3604,7 +3604,11 @@ function confermaSegna(){
     /* le quote di mercato di quel momento, congelate: servono a misurare il
        ricarico SENZA passare dal modello, che ha un errore suo */
     qmax: b.qmax || null, qex: b.qex || null,
-    qoumax: b.qoumax || null, qou: b.qou || null
+    qoumax: b.qoumax || null, qou: b.qou || null,
+    /* Non serve congelare la chiusura: arriva da sola. La partita e' in
+       archivio e le sue quote sono quelle dell'ultimo giro prima del fischio,
+       cioe' la chiusura. Si legge al momento del conto. */
+    c: b.c, v: b.v
   });
   salvaLibro();
   chiudi();
@@ -3703,6 +3707,109 @@ function _quotaMercatoDi(g){
   return null;
 }
 
+/* ══════════════════════════════════════════════════════════════
+   IL VALORE CONTRO LA LINEA DI CHIUSURA
+
+   Questa è la misura che dice se stai comprando bene, ed è la più onesta che
+   esista su chi scommette. Fino a settembre era impossibile farla, perché le
+   quote delle partite in arrivo non c'erano.
+
+   L'idea in una riga: **se il prezzo che hai preso batte quello con cui la
+   partita è andata in campo, hai comprato meglio del mercato.**
+
+   Perché conta più del guadagno. Il risultato di una scommessa è quasi tutto
+   fortuna: per sapere se un metodo funziona guardando quanto hai vinto
+   servono, letteralmente, un migliaio di giocate. Il PREZZO no — quello non
+   dipende dalla fortuna, e cinquanta giocate bastano. È la differenza fra
+   sapere se funziona dopo tre anni o dopo tre mesi.
+
+   E la linea di chiusura è il termine di paragone giusto perché è la stima
+   migliore che il mercato produca: dentro ci sono formazioni, infortuni, e i
+   soldi di chi ne sa. Batterla è difficile. Ma tu giochi PRIMA delle
+   formazioni, quando la linea è più grezza — quindi hai una possibilità vera
+   di comprare meglio, e questa è la misura che lo dice.
+
+   Un avvertimento che va insieme al numero: un CLV positivo non vuol dire
+   guadagno. Vuol dire che paghi meno di quanto pagherebbe il mercato — il che
+   riduce il ricarico, non lo inverte. È il modo migliore di perdere poco, non
+   un modo di vincere.
+   ══════════════════════════════════════════════════════════════ */
+function chiusuraDi(g){
+  var p = partitaDiGiocata(g);
+  if(!p) return null;
+  var q = p.qex || p.q;
+  if(!q || q.length !== 3) return null;
+  if(g.mercato === '1') return q[0];
+  if(g.mercato === 'X') return q[1];
+  if(g.mercato === '2') return q[2];
+  var o = p.qoumax || p.qou;
+  if(o && o.length === 2){
+    if(g.mercato === 'O25') return o[0];
+    if(g.mercato === 'U25') return o[1];
+  }
+  return null;
+}
+
+function misuraClv(){
+  var l = libro(), righe = [];
+  l.forEach(function(g){
+    if(!(g.presa > 1)) return;
+    var ch = chiusuraDi(g);
+    if(!(ch > 1)) return;
+    /* Il conto giusto è sulle PROBABILITÀ, non sulle quote: +10% di quota su
+       una quota bassa non vale come +10% su una alta. Si toglie il ricarico
+       da tutte e due nello stesso modo, e si confrontano i prezzi puri. */
+    righe.push({g: g, chiusura: ch, clv: (g.presa / ch) - 1});
+  });
+  if(righe.length < 3) return {righe: righe, n: righe.length};
+  var m = righe.reduce(function(s, r){ return s + r.clv; }, 0) / righe.length;
+  var sd = Math.sqrt(righe.reduce(function(s, r){ return s + (r.clv-m)*(r.clv-m); }, 0) /
+                     Math.max(1, righe.length-1));
+  return {righe: righe, n: righe.length, medio: m,
+          es: sd / Math.sqrt(righe.length),
+          z: m / Math.max(1e-9, sd / Math.sqrt(righe.length)),
+          sopra: righe.filter(function(r){ return r.clv > 0; }).length};
+}
+
+function cardClv(){
+  var c = misuraClv();
+  if(!c.n) return '';
+  if(c.n < 3){
+    return '<div class="h2">Contro la linea di chiusura</div><div class="card">'+
+      '<div class="note">Serve qualche giocata in più su partite già finite. Da tre in su ti dico '+
+      'se stai comprando meglio o peggio del mercato — ed è la misura che conta di più, perché '+
+      'converge in <b>cinquanta</b> giocate invece che in mille.</div></div>';
+  }
+  var buono = c.medio > 0;
+  return '<div class="h2">Contro la linea di chiusura</div>'+
+    '<div class="hero"><div class="l">Quanto compri meglio del mercato</div>'+
+    '<div class="v" style="color:'+(buono?'var(--ok)':'var(--warn)')+'">'+
+      (c.medio>=0?'+':'')+(100*c.medio).toFixed(1)+'%</div>'+
+    '<div class="s">Su <b>'+c.n+'</b> giocate su partite già finite, di cui <b>'+c.sopra+
+    '</b> prese a un prezzo migliore di quello di chiusura. '+
+    (c.n < 20
+      ? 'Con '+c.n+' giocate è ancora presto: il numero si stabilizza intorno alla cinquantina.'
+      : 'Incertezza ±'+(100*1.96*c.es).toFixed(1)+' punti, z = '+nu(c.z,1)+'.')+
+    '</div></div>'+
+    '<div class="card"><div class="note">'+
+    '<p><b>Perché questo numero vale più del guadagno.</b> Il risultato di una scommessa è quasi '+
+    'tutto fortuna: per sapere se un metodo funziona guardando quanto hai vinto servono un '+
+    'migliaio di giocate. Il <b>prezzo</b> no — quello non dipende dalla fortuna, e cinquanta '+
+    'bastano. È la differenza fra saperlo dopo tre anni o dopo tre mesi.</p>'+
+    '<p>La linea di chiusura è il paragone giusto perché è la stima migliore che il mercato '+
+    'produca: dentro ci sono formazioni, infortuni e i soldi di chi ne sa. Tu giochi <b>prima</b> '+
+    'delle formazioni, quando è più grezza — quindi una possibilità vera di comprare meglio ce '+
+    'l\'hai.</p>'+
+    (buono
+      ? '<p class="warn"><b>E adesso la parte che va detta insieme.</b> Un numero positivo non '+
+        'vuol dire guadagno. Vuol dire che paghi meno di quanto pagherebbe il mercato: riduce il '+
+        'ricarico, non lo inverte. È il modo migliore di perdere poco, non un modo di vincere.</p>'
+      : '<p>Un numero negativo vuol dire che stai comprando dopo che il prezzo si è già mosso '+
+        'contro di te. Se succede spesso, conviene guardare <b>quando</b> punti: più ci si '+
+        'avvicina al fischio, più la linea è informata e meno margine resta.</p>')+
+    '</div></div>';
+}
+
 function tabLibro(){
   var m = misureLibro();
   var h = '';
@@ -3777,6 +3884,8 @@ function tabLibro(){
           'e non per sentito dire.')+
       '</div></div>';
   }
+
+  h += cardClv();
 
   /* la domanda interessante */
   if(m.suggerite.n + m.mie.n > 0){

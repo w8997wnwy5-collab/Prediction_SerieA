@@ -226,6 +226,7 @@ node tools/misura_mercati.js                        # il peso giusto è lo stess
 node tools/ottimizza_mese.js                        # quale struttura chiude il mese in attivo più spesso
 node tools/misura_multigol.js                       # Multigol 1-4 ovunque: bug o regola che fa il suo mestiere?
 node tools/misura_apertura.js                       # il peso giusto quando il mercato non ha visto le formazioni (sempre 1)
+node tools/misura_linee.js                          # l'ancoraggio tiene anche sulle linee non agganciate? (sì)
 ```
 
 ### Le notizie, e cosa possono fare
@@ -754,6 +755,59 @@ solo è una stima più rumorosa di una media. Dove c'è il consenso si usa il
 consenso; dove non c'è niente, **tre numeri battono zero numeri di parecchio** —
 ed è esattamente il caso in cui servono. Restano sul telefono, come il libro.
 
+### Le linee non ancorate tengono
+
+Guardando cosa l'app propone davvero, su dieci partite ne escono cinque fra
+**Over 1.5** e **Under 3.5**. Sono quelle le giocate che uno fa. Ma il modello si
+ancora al mercato su due assi soli — chi vince, e quanti gol dall'Over/Under
+**2.5**. Le altre linee non sono ancorate a niente: escono dalla forma di
+Poisson che il modello impone.
+
+E l'ancoraggio sistema la **media** dei gol, non la **forma**. Se la forma vera
+fosse diversa — più schiacciata, più larga — la media sarebbe giusta e le code
+sbagliate: il 2.5 preciso e l'1.5 e il 3.5 storti. Cioè proprio le linee che si
+giocano. Misurato su 810 partite (`tools/misura_linee.js`):
+
+| linea | dice | succede | scarto |
+|---|---|---|---|
+| Over 0.5 | 91.3% | 92.1% | +0.8 punti, z = +0.8 |
+| Over 1.5 | 73.0% | 72.6% | −0.4 punti, z = −0.2 |
+| **Over 2.5** (ancorata) | 47.2% | 47.4% | +0.2 punti, z = +0.1 |
+| Over 3.5 | 25.9% | 24.3% | −1.6 punti, z = −1.1 |
+| Over 4.5 | 12.2% | 11.4% | −0.8 punti, z = −0.7 |
+
+**Nessuna fuori.** La forma di Poisson, una volta sistemata la media, descrive
+bene anche le code: ancorarsi alle altre linee non avrebbe niente da
+recuperare. È il risultato che uno spera di trovare e quasi mai trova — la
+macchina è sana proprio dove serve di più.
+
+(E comunque non si sarebbe potuto: The Odds API vende solo `h2h`, `totals` e
+`spreads`. Gol/Gol, doppia chance e linee alternative rispondono
+`INVALID_MARKET`.)
+
+### Il valore contro la linea di chiusura
+
+La misura più onesta che esista su chi scommette, e impossibile da fare fino a
+quando le quote delle partite in arrivo non ci sono state.
+
+**Se il prezzo che hai preso batte quello con cui la partita è andata in campo,
+hai comprato meglio del mercato.**
+
+Perché conta più del guadagno: il risultato di una scommessa è quasi tutto
+fortuna, e per sapere se un metodo funziona guardando quanto hai vinto servono
+**un migliaio** di giocate. Il prezzo no — quello non dipende dalla fortuna, e
+**cinquanta** bastano. È la differenza fra saperlo dopo tre anni o dopo tre mesi.
+
+La linea di chiusura è il paragone giusto perché è la stima migliore che il
+mercato produca: dentro ci sono formazioni, infortuni e i soldi di chi ne sa.
+Chi gioca **prima** delle formazioni ha una possibilità vera di comprare meglio,
+e questo numero lo dice.
+
+**L'avvertimento che va insieme al numero, e non dopo:** un CLV positivo *non*
+vuol dire guadagno. Vuol dire pagare meno di quanto pagherebbe il mercato — il
+che riduce il ricarico, non lo inverte. È il modo migliore di perdere poco, non
+un modo di vincere.
+
 ### Il mio libro: la parte che non si può chiedere
 
 Tutto il resto di questo progetto è replicabile, ed è giusto così. I dati sono
@@ -955,7 +1009,7 @@ dire che quello che resta da guadagnare non sta nel modello, sta nel **prezzo**
 | `worker.js` | fa girare il motore fuori dal thread dell'interfaccia, così lo schermo non si blocca |
 | `scripts/build_data.py` | scarica e normalizza i dati da sei fonti (solo libreria standard) |
 | `.github/workflows/aggiorna-dati.yml` | il robot: quattro giri al giorno |
-| `tools/` | generatore di dati sintetici, le tre prove (141 sulle fonti, 154 sul motore, 15 sul backtest), la verifica di una giornata a posteriori e le nove misure (arbitri, indipendenza, valore, regola di selezione, handicap, vantaggio del campo, neopromosse, taratura dei parametri, ancoraggio Over/Under) |
+| `tools/` | generatore di dati sintetici, le tre prove (155 sulle fonti, 170 sul motore, 15 sul backtest), la verifica di una giornata a posteriori e le nove misure (arbitri, indipendenza, valore, regola di selezione, handicap, vantaggio del campo, neopromosse, taratura dei parametri, ancoraggio Over/Under) |
 | `data/` | riempita dalla Action: `serie-a.json` e `meta.json` |
 
 ## Una nota sul senso di tutto questo

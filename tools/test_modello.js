@@ -416,6 +416,81 @@ prova('e nessuna selezione finisce in due schedine',
         sing.atteso - acc.atteso > 5, (sing.atteso - acc.atteso).toFixed(2));
 })();
 
+/* ─── il valore contro la linea di chiusura ───
+
+   La misura piu' onesta che esista su chi scommette, e impossibile da fare
+   fino a quando le quote delle partite in arrivo non ci sono state. Se il
+   prezzo preso batte quello con cui la partita e' andata in campo, si e'
+   comprato meglio del mercato — e quella misura converge in cinquanta giocate
+   invece che in mille, perche' il risultato di una scommessa e' quasi tutto
+   fortuna mentre il prezzo no.
+
+   Le due cose che possono rompersi in silenzio: leggere la chiusura
+   dall'esito sbagliato (un CLV calcolato sulla quota della trasferta quando si
+   e' giocata la casa non da' errore, da' un numero), e dichiarare un numero
+   quando le giocate sono troppo poche perche' voglia dire qualcosa. */
+(function () {
+  var html;
+  try { html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8'); } catch (e) { return; }
+  function estrai(n) {
+    var i = html.indexOf('function ' + n + '(');
+    if (i < 0) return null;
+    var d = 0;
+    for (var k = html.indexOf('{', i); k < html.length; k++) {
+      if (html[k] === '{') d++;
+      else if (html[k] === '}') { d--; if (!d) return html.slice(i, k + 1); }
+    }
+    return null;
+  }
+  var src = estrai('chiusuraDi');
+  prova('la lettura della chiusura esiste', !!src);
+  if (!src) return;
+  var partita = { qex: [2.50, 3.40, 2.90], qou: [1.85, 1.95] };
+  var chiusuraDi = new Function('partitaDiGiocata',
+    'return ' + src + ';')(function () { return partita; });
+
+  prova('1 legge la chiusura di casa', chiusuraDi({ mercato: '1' }) === 2.50);
+  prova('X legge il pareggio', chiusuraDi({ mercato: 'X' }) === 3.40);
+  prova('2 legge la trasferta', chiusuraDi({ mercato: '2' }) === 2.90);
+  prova('Over 2.5 legge la sua', chiusuraDi({ mercato: 'O25' }) === 1.85);
+  prova('Under 2.5 la sua', chiusuraDi({ mercato: 'U25' }) === 1.95);
+  prova('un mercato senza chiusura non ne inventa una',
+        chiusuraDi({ mercato: '1X' }) == null);
+  var senza = new Function('partitaDiGiocata', 'return ' + src + ';')(function () { return null; });
+  prova('e una partita non ancora giocata non ha chiusura',
+        senza({ mercato: '1' }) == null);
+
+  var src2 = estrai('misuraClv');
+  prova('il conto del CLV esiste', !!src2);
+  if (!src2) return;
+  function conLibro(voci, chiusura) {
+    return new Function('libro', 'chiusuraDi', 'return ' + src2 + ';')(
+      function () { return voci; }, function () { return chiusura; })();
+  }
+  /* preso a 2.60 quello che ha chiuso a 2.50: il 4% meglio */
+  var otto = [];
+  for (var i = 0; i < 8; i++) otto.push({ presa: 2.60, mercato: '1' });
+  var r = conLibro(otto, 2.50);
+  prova('otto giocate al 4% meglio danno +4%',
+        Math.abs(r.medio - 0.04) < 0.0005, r.medio);
+  prova('e le conta tutte sopra', r.sopra === 8, r.sopra);
+  prova('sotto le tre giocate non dichiara un numero',
+        conLibro(otto.slice(0, 2), 2.50).medio === undefined);
+  var peggio = [];
+  for (i = 0; i < 5; i++) peggio.push({ presa: 2.40, mercato: '1' });
+  prova('e un prezzo peggiore della chiusura da un numero negativo',
+        conLibro(peggio, 2.50).medio < 0, conLibro(peggio, 2.50).medio);
+  prova('una giocata senza chiusura viene saltata, non contata a zero',
+        conLibro(otto, null).n === 0);
+
+  /* \\s+ invece di uno spazio: il testo va a capo nel sorgente, e una prova che
+     fallisce per un ritorno a capo insegna solo a non fidarsi delle prove. */
+  prova('la scheda dice che un CLV positivo NON e guadagno',
+        /non vuol dire\s+guadagno[\s\S]{0,300}riduce il ricarico, non lo inverte/.test(html));
+  prova('e dice perche vale piu del guadagno: converge prima',
+        /cinquanta[\s\S]{0,120}invece che in mille|migliaio di giocate/.test(html));
+})();
+
 /* ─── le quote scritte a mano: l'unica fonte che non si puo' comprare ───
 
    Le quote delle partite in arrivo hanno una fonte sola e a volte manca. Non
