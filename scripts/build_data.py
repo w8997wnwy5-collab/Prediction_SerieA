@@ -1893,6 +1893,11 @@ ALIAS_EUROPA = {
     'espanyol de barcelona': 'espanol',
     'espanyol': 'espanol',
     'stade rennais': 'rennes',
+    # Trovato dal primo giro vero: 1522 nomi su 1560 risolti in Premier, e
+    # l'unico fuori era questo. E' esattamente il modo in cui questa tabella
+    # doveva crescere — guardando cosa il resoconto dichiara, non indovinando.
+    'wolverhampton wanderers': 'wolves',
+    'wolverhampton': 'wolves',
     'rennais': 'rennes',
 }
 

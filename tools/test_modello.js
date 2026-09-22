@@ -778,7 +778,15 @@ prova('e nessuna selezione finisce in due schedine',
      Torino-Udinese il mese proponeva Under 4.5 all'87%, che in Giornata non
      compare. Nessun errore e nessun numero sbagliato: solo due risposte. */
   prova('il conto del mese pesca le stesse selezioni della Giornata',
-        /function cercaStruttureMese\(\)\{\s*\n\s*var tutte = ancoreGiornata\(\);/.test(html));
+        /function cercaStruttureMese\(\)\{\s*\n\s*var tutte = ancoreTutteLeLeghe\(\);/.test(html) &&
+        /function ancoreTutteLeLeghe\(\)[\s\S]{0,400}ancoreGiornata\(\)/.test(html));
+  prova('e le pesca da TUTTI i campionati: e il motivo per cui ci sono',
+        /perOgniLega\(function\(lega\)\{[\s\S]{0,200}ancoreGiornata\(\)/.test(html));
+  prova('ogni selezione si porta dietro il suo campionato, o due partite si confondono',
+        /a\.iPartita = lega\.id \+ ':' \+ a\.iPartita/.test(html) &&
+        /c\.iPartita = lega\.id \+ ':' \+ c\.iPartita/.test(html));
+  prova('e i puntatori tornano al loro posto anche se un campionato inciampa',
+        /function perOgniLega[\s\S]{0,900}\} finally \{[\s\S]{0,200}S\.doc = eraDoc/.test(html));
   prova('e quelle selezioni sono la scelta della copertina, manopola compresa',
         /function ancoreGiornata\(\)[\s\S]{0,400}sceltePartita\(p, 1\)[\s\S]{0,120}sc\.ancora/.test(html));
   prova('dalla tabella del mese si arriva alle schedine scritte per esteso',

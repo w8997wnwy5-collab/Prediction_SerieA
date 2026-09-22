@@ -461,6 +461,10 @@ select{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:1
 .timr.scegli:active{background:var(--accent-soft);}
 .tabimp tr.scegli:active td{background:var(--accent-soft);}
 
+.forme.leghe{padding-bottom:12px;}
+.forme.leghe .formab{min-width:96px;}
+.formab.spenta{opacity:.45;cursor:default;}
+
 /* le schedine scritte per esteso: quale partita, in quale, a quanto */
 .forme{display:flex;gap:7px;overflow-x:auto;padding:2px 0 10px;
   -webkit-overflow-scrolling:touch;scrollbar-width:none;}
@@ -561,9 +565,25 @@ var S = {
   tab: 'giornata', doc: null, meta: null, mod: null, back: null, arb: null,
   mercatiAttivi: null,
   stato: 'carico', errore: null, avanzamento: 0, fase: 'Carico i dati',
-  aggiornando: false, tempoCalcolo: 0
+  aggiornando: false, tempoCalcolo: 0,
+  /* i cinque campionati: l'indice, i documenti, i modelli e quale si guarda */
+  leghe: null, docs: {}, mods: {}, simPerLega: {}, lega: null,
+  legheInCorso: false, legheFatte: ''
 };
-var VERSIONE = '3.2';
+var VERSIONE = '3.3';
+var LEGA_CASA = 'I1';
+/* Il peso dell'ancoraggio per i campionati che non sono quello di casa.
+
+   Non e' una comodita': e' il risultato della misura piu' netta di tutto il
+   progetto, rifatta campionato per campionato. Sul mercato QUOTATO il mercato
+   batte il modello, e il peso migliore e' UNO — il modello sta zitto dove il
+   banco parla, e parla lui sui quaranta mercati che il banco non quota.
+
+   Vale anche fuori dall'Italia? Sarebbe stato comodo darlo per buono e
+   sbagliato farlo: se in Premier il peso giusto fosse un altro, usare uno
+   renderebbe l'app peggiore proprio dove ci sono piu' partite fra cui
+   scegliere. Quindi si misura: tools/misura_ancora_leghe.js. */
+var ANCORA_ALTRE_LEGHE = 1;
 /* Un consiglio su una scommessa che il tuo operatore non accetta è un consiglio
    inutile. Questo è l'insieme standard che si trova su Sporttip; il resto resta
    disponibile ma spento, e si accende dalla sezione Dati. */
@@ -693,13 +713,148 @@ function prendi(percorso, forza){
     return r.json();
   });
 }
+/* ══════════════════════════════════════════════════════════════
+   CINQUE CAMPIONATI
+
+   L'app e' nata attorno a UN documento e UN modello, e ogni funzione qui
+   dentro li legge da S.doc e S.mod. Riscrivere cinquanta funzioni perche'
+   prendano un campionato come argomento sarebbe stato il modo piu' rumoroso
+   e piu' rischioso di aggiungerne quattro.
+
+   Quindi S.doc e S.mod restano dove sono, e diventano PUNTATORI al campionato
+   scelto. Cambiare campionato e' spostare due puntatori. La Giornata non se
+   ne accorge nemmeno: continua a chiedere "le partite" e "la piu' solida", e
+   sono quelle del campionato di turno.
+
+   Dove invece servono TUTTI insieme — le schedine, che e' il motivo per cui
+   quattro campionati sono stati aggiunti — c'e' perOgniLega, che gira sui
+   campionati spostando i puntatori e rimettendoli a posto.
+
+   I modelli si costruiscono senza backtest: costa 253 ms contro 15.000, e il
+   peso dell'ancoraggio non ha bisogno di essere ritarato campionato per
+   campionato — misurato, non dato per buono (tools/misura_ancora_leghe.js).
+   La Serie A tiene il suo giro completo, perche' e' quella che alimenta la
+   sezione Precisione.
+   ══════════════════════════════════════════════════════════════ */
+var CHIAVE_LEGA = 'seriea_lega_v1';
+function ricordaLega(id){
+  try{ localStorage.setItem(CHIAVE_LEGA, id); }catch(e){}
+}
+function legaRicordata(){
+  try{ return localStorage.getItem(CHIAVE_LEGA) || null; }catch(e){ return null; }
+}
+function scegliLega(id){
+  if(!puntaSu(id)) return;
+  ricordaLega(id);
+  render();
+  window.scrollTo(0, 0);
+}
+function legaCorrente(){
+  return (S.leghe || []).filter(function(l){ return l.id === S.lega; })[0] || null;
+}
+function legheCaricate(){
+  return (S.leghe || []).filter(function(l){ return S.docs[l.id] && S.mods[l.id]; });
+}
+function puntaSu(id){
+  if(!S.docs[id] || !S.mods[id]) return false;
+  S.lega = id;
+  S.doc = S.docs[id];
+  S.mod = S.mods[id];
+  S.simCache = S.simPerLega[id] || (S.simPerLega[id] = {});
+  S._prossime = null;
+  return true;
+}
+/* Gira su tutti i campionati caricati e rimette i puntatori dov'erano. Il
+   try/finally non e' prudenza generica: senza, una sola partita che fa
+   inciampare un conto lascerebbe l'app puntata su un altro campionato, e da
+   li' in poi la Giornata mostrerebbe la Bundesliga dicendo Serie A. */
+function perOgniLega(f){
+  var eraDoc = S.doc, eraMod = S.mod, eraLega = S.lega,
+      eraSim = S.simCache, eraProx = S._prossime;
+  var fuori = [];
+  try{
+    legheCaricate().forEach(function(l){
+      puntaSu(l.id);
+      try{ fuori.push({lega: l, valore: f(l)}); }
+      catch(e){ /* un campionato che inciampa non porta giu' gli altri */ }
+    });
+  } finally {
+    S.doc = eraDoc; S.mod = eraMod; S.lega = eraLega;
+    S.simCache = eraSim; S._prossime = eraProx;
+  }
+  return fuori;
+}
+
+/* Il modello di un campionato che non sia quello di casa: la stima, e basta.
+   Niente backtest (costa sessanta volte tanto), niente bootstrap, niente
+   calibrazione storica. Le fasce di incertezza restano quelle della
+   simulazione, che ci sono comunque. */
+function modelloLeggero(doc){
+  var giocate = (doc.partite || []).filter(function(p){ return p.gc != null; });
+  if(giocate.length < 200) return null;
+  var mod = M.costruisci(giocate, {
+    iterazioni: 400,
+    pesoTiri: (S.risultato && S.risultato.pesoTiri != null) ? S.risultato.pesoTiri : 0.60,
+    ancoraggio: ANCORA_ALTRE_LEGHE
+  });
+  if(!mod || !mod.ok) return null;
+  return {squadre: mod.squadre, indice: mod.indice, gol: mod.gol, tiri: mod.tiri,
+          primoTempo: mod.primoTempo, pesoTiri: mod.pesoTiri,
+          stiro: mod.stiro == null ? 1 : mod.stiro,
+          ancoraggio: mod.ancoraggio == null ? 0 : mod.ancoraggio,
+          calibrazioneTiri: mod.calibrazioneTiri,
+          repliche: null, se: null, effettoRosso: M.effettoRosso(giocate, mod)};
+}
+
+/* Gli altri campionati arrivano DOPO che l'app e' gia' in piedi: il file di
+   casa si carica e si mostra come sempre, e i quattro fratelli entrano in
+   sottofondo. Tre megabyte e mezzo davanti alla prima schermata sarebbero
+   stati il modo piu' sicuro di rendere l'app peggiore aggiungendo roba. */
+function caricaAltreLeghe(forza){
+  var da = (S.leghe || []).filter(function(l){ return !S.docs[l.id]; });
+  if(!da.length){ S.legheInCorso = false; render(); return Promise.resolve(); }
+  S.legheInCorso = true;
+  var fatte = 0;
+  return da.reduce(function(catena, l){
+    return catena.then(function(){
+      return prendi('data/' + l.file, forza).then(function(doc){
+        var mod = modelloLeggero(doc);
+        if(!mod) return;
+        S.docs[l.id] = doc;
+        S.mods[l.id] = mod;
+        S.simPerLega[l.id] = {};
+      }).catch(function(){ /* un campionato che non risponde non ferma gli altri */ })
+        .then(function(){
+          fatte++;
+          S.legheFatte = fatte + '/' + da.length;
+          render();
+        });
+    });
+  }, Promise.resolve()).then(function(){
+    S.legheInCorso = false;
+    render();
+  });
+}
+
 function carica(forza){
   S.stato = 'carico'; S.fase = 'Scarico i dati'; S.avanzamento = 0.03; render();
   return prendi('data/serie-a.json', forza).then(function(doc){
     S.doc = doc;
+    S.docs[LEGA_CASA] = doc;
     return prendi('data/meta.json', forza).catch(function(){ return null; });
   }).then(function(meta){
     S.meta = meta;
+    /* L'indice dice quali campionati esistono. Se manca — per esempio perche'
+       il giro dei dati non e' ancora passato dopo un aggiornamento dell'app —
+       si resta a uno solo, che e' esattamente come funzionava prima. */
+    return prendi('data/leghe.json', forza).catch(function(){ return null; });
+  }).then(function(indice){
+    S.leghe = (indice && indice.leghe && indice.leghe.length)
+      ? indice.leghe
+      : [{id: LEGA_CASA, nome: (S.doc && S.doc.lega) || 'Serie A', paese: 'Italia',
+          file: 'serie-a.json'}];
+    if(!S.lega) S.lega = legaRicordata() || LEGA_CASA;
+    if(!(S.leghe||[]).some(function(l){ return l.id === S.lega; })) S.lega = LEGA_CASA;
     var cache = leggiCache();
     if(cache && !forza){
       applicaRisultato(cache, true);
@@ -830,10 +985,22 @@ function applicaRisultato(ris, daCache){
             repliche: ris.repliche || null, se: ris.se || null,
             effettoRosso: ris.effettoRosso || null };
   S.simCache = {};
+  /* Il campionato di casa entra nella collezione come gli altri, cosi' da qui
+     in giu' nessuno deve sapere che e' speciale. Lo e' solo nel come viene
+     costruito, non nel come si usa. */
+  S.docs[LEGA_CASA] = S.doc;
+  S.mods[LEGA_CASA] = S.mod;
+  S.simPerLega[LEGA_CASA] = S.simCache;
+  if(!S.lega) S.lega = LEGA_CASA;
+  if(S.lega !== LEGA_CASA && S.docs[S.lega]) puntaSu(S.lega);
   S.daCache = !!daCache;
   S.stato = 'pronto';
   chiudiPronostici();       /* i pronostici passati si chiudono da soli */
   render();
+  /* E adesso gli altri quattro, in sottofondo: l'app e' gia' usabile. */
+  if(!S.legheInCorso && (S.leghe||[]).length > 1){
+    setTimeout(function(){ caricaAltreLeghe(false); }, 60);
+  }
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -1855,9 +2022,34 @@ function avvisoRitardo(){
     '</div>';
 }
 
+/* Il selettore dei campionati: si sceglie quale guardare, e la Giornata
+   mostra le sue partite con la sua "piu' solida". Tutto il resto della vista
+   non sa nemmeno che esistono cinque campionati — legge S.doc e S.mod come ha
+   sempre fatto, e quei due puntano al campionato scelto qui. */
+function selettoreLeghe(){
+  if(!(S.leghe||[]).length || S.leghe.length < 2) return '';
+  var pronte = {};
+  legheCaricate().forEach(function(l){ pronte[l.id] = 1; });
+  var h = '<div class="forme leghe">' + S.leghe.map(function(l){
+    var ok = !!pronte[l.id];
+    var quante = l.inArrivo != null ? l.inArrivo : '';
+    return '<button class="formab' + (l.id===S.lega?' on':'') + (ok?'':' spenta') + '"' +
+      (ok ? ' onclick="scegliLega(\'' + l.id + '\')"' : ' disabled') + '>' +
+      '<b>' + esc(l.nome) + '</b><em>' + (ok ? esc(l.paese) : 'carico…') + '</em></button>';
+  }).join('') + '</div>';
+  if(S.legheInCorso){
+    h += '<div class="note" style="margin:-4px 0 12px">Sto caricando gli altri campionati ' +
+      (S.legheFatte ? '(' + esc(S.legheFatte) + ') ' : '') +
+      '— l\'app funziona già, quelli si accendono man mano. Ognuno ha il suo modello: ' +
+      'le forze di due campionati diversi non sono confrontabili, e non devono esserlo, ' +
+      'perché non si scommette su Inter–Arsenal.</div>';
+  }
+  return h;
+}
+
 function tabGiornata(){
   var prossime = prossimePartite();
-  var h = '';
+  var h = selettoreLeghe();
   if(!prossime.length){
     h += '<div class="card"><div class="empty"><b>Nessuna partita in calendario</b>'+
       'Il file dei dati non contiene partite future. Succede fra una stagione e l\'altra, '+
@@ -1870,7 +2062,9 @@ function tabGiornata(){
   S._prossime = prossime;
   segnaPronostici();
   h += avvisoRitardo();
-  h += '<div class="h2">Prossime partite<span class="r">'+g.partite.length+'</span></div>';
+  var lg = legaCorrente();
+  h += '<div class="h2">'+(lg && S.leghe.length>1 ? esc(lg.nome) : 'Prossime partite')+
+    '<span class="r">'+g.partite.length+'</span></div>';
   h += '<p class="lede">Dal '+esc(dataBreve(g.inizio))+(g.fine!==g.inizio?' al '+esc(dataBreve(g.fine)):'')+
     '. Su ogni partita <b>la più solida</b> — tocca per tutte le altre.</p>';
   h += avvisoSenzaQuote(g.partite);
@@ -2019,6 +2213,45 @@ function ancoreGiornata(){
                 p: m.p, p05: m.p05, p95: m.p95});
   });
   return fuori.sort(function(a, b){ return b.p05 - a.p05; });
+}
+
+/* Le selezioni di TUTTI i campionati caricati, per le schedine.
+
+   E' il motivo per cui quattro campionati sono stati aggiunti: dieci partite
+   di Serie A davano dieci selezioni, e una schedina da tre su dieci pesca da
+   un menu' piccolo. Con cinque campionati il menu' e' di una cinquantina, e a
+   parita' di gambe si scelgono le piu' solide fra cinque volte tante.
+
+   La matematica delle schedine non cambia di una riga, e vale la pena dire
+   perche': pretende che le gambe siano INDIPENDENTI, e due partite di
+   campionati diversi lo sono almeno quanto due partite dello stesso. Semmai di
+   piu' — niente arbitro in comune, niente rivalita', niente giornata storta
+   dello stesso torneo.
+
+   Ogni selezione si porta dietro il suo campionato: serve a mostrarlo accanto
+   alla partita, e serve alla chiave, perche' l'indice 3 della Serie A e
+   l'indice 3 della Premier sono due partite diverse. */
+function ancoreTutteLeLeghe(){
+  var fuori = [];
+  perOgniLega(function(lega){
+    ancoreGiornata().forEach(function(a){
+      a.lega = lega;
+      a.iPartita = lega.id + ':' + a.iPartita;
+      fuori.push(a);
+    });
+  });
+  return fuori.sort(function(a,b){ return b.p05 - a.p05; });
+}
+function candidatiTutteLeLeghe(){
+  var fuori = [];
+  perOgniLega(function(lega){
+    candidatiGiornata().forEach(function(c){
+      c.lega = lega;
+      c.iPartita = lega.id + ':' + c.iPartita;
+      fuori.push(c);
+    });
+  });
+  return fuori;
 }
 
 function candidatiGiornata(){
@@ -2249,8 +2482,9 @@ function schedaSchedina(profilo, scelte){
 }
 
 function elencoSchedine(){
-  var partite = partiteGiornata();
-  var cand = candidatiGiornata();
+  var cand = candidatiTutteLeLeghe();
+  var partite = [];
+  perOgniLega(function(){ partite = partite.concat(partiteGiornata()); });
   if(!cand.length){
     return '<div class="card"><div class="empty"><b>Nessun mercato attivo</b>'+
       'Accendine qualcuno in Dati → Mercati.</div></div>';
@@ -2424,7 +2658,8 @@ function testoSchedina(o, k){
   o.gruppi[k].forEach(function(i, n){
     var c = o.selezioni[i];
     righe.push('  ' + (n+1) + '. ' + c.nome + '  —  ' + c.partita.c + ' - ' + c.partita.v +
-               ' (' + dataBreve(c.partita.d) + ')');
+               ' (' + dataBreve(c.partita.d) +
+               (c.lega ? ', ' + c.lega.nome : '') + ')');
   });
   righe.push('  quota attesa ' + nu(o.quote[k],2) + ' — vincita ' +
              nu(o.perSchedina * o.quote[k], 0) + ' chf — esce il ' + pc(o.probSchedine[k]) +
@@ -2530,6 +2765,7 @@ function cardLeTueSchedine(){
       var c = o.selezioni[i];
       h += '<div class="sqg"><span class="sqn">' + esc(c.nome) +
         '<em>' + esc(c.partita.c) + ' – ' + esc(c.partita.v) + ' · ' + esc(dataBreve(c.partita.d)) +
+        (c.lega && S.leghe && S.leghe.length > 1 ? ' · ' + esc(c.lega.nome) : '') +
         '</em></span><span class="sqq">' + pc(c.p) +
         '<i>' + nu(quotaBanco(1/c.p, 1), 2) + '</i></span></div>';
     });
@@ -2772,13 +3008,15 @@ function ripartizioneMigliore(sel, L, m, pt){
    dopo che hai spento un mercato. */
 var _meseCache = null;
 function cercaStruttureMese(){
-  var tutte = ancoreGiornata();
+  var tutte = ancoreTutteLeLeghe();
   var n = tutte.length;
   if(n < 2) return null;
   var pt = puntata();
   var firma = pt + '|' + ricarico().v + '|' + tutte.map(function(c){
     return c.iPartita + ':' + c.id + ':' + c.p.toFixed(5);
   }).join(',');
+  /* iPartita porta gia' dentro il campionato, quindi un campionato che
+     finisce di caricarsi cambia la firma da solo e il conto si rifa'. */
   if(_meseCache && _meseCache.firma === firma) return _meseCache.v;
 
   var fuori = [], L, m;
