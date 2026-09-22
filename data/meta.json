@@ -1,5 +1,5 @@
 {
- "aggiornato": "2026-09-22T07:15:08+00:00",
+ "aggiornato": "2026-09-22T09:52:48+00:00",
  "esito": "ok",
  "ultima_partita": "2026-09-20",
  "partite_totali": 1950,
@@ -11,11 +11,11 @@
  "con_xg": 50,
  "con_quote": 1950,
  "in_arrivo_con_quote": 30,
- "crediti_quote": 431,
+ "crediti_quote": 429,
  "in_arrivo_con_orario": 80,
  "marcatori": 0,
- "notizie": 51,
- "notizie_assenze": 10,
+ "notizie": 49,
+ "notizie_assenze": 9,
  "stagioni": [
   "2021-22",
   "2022-23",
@@ -35,13 +35,13 @@
   "2021-22": "ok: 380 partite, 0 con arbitro",
   "TheSportsDB": "ok: 1 giocate di cui 1 col risultato, 1 in arrivo",
   "calendario ravvicinato": "ok: 10 partite",
-  "calendario stagione": "ok da openfootball: 340 partite",
-  "The Odds API crediti": "restano 431 (usati 69)",
+  "calendario stagione": "ok da openfootball: 330 partite",
+  "The Odds API crediti": "restano 429 (usati 71)",
   "The Odds API": "ok: 20 partite con quote (20 con Betfair)",
   "calendario": "340 partite in tutto, 30 con le quote (10 scaricate adesso, 20 tenute da prima)",
   "TheSportsDB risultati": "1 risultati accolti",
-  "Understat 2026-27": "fallita: nella pagina non compare mai datesData (18714 byte): o è cambiato il nome, o quella servita non è la pagina della lega",
-  "Understat 2025-26": "fallita: nella pagina non compare mai datesData (18714 byte): o è cambiato il nome, o quella servita non è la pagina della lega",
+  "Understat 2026-27": "fallita: nella pagina non compare mai datesData (18705 byte): o è cambiato il nome, o quella servita non è la pagina della lega",
+  "Understat 2025-26": "fallita: nella pagina non compare mai datesData (18705 byte): o è cambiato il nome, o quella servita non è la pagina della lega",
   "Understat": "fermato dopo 2 tentativi: understat.com risponde sempre con la stessa pagina, la stessa per tutte le stagioni. Non è un formato cambiato, è un blocco — probabilmente sull'indirizzo da cui gira la Action. Gli xG restano dedotti dai tiri.",
   "ESPN calendario": "non disponibile: HTTP Error 403: Forbidden",
   "football-data.org arbitri": "saltati: nessuna chiave FOOTBALL_DATA_TOKEN",
@@ -54,9 +54,9 @@
   "API-Football 2021-22": "non disponibile: API-Football dice: {\"plan\": \"Free plans do not have access to this season, try from 2022 to 2024.\"}",
   "API-Football richieste": "6 usate su 70 disponibili",
   "marcatori": "saltati: nessuna chiave FOOTBALL_DATA_TOKEN",
-  "notizie ANSA": "37 titoli tenuti su 81 (scartati: 44 nessuna squadra)",
+  "notizie ANSA": "36 titoli tenuti su 79 (scartati: 43 nessuna squadra)",
   "notizie Football Italia": "9 titoli tenuti su 20 (scartati: 11 nessuna squadra)",
-  "notizie Repubblica": "5 titoli tenuti su 25 (scartati: 4 doppio, 16 nessuna squadra)",
-  "notizie": "51 titoli tenuti, 10 segnalano un'assenza, 0 la panchina"
+  "notizie Repubblica": "4 titoli tenuti su 25 (scartati: 1 doppio, 20 nessuna squadra)",
+  "notizie": "49 titoli tenuti, 9 segnalano un'assenza, 0 la panchina"
  }
 }
