@@ -114,5 +114,72 @@ def main():
     return 0
 
 
+def sonda_mercati():
+    """Quali mercati vende, e quanto costano.
+
+    L'app oggi si ancora a DUE assi — chi vince e quanti gol — e da li' deduce
+    quaranta mercati che il banco non quota. Ma la misura piu' netta di tutto
+    il progetto dice che sul mercato quotato il mercato batte il modello, su
+    tutti e tredici i mercati provati.
+
+    Quindi: se questa API vende DIRETTAMENTE un mercato che oggi deduco — il
+    Gol/Gol, la doppia chance — ancorarsi a quel prezzo invece di dedurlo
+    dovrebbe essere piu' preciso. Vale la pena sapere quali ci sono e cosa
+    costano in crediti, perche' il piano gratuito ne da' 500 al mese e oggi
+    ne spendo 240.
+    """
+    chiave = os.environ.get('ODDS_API_KEY', '').strip()
+    riga()
+    riga('== quali mercati, e a che prezzo ==')
+    if not chiave:
+        riga('nessuna chiave.')
+        return
+    # un mercato alla volta: cosi' si vede chi risponde e chi no, e quanto costa
+    for m in ('h2h', 'totals', 'spreads', 'btts', 'draw_no_bet',
+              'double_chance', 'team_totals', 'alternate_totals'):
+        try:
+            d, testa = chiedi('/sports/%s/odds' % SPORT,
+                              {'regions': 'eu', 'markets': m, 'oddsFormat': 'decimal'}, chiave)
+        except urllib.error.HTTPError as e:
+            corpo = e.read()[:120].decode('utf-8', 'replace')
+            riga('  %-18s HTTP %s — %s' % (m, e.code, corpo))
+            continue
+        except Exception as e:                   # noqa: BLE001
+            riga('  %-18s errore: %s' % (m, str(e)[:80]))
+            continue
+        conBanchi = sum(1 for p in d if p.get('bookmakers'))
+        banchi = set()
+        for p in d:
+            for b in p.get('bookmakers') or []:
+                for mk in b.get('markets') or []:
+                    if mk.get('key') == m:
+                        banchi.add(b.get('key'))
+        riga('  %-18s %2d partite, %2d banchi, costo %s crediti, restano %s'
+             % (m, conBanchi, len(banchi),
+                testa.get('x-requests-last', '?'), testa.get('x-requests-remaining', '?')))
+
+    # e le regioni: piu' regioni = piu' banchi, ma i crediti si moltiplicano
+    riga()
+    riga('== quanto rende allargare le regioni (solo h2h) ==')
+    for reg in ('eu', 'uk', 'eu,uk'):
+        try:
+            d, testa = chiedi('/sports/%s/odds' % SPORT,
+                              {'regions': reg, 'markets': 'h2h', 'oddsFormat': 'decimal'}, chiave)
+        except Exception as e:                   # noqa: BLE001
+            riga('  %-8s errore: %s' % (reg, str(e)[:80]))
+            continue
+        banchi = set()
+        exch = 0
+        for p in d:
+            nomi = [b.get('key') for b in p.get('bookmakers') or []]
+            banchi.update(nomi)
+            if any('betfair' in (n or '') for n in nomi):
+                exch += 1
+        riga('  %-8s %2d banchi distinti, %2d partite con un exchange, costo %s crediti'
+             % (reg, len(banchi), exch, testa.get('x-requests-last', '?')))
+
+
 if __name__ == '__main__':
-    sys.exit(main())
+    esito = main()
+    sonda_mercati()
+    sys.exit(esito)
