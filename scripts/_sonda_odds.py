@@ -340,8 +340,75 @@ def sonda_acquisto():
             riga('  %-18s errore: %s' % (nome, str(e)[:90]))
 
 
+def sonda_mercati_per_evento():
+    """I mercati in piu' esistono, ma su un altro indirizzo?
+
+    La sonda di prima chiedeva btts e doppia chance all'indirizzo che porta
+    tutte le partite insieme, e si e' presa un 422: "Markets not supported by
+    this endpoint". Quel messaggio e' diverso da quello dello storico, che dice
+    chiaro "only available on paid usage plans" — qui non dice che manca il
+    piano, dice che sbaglio porta. Vale la pena bussare all'altra.
+
+    Se esistono, e' la cosa piu' preziosa che si possa comprare per questo
+    progetto: l'app oggi si ancora a DUE assi e da li' DEDUCE quaranta mercati,
+    ma la misura piu' netta di tutto il lavoro dice che sul mercato quotato il
+    mercato batte il modello, peso ottimale uno, su tutti e tredici i mercati
+    provati. Un prezzo vero per il Gol/Gol varrebbe piu' di qualunque cosa io
+    possa aggiungere al modello.
+
+    Costa un credito per partita per mercato, quindi qui si guarda anche il
+    conto: dieci partite a giornata, quattro giri al giorno, fa presto a
+    diventare il piano da pagare.
+    """
+    chiave = os.environ.get('ODDS_API_KEY', '').strip()
+    riga()
+    riga('== i mercati in piu\' esistono sull\'indirizzo per singola partita? ==')
+    if not chiave:
+        riga('nessuna chiave.')
+        return
+    try:
+        eventi, testa = chiedi('/sports/%s/events' % SPORT, {}, chiave)
+    except Exception as e:                       # noqa: BLE001
+        riga('  elenco eventi: errore %s' % str(e)[:120])
+        return
+    riga('  eventi in arrivo: %d, costo %s crediti, restano %s'
+         % (len(eventi), testa.get('x-requests-last', '?'), testa.get('x-requests-remaining', '?')))
+    if not eventi:
+        return
+    ev = eventi[0]
+    riga('  provo su: %s - %s' % (ev.get('home_team'), ev.get('away_team')))
+    riga()
+    for m in ('btts', 'double_chance', 'draw_no_bet', 'alternate_totals',
+              'team_totals', 'h2h_h1', 'totals_h1', 'player_goal_scorer_anytime'):
+        try:
+            d, testa = chiedi('/sports/%s/events/%s/odds' % (SPORT, ev.get('id')),
+                              {'regions': 'eu', 'markets': m, 'oddsFormat': 'decimal'}, chiave)
+        except urllib.error.HTTPError as e:
+            corpo = e.read()[:150].decode('utf-8', 'replace').replace('\n', ' ')
+            riga('  %-26s HTTP %s — %s' % (m, e.code, corpo))
+            continue
+        except Exception as e:                   # noqa: BLE001
+            riga('  %-26s errore: %s' % (m, str(e)[:90]))
+            continue
+        banchi = [b for b in (d.get('bookmakers') or [])
+                  if any(mk.get('key') == m for mk in (b.get('markets') or []))]
+        riga('  %-26s OK — %2d banchi, costo %s crediti, restano %s'
+             % (m, len(banchi), testa.get('x-requests-last', '?'),
+                testa.get('x-requests-remaining', '?')))
+        if banchi:
+            mk = [x for x in (banchi[0].get('markets') or []) if x.get('key') == m][0]
+            campione = ', '.join('%s %s=%s' % (o.get('name'), o.get('point', ''), o.get('price'))
+                                 for o in (mk.get('outcomes') or [])[:4])
+            riga('      %s: %s' % (banchi[0].get('key'), campione))
+            esistente = [b.get('key') for b in banchi]
+            riga('      exchange fra questi: %s'
+                 % (', '.join(k for k in esistente if 'betfair' in (k or '') or 'smarkets' in (k or ''))
+                    or 'nessuno'))
+
+
 if __name__ == '__main__':
     esito = main()
     sonda_mercati()
     sonda_acquisto()
+    sonda_mercati_per_evento()
     sys.exit(esito)
