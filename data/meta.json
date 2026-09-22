@@ -1,10 +1,10 @@
 {
- "aggiornato": "2026-09-21T23:29:59+00:00",
+ "aggiornato": "2026-09-22T05:24:24+00:00",
  "esito": "ok",
  "ultima_partita": "2026-09-20",
  "partite_totali": 1950,
  "partite_giocate": 1950,
- "nuove_oggi": 2,
+ "nuove_oggi": 0,
  "partite_in_arrivo": 340,
  "con_arbitro": 1140,
  "con_tiri": 1950,
@@ -13,7 +13,7 @@
  "in_arrivo_con_quote": 30,
  "in_arrivo_con_orario": 80,
  "marcatori": 0,
- "notizie": 56,
+ "notizie": 51,
  "notizie_assenze": 10,
  "stagioni": [
   "2021-22",
@@ -52,9 +52,9 @@
   "API-Football 2021-22": "non disponibile: API-Football dice: {\"plan\": \"Free plans do not have access to this season, try from 2022 to 2024.\"}",
   "API-Football richieste": "6 usate su 70 disponibili",
   "marcatori": "saltati: nessuna chiave FOOTBALL_DATA_TOKEN",
-  "notizie ANSA": "40 titoli tenuti su 85 (scartati: 45 nessuna squadra)",
+  "notizie ANSA": "37 titoli tenuti su 81 (scartati: 44 nessuna squadra)",
   "notizie Football Italia": "9 titoli tenuti su 20 (scartati: 11 nessuna squadra)",
-  "notizie Repubblica": "7 titoli tenuti su 25 (scartati: 6 doppio, 12 nessuna squadra)",
-  "notizie": "56 titoli tenuti, 10 segnalano un'assenza, 0 la panchina"
+  "notizie Repubblica": "5 titoli tenuti su 25 (scartati: 4 doppio, 16 nessuna squadra)",
+  "notizie": "51 titoli tenuti, 10 segnalano un'assenza, 0 la panchina"
  }
 }
