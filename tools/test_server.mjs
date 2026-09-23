@@ -292,6 +292,107 @@ async function entra(env, codice) {
   prova('un VIP normale non puo fare codici', prova1.stato === 401, prova1.stato);
 }
 
+/* ═══ 7-ter. la classifica ═══
+
+   Qui si prova la cosa che tiene in piedi tutta la classifica: che il
+   punteggio non se lo possa mettere chi gioca. Se la schedina la dichiara il
+   giocatore a partita finita, la classifica diventa la graduatoria di chi
+   mente meglio, e muore in una settimana.
+
+   Tre chiodi, e sono le tre prove scritte in maiuscolo qui sotto. */
+{
+  const env = ambiente();
+  const giorno = (n) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
+  await env.DATI.put('cal:I1', JSON.stringify({ aggiornato: 'ora', calendario: [
+    { d: giorno(3), o: '20:45', c: 'Inter', v: 'Milan', q: [2, 3.3, 3.8] },
+    { d: giorno(4), o: '15:00', c: 'Roma', v: 'Lazio', q: [2.2, 3.2, 3.4] },
+    { d: giorno(-2), o: '20:45', c: 'Napoli', v: 'Juve', q: [2.1, 3.3, 3.5] },
+  ] }));
+
+  const cod = await creaCodice(env, { tipo: 'vip', nome: 'uno' });
+  const g = (await entra(env, cod)).corpo.gettone;
+
+  /* senza nome non si gioca: in classifica un anonimo non ci sta */
+  const senzaNome = await leggi(await chiedi(env, '/api/schedina', { metodo: 'POST', gettone: g,
+    corpo: { gambe: [{ lega: 'I1', d: giorno(3), c: 'Inter', v: 'Milan', mercato: 'o15', quota: 1.3 }] } }));
+  prova('senza un nome non si registra niente', senzaNome.stato === 428, senzaNome.stato);
+
+  const nick = await leggi(await chiedi(env, '/api/nick',
+    { metodo: 'POST', gettone: g, corpo: { nick: 'Cristian' } }));
+  prova('il nome si mette una volta', nick.stato === 200 && nick.corpo.nick === 'Cristian', nick.stato);
+
+  const corto = await leggi(await chiedi(env, '/api/nick',
+    { metodo: 'POST', gettone: g, corpo: { nick: 'ab' } }));
+  prova('e uno da due lettere non va bene', corto.stato === 400);
+
+  /* due persone, lo stesso nome */
+  const cod2 = await creaCodice(env, { tipo: 'vip', nome: 'due' });
+  const g2 = (await entra(env, cod2)).corpo.gettone;
+  const doppio = await leggi(await chiedi(env, '/api/nick',
+    { metodo: 'POST', gettone: g2, corpo: { nick: 'cristian' } }));
+  prova('due giocatori non possono chiamarsi uguale', doppio.stato === 409, doppio.stato);
+
+  /* la schedina vera */
+  const ok = await leggi(await chiedi(env, '/api/schedina', { metodo: 'POST', gettone: g, corpo: {
+    gambe: [{ lega: 'I1', d: giorno(3), c: 'Inter', v: 'Milan', mercato: 'o15', quota: 1.30 },
+            { lega: 'I1', d: giorno(4), c: 'Roma', v: 'Lazio', mercato: 'casa', quota: 2.20 }] } }));
+  prova('una schedina su partite vere si registra',
+        ok.stato === 200 && Math.abs(ok.corpo.quota - 2.86) < 0.001, ok.corpo && ok.corpo.quota);
+
+  /* I TRE CHIODI */
+  const tardi = await leggi(await chiedi(env, '/api/schedina', { metodo: 'POST', gettone: g, corpo: {
+    gambe: [{ lega: 'I1', d: giorno(-2), c: 'Napoli', v: 'Juve', mercato: 'casa', quota: 2.1 }] } }));
+  prova('UNA PARTITA GIA COMINCIATA NON SI REGISTRA', tardi.stato === 409, tardi.stato);
+
+  const finta = await leggi(await chiedi(env, '/api/schedina', { metodo: 'POST', gettone: g, corpo: {
+    gambe: [{ lega: 'I1', d: giorno(3), c: 'Atalanta', v: 'Torino', mercato: 'casa', quota: 2.1 }] } }));
+  prova('UNA PARTITA INVENTATA NON SI REGISTRA', finta.stato === 400, finta.stato);
+
+  const gonfia = await leggi(await chiedi(env, '/api/schedina', { metodo: 'POST', gettone: g, corpo: {
+    gambe: [{ lega: 'I1', d: giorno(3), c: 'Inter', v: 'Milan', mercato: 'O15', quota: 90 }] } }));
+  prova('UNA QUOTA GONFIATA NON PASSA', gonfia.stato === 400, gonfia.stato);
+
+  const suoi = await leggi(await chiedi(env, '/api/admin/salda', { metodo: 'POST', gettone: g,
+    corpo: { esiti: [{ chiave: 'sch:x:y', vinta: true }] } }));
+  prova('CHI GIOCA NON PUO SALDARE I PROPRI PUNTI', suoi.stato === 401, suoi.stato);
+
+  /* il giro dei dati invece si', ed e' l'unico */
+  const pend = await leggi(await chiedi(env, '/api/admin/pendenti', { admin: env.SEGRETO_ADMIN }));
+  prova('il giro dei dati vede le schedine da saldare',
+        pend.stato === 200 && pend.corpo.quante === 1, pend.corpo && pend.corpo.quante);
+
+  const saldo = await leggi(await chiedi(env, '/api/admin/salda', { metodo: 'POST', admin: env.SEGRETO_ADMIN,
+    corpo: { esiti: [{ chiave: pend.corpo.schedine[0].chiave, vinta: true }] } }));
+  /* 10 x log2(2.86) = 15 */
+  prova('e i punti li mette lui: 10 per il logaritmo della quota',
+        saldo.corpo.saldate === 1 && saldo.corpo.punti === 15, JSON.stringify(saldo.corpo));
+
+  const cl = await leggi(await chiedi(env, '/api/classifica', { gettone: g }));
+  prova('la classifica mostra il nome, non il codice',
+        cl.corpo.classifica[0].nick === 'Cristian' && cl.corpo.classifica[0].punti === 15,
+        JSON.stringify(cl.corpo.classifica[0]));
+  prova('e dice a ognuno il suo posto', cl.corpo.io && cl.corpo.io.posto === 1);
+  prova('nessuna impronta esce insieme al nome',
+        cl.corpo.classifica.every(x => x.id === undefined));
+
+  const dinuovo = await leggi(await chiedi(env, '/api/admin/salda', { metodo: 'POST', admin: env.SEGRETO_ADMIN,
+    corpo: { esiti: [{ chiave: pend.corpo.schedine[0].chiave, vinta: true }] } }));
+  prova('una schedina saldata due volte non paga due volte', dinuovo.corpo.saldate === 0);
+
+  /* l'ospite: niente codice, ma un nome e un posto */
+  const osp = await leggi(await chiedi(env, '/api/ospite', { metodo: 'POST' }));
+  prova('chi non ha un codice puo comunque avere un nome',
+        osp.stato === 200 && !!osp.corpo.gettone && osp.corpo.tutto === false);
+  const go = osp.corpo.gettone;
+  const nickOsp = await leggi(await chiedi(env, '/api/nick',
+    { metodo: 'POST', gettone: go, corpo: { nick: 'Ospite1' } }));
+  prova('e si iscrive alla classifica', nickOsp.stato === 200);
+  const calOsp = await leggi(await chiedi(env, '/api/calendario/I1', { gettone: go }));
+  prova('MA RESTA FUORI: vede sempre e solo le partite gratis',
+        calOsp.corpo.tutto === false && calOsp.corpo.calendario.length <= 3,
+        calOsp.corpo && calOsp.corpo.calendario.length);
+}
+
 /* ═══ 8-bis. l'origine dimenticata ═══
 
    Montando il Worker dal pannello di Cloudflare invece che da riga di comando,

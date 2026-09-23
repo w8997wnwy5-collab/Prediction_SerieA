@@ -41,6 +41,9 @@ const GRATIS = 3;                 /* partite per campionato senza codice */
 const ORIGINI_PREDEFINITE = 'https://w8997wnwy5-collab.github.io';
 const GETTONE_GIORNI = 30;        /* ogni quanto il telefono deve ripresentarsi */
 const TENTATIVI_ORA = 12;         /* codici sbagliati tollerati, per indirizzo */
+const GAMBE_MAX = 8;              /* gambe per schedina: oltre, non e' piu' una giocata */
+const CLASSIFICA_QUANTI = 50;     /* quanti se ne mandano */
+const NICK_MIN = 3, NICK_MAX = 16;
 
 /* ─────────────────────────── utilita' ─────────────────────────── */
 
@@ -200,9 +203,19 @@ async function postCodice(req, env) {
   voce.usi = (voce.usi || 0) + 1;
   await env.CODICI.put('codice:' + codice, JSON.stringify(voce));
 
+  /* Dentro il gettone va l'IMPRONTA del codice, non il codice.
+
+     Serve un nome stabile per la classifica — il punteggio deve ritrovare il
+     suo proprietario a ogni accesso — e il codice quel lavoro lo farebbe. Ma
+     il codice e' un segreto che apre l'app, e il gettone e' solo firmato, non
+     cifrato: chiunque lo legga se lo ritroverebbe dentro in chiaro. Chi passa
+     il gettone a un amico gli regala l'accesso per trenta giorni; se ci
+     mettessimo il codice gli regalerebbe l'accesso per sempre, e senza
+     saperlo. L'impronta identifica e non rivela. */
+  const gid = await chiaveGiocatore(codice, env.SEGRETO);
   const gettone = await firmaGettone({
     tipo: voce.tipo, nome: voce.nome || '', scade: voce.scade || null,
-    capo: voce.tipo === 'capo',
+    capo: voce.tipo === 'capo', gid: gid,
     exp: Date.now() + GETTONE_GIORNI * 86400000,
   }, env.SEGRETO);
   return json({ gettone, tipo: voce.tipo, nome: voce.nome || '',
@@ -210,7 +223,19 @@ async function postCodice(req, env) {
 }
 
 async function getIo(req, env) {
-  return json(await dirittiDa(req, env));
+  const d = await dirittiDa(req, env);
+  const io = await chiSono(req, env);
+  /* "Valido" e "apre tutto" sono due cose diverse, e confonderle costava un
+     bug intero: il gettone da ospite e' validissimo e non apre niente. L'app
+     butta il gettone quando non vale, non quando non apre. */
+  d.valido = !!io;
+  if (io) {
+    const g = await leggiGiocatore(env, io.id);
+    d.nick = (g && g.nick) || null;
+    d.punti = (g && g.punti) || 0;
+    d.vinte = (g && g.vinte) || 0;
+  }
+  return json(d);
 }
 
 async function getCalendario(req, env, lega) {
@@ -351,6 +376,285 @@ async function adminCarica(req, env, lega) {
 
 /* ─────────────────────────── l'ingresso ─────────────────────────── */
 
+/* ══════════════════════════════════════════════════════════════════════════
+   LA CLASSIFICA
+
+   Un punteggio ha senso solo se non ci si puo' mettere dentro quello che si
+   vuole. Se la schedina la dichiara chi gioca, a partita finita, la classifica
+   diventa la graduatoria di chi mente meglio — e muore in una settimana,
+   perche' il primo che se ne accorge smette di giocare.
+
+   Quindi tre chiodi, e sono tutti e tre nel server:
+
+     1. la schedina si registra PRIMA del fischio d'inizio. L'ora la decide il
+        server guardando il suo orologio, non quello del telefono.
+     2. ogni gamba deve esistere nel calendario del server, con la stessa
+        partita e una quota che non si discosta da quella vera. Non si
+        registrano partite inventate ne' quote gonfiate.
+     3. l'esito NON lo dice chi ha giocato. Lo calcola il giro dei dati, che
+        vede i risultati, usando la stessa funzione con cui l'app decide se
+        una giocata e' presa — M.haVinto. Una sola verita', non due.
+
+   I punti: 10 x log2(quota) per ogni schedina vinta. Logaritmico apposta.
+   Con i punti uguali alla quota, una botta di culo da 50 cancellerebbe un
+   mese di gioco solido, e la classifica misurerebbe la fortuna. Cosi' invece
+   una da 2.00 vale 10, una da 4.00 ne vale 20, una da 16.00 quaranta: il
+   rischio paga, ma paga come il logaritmo, non come il colpo di fortuna.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+function puntiDi(quota) {
+  if (!(quota > 1)) return 0;
+  return Math.max(1, Math.round(10 * Math.log2(quota)));
+}
+
+function nickPulito(x) {
+  const n = String(x || '').trim().replace(/\s+/g, ' ');
+  if (n.length < NICK_MIN || n.length > NICK_MAX) return null;
+  if (!/^[\p{L}\p{N}][\p{L}\p{N} ._-]*$/u.test(n)) return null;
+  return n;
+}
+
+/* La chiave di chi gioca. Non e' il codice: il codice e' un segreto — chi lo
+   ha in mano entra — e la classifica e' pubblica. Si usa l'impronta del
+   codice, che identifica senza rivelare. */
+async function chiaveGiocatore(codice, segreto) {
+  const f = await crypto.subtle.sign('HMAC', await chiave(segreto), enc.encode('gioc:' + codice));
+  return base64url(f).slice(0, 22);
+}
+
+async function leggiGiocatore(env, id) {
+  const g = await env.CODICI.get('gioc:' + id);
+  return g ? JSON.parse(g) : null;
+}
+
+/* Chi sta chiedendo, in termini di classifica: l'impronta, e che grado ha. */
+async function chiSono(req, env) {
+  const auth = req.headers.get('Authorization') || '';
+  const gettone = auth.startsWith('Bearer ') ? auth.slice(7) : '';
+  const dati = await leggiGettone(gettone, env.SEGRETO);
+  if (!dati) return null;
+  if (!dati.gid) return null;
+  return {
+    id: dati.gid,
+    tipo: dati.capo ? 'capo' : (dati.tipo || 'libero'),
+    tutto: dati.tipo === 'vip' || dati.tipo === 'capo' ||
+           (!!dati.scade && new Date(dati.scade).getTime() > Date.now()),
+  };
+}
+
+/* L'OSPITE
+
+   Chi non ha un codice puo' comunque avere un nome e un posto in classifica.
+   Non e' generosita': e' il gancio. Uno che vede il suo nome dodicesimo e sa
+   che i primi undici scelgono fra millecinquecento partite mentre lui ne
+   vede quindici, ha un motivo per pagare che nessun muro gli avrebbe dato.
+
+   E vedere non e' entrare: l'ospite resta libero, con le sue tre partite per
+   campionato. Il gettone dice chi e', non cosa puo'. */
+async function postOspite(req, env) {
+  const seme = base64url(crypto.getRandomValues(new Uint8Array(18)).buffer);
+  const gid = await chiaveGiocatore('ospite:' + seme, env.SEGRETO);
+  const gettone = await firmaGettone({
+    tipo: 'libero', nome: '', scade: null, capo: false, gid: gid,
+    exp: Date.now() + GETTONE_GIORNI * 86400000,
+  }, env.SEGRETO);
+  return json({ gettone, tipo: 'libero', tutto: false, capo: false });
+}
+
+async function postNick(req, env) {
+  const io = await chiSono(req, env);
+  if (!io) return json({ errore: 'serve un codice' }, 401);
+  let c; try { c = await req.json(); } catch (e) { c = {}; }
+  const nick = nickPulito(c.nick);
+  if (!nick) {
+    return json({ errore: 'il nome va da ' + NICK_MIN + ' a ' + NICK_MAX +
+                          ' caratteri, lettere e numeri' }, 400);
+  }
+  /* uno per uno: due "Marco" in classifica non si distinguono */
+  const chiave2 = 'nick:' + nick.toLowerCase();
+  const gia = await env.CODICI.get(chiave2);
+  if (gia && gia !== io.id) return json({ errore: 'questo nome e gia preso' }, 409);
+
+  const vecchio = await leggiGiocatore(env, io.id);
+  if (vecchio && vecchio.nick && vecchio.nick.toLowerCase() !== nick.toLowerCase()) {
+    await env.CODICI.delete('nick:' + vecchio.nick.toLowerCase());
+  }
+  const g = Object.assign({ punti: 0, vinte: 0, giocate: 0 }, vecchio || {},
+                          { nick, tipo: io.tipo, aggiornato: new Date().toISOString() });
+  await env.CODICI.put('gioc:' + io.id, JSON.stringify(g));
+  await env.CODICI.put(chiave2, io.id);
+  return json({ nick: g.nick, punti: g.punti, vinte: g.vinte, giocate: g.giocate, tipo: g.tipo });
+}
+
+async function getClassifica(req, env) {
+  const io = await chiSono(req, env);
+  const fuori = [];
+  let cursore;
+  do {
+    const p = await env.CODICI.list({ prefix: 'gioc:', cursor: cursore });
+    for (const k of p.keys) {
+      const v = JSON.parse(await env.CODICI.get(k.name) || '{}');
+      if (!v.nick) continue;
+      fuori.push({ id: k.name.slice(5), nick: v.nick, tipo: v.tipo || 'libero',
+                   punti: v.punti || 0, vinte: v.vinte || 0, giocate: v.giocate || 0 });
+    }
+    cursore = p.list_complete ? null : p.cursor;
+  } while (cursore);
+  fuori.sort((a, b) => (b.punti - a.punti) || (b.vinte - a.vinte) ||
+                       String(a.nick).localeCompare(String(b.nick)));
+  fuori.forEach((x, i) => { x.posto = i + 1; });
+  const mio = io ? fuori.filter(x => x.id === io.id)[0] || null : null;
+  /* l'impronta non esce: serviva solo a ritrovarsi nella lista */
+  const senzaId = fuori.slice(0, CLASSIFICA_QUANTI).map(({ id, ...r }) => r);
+  return json({ classifica: senzaId, quanti: fuori.length,
+                io: mio ? { posto: mio.posto, nick: mio.nick, punti: mio.punti,
+                            vinte: mio.vinte, giocate: mio.giocate, tipo: mio.tipo } : null });
+}
+
+/* Una schedina registrata prima del fischio d'inizio. */
+async function postSchedina(req, env) {
+  const io = await chiSono(req, env);
+  if (!io) return json({ errore: 'serve un codice' }, 401);
+  const g = await leggiGiocatore(env, io.id);
+  if (!g || !g.nick) return json({ errore: 'prima scegli un nome' }, 428);
+
+  let c; try { c = await req.json(); } catch (e) { c = {}; }
+  const gambe = Array.isArray(c.gambe) ? c.gambe : [];
+  if (!gambe.length || gambe.length > GAMBE_MAX) {
+    return json({ errore: 'da 1 a ' + GAMBE_MAX + ' gambe' }, 400);
+  }
+
+  const adesso = Date.now();
+  const pulite = [];
+  for (const gamba of gambe) {
+    const lega = String(gamba.lega || '').toUpperCase();
+    if (!/^[A-Z0-9]{1,6}$/.test(lega)) return json({ errore: 'campionato sconosciuto' }, 400);
+    const grezzo = await env.DATI.get('cal:' + lega);
+    if (!grezzo) return json({ errore: 'campionato non disponibile' }, 404);
+    const cal = JSON.parse(grezzo).calendario || [];
+    const p = cal.filter(x => x.d === gamba.d && x.c === gamba.c && x.v === gamba.v)[0];
+    if (!p) return json({ errore: 'questa partita non e in calendario' }, 400);
+    if (inizioDi(p) <= adesso) return json({ errore: 'questa partita e gia cominciata' }, 409);
+    const quota = Number(gamba.quota);
+    if (!(quota > 1.01)) return json({ errore: 'quota fuori scala' }, 400);
+
+    /* La quota la dichiara il telefono, e sui punti pesa: un tetto ci vuole.
+
+       Il server non puo' VERIFICARLA — l'app offre sessantacinque mercati e
+       il calendario ne porta le quote di due — quindi qui non si pretende di
+       sapere quella giusta. Si sa pero' quanto puo' essere alta: nessun
+       mercato di una partita e' molto piu' lungo del suo esito piu' lungo.
+       Il tetto e' due volte e mezzo quello, con un minimo per le partite
+       equilibrate e un massimo assoluto.
+
+       Non e' una prova, e' un argine, e va detto per quello che e': chi vuole
+       barare puo' ancora gonfiare un po'. Quello che non puo' fare e' gonfiare
+       DI MOLTO — senza tetto una schedina inventata da mille varrebbe cento
+       punti e la classifica finirebbe li'. Con il tetto il guadagno di chi
+       imbroglia sta sotto il doppio di chi gioca onesto, e gli altri tre
+       chiodi (prima del fischio, partite vere, esito deciso dal giro dei
+       dati) restano inchiodati. */
+    const qs = (Array.isArray(p.q) ? p.q : []).filter((x) => x > 1);
+    const tetto = Math.min(25, Math.max(6, 2.5 * (qs.length ? Math.max(...qs) : 4)));
+    if (quota > tetto) {
+      return json({ errore: 'quota troppo alta per questa partita' }, 400);
+    }
+    pulite.push({ lega, d: p.d, o: p.o || null, c: p.c, v: p.v,
+                  mercato: String(gamba.mercato || '').slice(0, 24), quota });
+  }
+  const quota = pulite.reduce((t, x) => t * x.quota, 1);
+  if (quota > 500) return json({ errore: 'schedina troppo lunga per la classifica' }, 400);
+  const id = nuovoId();
+  const sch = { id, gambe: pulite, quota: Math.round(quota * 1000) / 1000,
+                creata: new Date(adesso).toISOString(), stato: 'aperta' };
+  await env.CODICI.put('sch:' + io.id + ':' + id, JSON.stringify(sch));
+  g.giocate = (g.giocate || 0) + 1;
+  await env.CODICI.put('gioc:' + io.id, JSON.stringify(g));
+  return json(sch);
+}
+
+/* L'orario del fischio d'inizio, in millisecondi. Senza ora si prende
+   mezzogiorno: sbagliare di qualche ora sul giorno giusto e' molto meglio
+   che accettare una schedina il giorno dopo la partita. */
+function inizioDi(p) {
+  const o = /^\d{2}:\d{2}$/.test(p.o || '') ? p.o : '12:00';
+  return new Date(p.d + 'T' + o + ':00Z').getTime() - 2 * 3600000;
+}
+
+function nuovoId() {
+  const b = crypto.getRandomValues(new Uint8Array(9));
+  return base64url(b.buffer);
+}
+
+/* Le schedine che aspettano un esito: le legge il giro dei dati, che i
+   risultati li vede. */
+async function getPendenti(env) {
+  const fuori = [];
+  let cursore;
+  do {
+    const p = await env.CODICI.list({ prefix: 'sch:', cursor: cursore });
+    for (const k of p.keys) {
+      const v = JSON.parse(await env.CODICI.get(k.name) || '{}');
+      if (v.stato !== 'aperta') continue;
+      fuori.push({ chiave: k.name, id: v.id, gambe: v.gambe, quota: v.quota, creata: v.creata });
+    }
+    cursore = p.list_complete ? null : p.cursor;
+  } while (cursore);
+  return json({ schedine: fuori, quante: fuori.length });
+}
+
+/* E qui si saldano. Chi decide e' il giro dei dati, col segreto grosso: chi
+   ha giocato non tocca il proprio punteggio nemmeno di striscio. */
+async function postSalda(req, env) {
+  let c; try { c = await req.json(); } catch (e) { c = {}; }
+  const esiti = Array.isArray(c.esiti) ? c.esiti : [];
+  let saldate = 0, punti = 0;
+  for (const e of esiti) {
+    const k = String(e.chiave || '');
+    if (!k.startsWith('sch:')) continue;
+    const grezzo = await env.CODICI.get(k);
+    if (!grezzo) continue;
+    const sch = JSON.parse(grezzo);
+    if (sch.stato !== 'aperta') continue;
+
+    /* Annullata: una gamba il cui esito non si riesce a decidere nemmeno
+       dopo giorni — di solito un mercato sul primo tempo quando l'archivio
+       il primo tempo non ce l'ha. Non e' ne' vinta ne' persa, e contarla
+       persa sarebbe una bugia a spese di chi ha giocato: si toglie di mezzo
+       e si scala dalle giocate, come se non fosse mai stata fatta. */
+    if (e.annulla === true) {
+      sch.stato = 'annullata';
+      sch.saldata = new Date().toISOString();
+      sch.punti = 0;
+      await env.CODICI.put(k, JSON.stringify(sch));
+      const gid = k.split(':')[1];
+      const gg = await leggiGiocatore(env, gid);
+      if (gg) {
+        gg.giocate = Math.max(0, (gg.giocate || 1) - 1);
+        await env.CODICI.put('gioc:' + gid, JSON.stringify(gg));
+      }
+      saldate++;
+      continue;
+    }
+    const vinta = e.vinta === true;
+    sch.stato = vinta ? 'vinta' : 'persa';
+    sch.saldata = new Date().toISOString();
+    sch.punti = vinta ? puntiDi(sch.quota) : 0;
+    await env.CODICI.put(k, JSON.stringify(sch));
+
+    const id = k.split(':')[1];
+    const g = await leggiGiocatore(env, id);
+    if (g) {
+      g.punti = (g.punti || 0) + sch.punti;
+      if (vinta) g.vinte = (g.vinte || 0) + 1;
+      g.aggiornato = new Date().toISOString();
+      await env.CODICI.put('gioc:' + id, JSON.stringify(g));
+    }
+    saldate++; punti += sch.punti;
+  }
+  return json({ saldate, punti });
+}
+
 export default {
   async fetch(req, env) {
     const url = new URL(req.url);
@@ -366,6 +670,10 @@ export default {
       try {
         if (via === '/api/codice' && req.method === 'POST') return await postCodice(req, env);
         if (via === '/api/io' && req.method === 'GET') return await getIo(req, env);
+        if (via === '/api/ospite' && req.method === 'POST') return await postOspite(req, env);
+        if (via === '/api/nick' && req.method === 'POST') return await postNick(req, env);
+        if (via === '/api/classifica' && req.method === 'GET') return await getClassifica(req, env);
+        if (via === '/api/schedina' && req.method === 'POST') return await postSchedina(req, env);
         const cal = /^\/api\/calendario\/([A-Za-z0-9]{1,6})$/.exec(via);
         if (cal && req.method === 'GET') return await getCalendario(req, env, cal[1].toUpperCase());
 
@@ -376,6 +684,15 @@ export default {
           if (car && req.method === 'POST') {
             if (!ammesso(req, env)) return json({ errore: 'non ammesso' }, 401);
             return await adminCarica(req, env, car[1].toUpperCase());
+          }
+          /* saldare i punti e' mestiere del giro dei dati, non di chi gioca */
+          if (via === '/api/admin/pendenti' && req.method === 'GET') {
+            if (!ammesso(req, env)) return json({ errore: 'non ammesso' }, 401);
+            return await getPendenti(env);
+          }
+          if (via === '/api/admin/salda' && req.method === 'POST') {
+            if (!ammesso(req, env)) return json({ errore: 'non ammesso' }, 401);
+            return await postSalda(req, env);
           }
           const chi = await comanda(req, env);
           if (!chi) return json({ errore: 'non ammesso' }, 401);

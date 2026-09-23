@@ -85,6 +85,16 @@ jobs:
           MODO: ${{ (github.event.schedule == '47 9,12,15,17 * * *' || github.event.schedule == '17 23 * * *') && 'leggero' || 'completo' }}
         run: python scripts/build_data.py
 
+      # I punti della classifica si mettono QUI e da nessun'altra parte: qui
+      # ci sono i risultati appena scaricati e il segreto grosso, e non c'e'
+      # nessuno che ha interesse a barare sul proprio punteggio.
+      - name: Salda la classifica
+        continue-on-error: true
+        env:
+          MONTHLINE_API: ${{ secrets.MONTHLINE_API }}
+          MONTHLINE_ADMIN: ${{ secrets.MONTHLINE_ADMIN }}
+        run: node scripts/salda.js
+
       - name: Committa se qualcosa è cambiato
         env:
           FOOTBALL_DATA_TOKEN: ${{ secrets.FOOTBALL_DATA_TOKEN }}

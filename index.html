@@ -604,6 +604,20 @@ details.note summary:active{opacity:.6;}
   align-items:center;justify-content:center;color:var(--mute);
   background:var(--card2);border:1px solid var(--line);}
 .serr svg{width:21px;height:21px;}
+/* la classifica */
+.cla{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:.5px solid var(--line);}
+.cla:last-child{border-bottom:0;}
+.cla.io{background:var(--accent-soft);margin:0 -14px;padding-left:14px;padding-right:14px;
+  border-radius:10px;border-bottom:0;}
+.cla .pos{font-family:var(--mono);font-size:12px;color:var(--mute);width:22px;flex:none;text-align:right;}
+.cla .nk{flex:1;min-width:0;font-size:14.5px;font-weight:600;letter-spacing:-.2px;}
+.cla .nk em{display:block;font-style:normal;font-size:11px;font-weight:400;color:var(--mute);margin-top:1px;}
+.cla .pt{font-family:var(--mono);font-size:16px;font-weight:700;flex:none;}
+.igr{width:16px;height:16px;flex:none;}
+.igr.capo{color:#C9A227;}
+.igr.vip{color:var(--accent);}
+.igr.free{color:var(--mute);opacity:.5;}
+.note.ok{border-left-color:var(--ok);background:var(--ok-soft);}
 .tab.chiusa{opacity:.55;}
 .tab .tabl{position:absolute;width:9px;height:9px;top:5px;right:calc(50% - 17px);opacity:.75;}
 .tab{position:relative;}
@@ -723,7 +737,10 @@ var S = {
   leghe: null, docs: {}, mods: {}, simPerLega: {}, lega: null,
   legheInCorso: false, legheFatte: '',
   /* l'abbonamento: il gettone, cosa dice, e quanto si vede per campionato */
-  diritti: null, muro: {}
+  diritti: null, muro: {},
+  /* la classifica: null vuol dire "non ancora chiesta", [] "chiesta e vuota" */
+  classifica: null, ioInClassifica: null, classificaQuanti: 0, vistaLibro: 'mio',
+  capo: {}, schedinaFatta: null, schedinaInCorso: null
 };
 var VERSIONE = '3.4';
 var LEGA_CASA = 'I1';
@@ -798,9 +815,12 @@ function chiediApi(via, opz){
 function rileggiDiritti(){
   if(!cancelloAcceso() || !gettone()) return Promise.resolve(null);
   return chiediApi('/api/io').then(function(r){
-    if(!r || !r.tutto){ salvaGettone(null); S.diritti = null; return null; }
+    /* "Non vale" e "non apre" sono due cose diverse: il gettone da ospite e'
+       validissimo e non apre niente. Si butta solo quello che non vale. */
+    if(!r || !r.valido){ salvaGettone(null); S.diritti = null; return null; }
     S.diritti = {tipo: r.tipo, nome: r.nome, scade: r.scade,
-                 tutto: true, capo: !!r.capo};
+                 tutto: !!r.tutto, capo: !!r.capo, nick: r.nick || null,
+                 punti: r.punti || 0, vinte: r.vinte || 0};
     return S.diritti;
   }).catch(function(){ /* server giu': si tiene il gettone e si riprova dopo */
     return null;
@@ -813,10 +833,126 @@ function gradoDi(tipo){
   if(tipo === 'vip' || tipo === 'abbonato') return '<span class="gradi vip">VIP</span>';
   return '<span class="gradi free">FREE</span>';
 }
+
+/* L'icona accanto al nome in classifica. Sta al posto del testo, perche' in
+   una riga di classifica il nome e' la cosa da leggere e il grado la cosa da
+   riconoscere: una corona la vedi senza leggerla, "GOAT" scritto no. */
+var ICONE_GRADO = {
+  capo: 'M4 17l1.6-8 4 3.2L12 6l2.4 6.2 4-3.2L20 17zM4 19h16',        /* corona */
+  vip:  'M12 4l2.3 5 5.2.6-3.9 3.5 1.1 5.2L12 15.6 7.3 18.3l1.1-5.2L4.5 9.6l5.2-.6z', /* stella */
+  free: 'M12 4a8 8 0 1 0 0 16 8 8 0 0 0 0-16'                          /* cerchio */
+};
+function iconaGrado(tipo){
+  var t = tipo === 'capo' ? 'capo'
+        : (tipo === 'vip' || tipo === 'abbonato') ? 'vip' : 'free';
+  return '<svg class="igr ' + t + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+    'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ' +
+    'aria-label="' + (t === 'capo' ? 'capo' : t === 'vip' ? 'abbonato' : 'senza codice') + '">' +
+    '<path d="' + ICONE_GRADO[t] + '"/></svg>';
+}
 function ilMioGrado(){
   if(!cancelloAcceso()) return '';
   if(!S.diritti || !S.diritti.tutto) return gradoDi(null);
   return gradoDi(S.diritti.capo ? 'capo' : S.diritti.tipo);
+}
+function ilMioNick(){ return (S.diritti && S.diritti.nick) || null; }
+
+/* ══════════════════════════════════════════════════════════════
+   LA CLASSIFICA
+
+   Un nome, e un posto. Anche per chi non paga: chi si vede dodicesimo e legge
+   che i primi undici scelgono fra millecinquecento partite mentre lui ne vede
+   quindici ha un motivo per pagare che nessun muro gli avrebbe dato. Vedere
+   non e' entrare — l'ospite resta con le sue tre partite per campionato.
+   ══════════════════════════════════════════════════════════════ */
+
+/* Chi non ha nemmeno un gettone ne prende uno da ospite: serve un nome
+   stabile a cui attaccare i punti, non un permesso. */
+function assicuraIdentita(){
+  if(gettone()) return Promise.resolve(true);
+  return chiediApi('/api/ospite', {metodo:'POST'}).then(function(r){
+    salvaGettone(r.gettone);
+    S.diritti = {tipo:'libero', nome:'', scade:null, tutto:false,
+                 capo:false, nick:null, punti:0, vinte:0};
+    return true;
+  }).catch(function(){ return false; });
+}
+
+function scegliNick(){
+  var campo = document.getElementById('campoNick');
+  var v = ((campo && campo.value) || '').trim();
+  S.nickErrore = null;
+  if(v.length < 3){ S.nickErrore = 'Almeno tre caratteri.'; render(); return; }
+  S.nickInCorso = true; render();
+  assicuraIdentita().then(function(ok){
+    if(!ok) throw new Error('il server non risponde');
+    return chiediApi('/api/nick', {metodo:'POST', corpo:{nick: v}});
+  }).then(function(r){
+    S.nickInCorso = false;
+    if(!S.diritti) S.diritti = {tipo:'libero', tutto:false};
+    S.diritti.nick = r.nick;
+    S.classifica = null;
+    caricaClassifica();
+  }).catch(function(e){
+    S.nickInCorso = false;
+    S.nickErrore = e.message === 'questo nome e gia preso'
+      ? 'Questo nome ce l\'ha gia\' qualcun altro. Provane un altro.'
+      : e.message;
+    render();
+  });
+}
+
+function caricaClassifica(){
+  if(!cancelloAcceso()) return;
+  S.classificaInCorso = true;
+  chiediApi('/api/classifica').then(function(r){
+    S.classifica = r.classifica || [];
+    S.ioInClassifica = r.io || null;
+    S.classificaQuanti = r.quanti || 0;
+    S.classificaInCorso = false;
+    render();
+  }).catch(function(e){
+    S.classificaInCorso = false; S.classificaGuasto = e.message; render();
+  });
+}
+
+/* La schedina che si registra per la classifica: le stesse selezioni che
+   l'app propone, con la quota che il banco paga davvero — non quella equa,
+   che nessuno ti da'. */
+/* La quota di una gamba come la paga il banco: l'equa meno il ricarico.
+
+   Sta in una funzione sola perche' prima stava in due, e le due davano numeri
+   diversi: il pulsante prometteva 2.65 e al server ne arrivava 2.604 —
+   arrotondamenti applicati in ordine diverso. Su una quota non e' un dettaglio
+   estetico: e' la cifra su cui poi si contano i punti, e due numeri diversi
+   per la stessa schedina sono il genere di cosa che fa perdere fiducia in
+   tutta la classifica. */
+function quotaGamba(x){
+  return Math.round((1 / Math.max(1e-6, x.p)) * (1 - ricarico().v) * 100) / 100;
+}
+function quotaDaRegistrare(scelte){
+  return scelte.reduce(function(t, x){ return t * quotaGamba(x); }, 1);
+}
+
+function giocaSchedina(chiave){
+  var sc = (S._schedineMostrate || {})[chiave];
+  if(!sc || !sc.length) return;
+  if(!ilMioNick()){ S.vistaLibro = 'classifica'; vai('libro'); return; }
+  S.schedinaInCorso = chiave; S.schedinaErrore = null; S._ultimaSchedina = chiave; render();
+  var gambe = sc.map(function(x){
+    return {lega: (x.lega && x.lega.id) || LEGA_CASA,
+            d: x.partita.d, c: x.partita.c, v: x.partita.v,
+            mercato: x.id, quota: quotaGamba(x)};
+  });
+  chiediApi('/api/schedina', {metodo:'POST', corpo:{gambe: gambe}}).then(function(r){
+    S.schedinaInCorso = null;
+    S.schedinaFatta = {chiave: chiave, quota: r.quota, gambe: r.gambe.length};
+    rileggiDiritti().then(function(){ caricaClassifica(); });
+  }).catch(function(e){
+    S.schedinaInCorso = null;
+    S.schedinaErrore = e.message;
+    render();
+  });
 }
 
 function entraColCodice(){
@@ -2505,12 +2641,24 @@ function cardMuroSchedine(){
    aveva mai visto. Chiuderla vorrebbe dire chiedere 4,99 a uno che non ha
    nessun motivo per crederti. E' la vetrina, non la merce. Se cambi idea
    basta togliere 'precisione' dalla riga qui sotto. */
-var SEZIONI_LIBERE = ['giornata', 'precisione', 'dati'];
+/* Libro sta qui dentro, ma non del tutto: la vista "classifica" e' aperta a
+   chiunque, la vista "il mio libro" no. Il muro sta dentro la linguetta e non
+   davanti, perche' la classifica e' il pezzo che fa venire voglia di pagare —
+   chiuderla vorrebbe dire nascondere proprio la vetrina. */
+var SEZIONI_LIBERE = ['giornata', 'precisione', 'dati', 'libro'];
 
 function sezioneChiusa(tab){
   if(!cancelloAcceso() || haTutto()) return false;
   return SEZIONI_LIBERE.indexOf(tab) < 0;
 }
+
+/* Il Libro e' mezzo chiuso, e la differenza e' dentro la linguetta, non
+   davanti: il registro personale e' roba da abbonati, la classifica che gli
+   sta accanto la vedono tutti. Se il muro stesse davanti alla linguetta —
+   com'era un minuto fa, e l'ho scoperto rileggendo — chiuderebbe anche la
+   classifica, cioe' esattamente il pezzo che fa venire voglia di pagare. */
+function libroChiuso(){ return cancelloAcceso() && !haTutto(); }
+function lucchettoSu(k){ return k === 'libro' ? libroChiuso() : sezioneChiusa(k); }
 
 var PERCHE_CHIUSA = {
   schedine: ['Le schedine', 'Quante gambe, a che quota, e quanto spesso un mese ' +
@@ -2725,6 +2873,84 @@ function revocaCodice(codice){
     .then(elencoCodici)
     .catch(function(e){ S.capo.errore = e.message; render(); });
 }
+
+function cardNick(){
+  if(!cancelloAcceso()) return '';
+  var nick = ilMioNick();
+  if(nick){
+    var io = S.ioInClassifica;
+    return '<div class="card"><div class="row">' +
+      '<div class="n">' + iconaGrado(S.diritti && S.diritti.capo ? 'capo'
+        : (S.diritti && S.diritti.tutto ? 'vip' : 'free')) + ' ' + esc(nick) +
+      '<em>' + (io ? esc(String(io.posto)) + (io.posto === 1 ? 'º — sei in testa' : 'º in classifica')
+                   : 'non hai ancora giocato una schedina') + '</em></div>' +
+      '<div class="v">' + ((io && io.punti) || 0) + '<span>punti</span></div>' +
+      '</div></div>';
+  }
+  return '<div class="card">' +
+    '<div class="h3" style="margin-top:0">Come ti chiami</div>' +
+    '<p class="lede">Serve un nome per stare in classifica. Lo vedono gli altri, ' +
+    'quindi mettici quello che vuoi far vedere — non ti chiedo nient\'altro: ' +
+    'niente email, niente password.</p>' +
+    '<div class="riga-punta" style="gap:9px">' +
+      '<input id="campoNick" type="text" maxlength="16" autocomplete="off" ' +
+        'placeholder="Il tuo nome" style="flex:1;width:auto;font-size:17px" ' +
+        'onkeydown="if(event.key===\'Enter\')scegliNick()">' +
+    '</div>' +
+    '<button class="btn acc" style="margin-top:11px"' + (S.nickInCorso ? ' disabled' : '') + ' ' +
+      'onclick="scegliNick()">' + (S.nickInCorso ? 'Un attimo…' : 'Entra in classifica') + '</button>' +
+    (S.nickErrore ? '<div class="note warn" style="margin-top:9px">' + esc(S.nickErrore) + '</div>' : '') +
+  '</div>';
+}
+
+function cardClassifica(){
+  if(!cancelloAcceso()){
+    return '<div class="card"><div class="empty"><b>La classifica \u00e8 spenta</b>' +
+      'Serve il server: senza, i punti non avrebbero dove stare.</div></div>';
+  }
+  /* undefined e null sono due modi diversi di non esserci, e distinguerli qui
+     non serviva a niente: contavano tutti e due come "non l'ho ancora
+     chiesta". Con === null la prima apertura passava oltre e andava a leggere
+     .length su una cosa che non c'era. */
+  if(!S.classifica){
+    if(!S.classificaInCorso) setTimeout(caricaClassifica, 0);
+    return '<div class="card"><div class="empty">' +
+      (S.classificaGuasto ? '<b>La classifica non arriva</b>' + esc(S.classificaGuasto)
+                          : 'Carico la classifica…') + '</div></div>';
+  }
+  if(!S.classifica.length){
+    return '<div class="card"><div class="empty"><b>Ancora nessuno</b>' +
+      'Chi registra la prima schedina apre la classifica. I punti arrivano quando ' +
+      'le partite sono finite: li mette il giro dei dati, non chi ha giocato.</div></div>';
+  }
+  var mio = S.ioInClassifica;
+  var h = '<div class="card">' + S.classifica.map(function(r){
+    var io = mio && r.nick === mio.nick;
+    return '<div class="cla' + (io ? ' io' : '') + '">' +
+      '<div class="pos">' + r.posto + '</div>' +
+      iconaGrado(r.tipo) +
+      '<div class="nk">' + esc(r.nick) +
+        '<em>' + r.vinte + ' su ' + r.giocate + ' prese</em></div>' +
+      '<div class="pt">' + r.punti + '</div>' +
+    '</div>';
+  }).join('') + '</div>';
+  if(mio && mio.posto > S.classifica.length){
+    h += '<div class="note">Tu sei ' + mio.posto + 'º su ' + S.classificaQuanti +
+      ' con ' + mio.punti + ' punti.</div>';
+  }
+  h += '<div class="note"><p><b>Come si fanno i punti.</b> Ogni schedina presa vale ' +
+    '<b>10 × log₂(quota)</b>: una da 2.00 vale 10 punti, una da 4.00 ne vale 20, una da ' +
+    '16.00 quaranta. Il logaritmo non \u00e8 un vezzo — a punti uguali alla quota, una botta ' +
+    'di fortuna da 50 cancellerebbe un mese di gioco solido, e la classifica misurerebbe ' +
+    'la fortuna invece del mestiere.</p>' +
+    '<p>La schedina si registra <b>prima del fischio d\'inizio</b>, sulle partite vere del ' +
+    'calendario. L\'esito non lo dichiara chi ha giocato: lo calcola il giro dei dati quando ' +
+    'i risultati arrivano, con la stessa funzione che decide se una tua giocata \u00e8 presa.</p>' +
+    '</div>';
+  return h;
+}
+
+function vaiVistaLibro(v){ S.vistaLibro = v; render(); window.scrollTo(0,0); }
 
 function selettoreLeghe(){
   if(!(S.leghe||[]).length || S.leghe.length < 2) return '';
@@ -3186,7 +3412,34 @@ function schedaSchedina(profilo, scelte){
         '<div class="v">'+pc(s.p)+'<span>min '+pc(s.p05)+'</span></div></div>';
     }).join('')+
     '<div class="note">'+esc(profilo.testo)+'</div>'+
+    bottoneGioca(profilo, scelte, c)+
   '</div>';
+}
+
+/* "La gioco": registra questa schedina per la classifica.
+
+   La quota che si manda non e' quella equa — quella non te la da' nessuno —
+   ma quella realistica, col ricarico del banco tolto: e' quella che ti
+   pagherebbero davvero, e quindi l'unica onesta su cui contare i punti. */
+function bottoneGioca(profilo, scelte, c){
+  if(!cancelloAcceso()) return '';
+  var chiave = profilo.id || profilo.nome;
+  if(!S._schedineMostrate) S._schedineMostrate = {};
+  S._schedineMostrate[chiave] = scelte;
+  var fatta = S.schedinaFatta && S.schedinaFatta.chiave === chiave;
+  if(fatta){
+    return '<div class="note ok" style="margin-top:10px">Registrata: ' +
+      S.schedinaFatta.gambe + ' gambe a quota ' + nu(S.schedinaFatta.quota, 2) + '. ' +
+      'Se esce, i punti arrivano quando le partite sono finite.</div>';
+  }
+  var inCorso = S.schedinaInCorso === chiave;
+  var q = quotaDaRegistrare(scelte);
+  return '<button class="btn" style="margin-top:10px"' + (inCorso ? ' disabled' : '') +
+      ' onclick="giocaSchedina(\'' + esc(chiave) + '\')">' +
+      (inCorso ? 'Registro…' : (ilMioNick() ? 'La gioco — ' + nu(q, 2) + ' in classifica'
+                                            : 'La gioco (serve un nome)')) + '</button>' +
+    (S.schedinaErrore && S.schedinaInCorso === null && S._ultimaSchedina === chiave
+      ? '<div class="note warn" style="margin-top:8px">' + esc(S.schedinaErrore) + '</div>' : '');
 }
 
 function elencoSchedine(){
@@ -5466,6 +5719,32 @@ function cardClv(){
 }
 
 function tabLibro(){
+  /* Due viste sotto la stessa linguetta: il registro tuo, e la classifica di
+     tutti. Una settima linguetta in fondo allo schermo non ci stava, e
+     soprattutto le due cose rispondono alla stessa domanda da due lati —
+     come sto andando io, e come vado rispetto agli altri. */
+  /* Chi non ha il codice arriva sulla classifica, non sul muro: il muro lo ha
+     gia' visto altrove, e la classifica e' la ragione per cui potrebbe
+     decidere di pagare. Chi ha pagato arriva sul suo libro, che e' la cosa
+     che ha comprato. */
+  var vista = S.vistaLibro || (libroChiuso() ? 'classifica' : 'mio');
+  var h = '<div class="forme">' +
+    [['mio', 'Il mio libro', 'le tue giocate'],
+     ['classifica', 'Classifica', 'tutti quanti']].map(function(o){
+      return '<button class="formab' + (vista === o[0] ? ' on' : '') + '" ' +
+        'onclick="vaiVistaLibro(\'' + o[0] + '\')"><b>' + o[1] + '</b><em>' + o[2] + '</em></button>';
+    }).join('') + '</div>';
+
+  if(vista === 'classifica'){
+    h += cardNick();
+    h += cardClassifica();
+    return h;
+  }
+  if(libroChiuso()) return h + cardSezioneChiusa('libro');
+  return h + tabLibroMio();
+}
+
+function tabLibroMio(){
   var m = misureLibro();
   var h = '';
   if(!m){
@@ -5830,7 +6109,7 @@ function render(){
        sarebbe l'errore: chi non paga non saprebbe nemmeno cosa si perde, e
        nessuno paga per una cosa di cui ignora l'esistenza. Premendola si
        arriva al muro, che spiega cosa c'e' dietro. */
-    var chiusa = sezioneChiusa(t.k);
+    var chiusa = lucchettoSu(t.k);
     return '<button class="tab '+(S.tab===t.k?'on':'')+(chiusa?' chiusa':'')+'" onclick="vai(\''+t.k+'\')">'+
       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="'+t.p+'"/></svg>'+
       '<span>'+t.n+'</span>'+
