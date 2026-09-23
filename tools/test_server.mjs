@@ -35,6 +35,12 @@ function kvFinta() {
     async put(k, val, opz) {
       m.set(k, { val, scadeA: opz && opz.expirationTtl ? Date.now() + opz.expirationTtl * 1000 : 0 });
     },
+    /* C'era il buco: questa finta KV non sapeva cancellare, e la KV vera si'.
+       Il primo codice che ha provato a cancellare una chiave ha preso un 500
+       e la prova diceva soltanto "non ha funzionato", senza dire perche'. Un
+       doppione di prova che offre MENO dell'originale non prova il codice:
+       prova il doppione. */
+    async delete(k) { m.delete(k); },
     async list({ prefix, cursor }) {
       const keys = [...m.keys()].filter(k => k.startsWith(prefix || '')).map(name => ({ name }));
       return { keys, list_complete: true, cursor: null };
@@ -226,6 +232,19 @@ async function entra(env, codice) {
 {
   const env = ambiente(); await preparaDati(env);
   const estraneo = await chiedi(env, '/api/calendario/I1', { headers: { Origin: 'https://sito-cattivo.example' } });
+  {
+    const env2 = ambiente(); await preparaDati(env2);
+    const buono = await creaCodice(env2, { tipo: 'vip', nome: 'tanti' });
+    let tutti = true;
+    for (let i = 0; i < 20; i++) {
+      const r = await chiedi(env2, '/api/codice', { metodo: 'POST', ip: '9.9.9.9',
+        corpo: { codice: buono } });
+      if (r.status !== 200) { tutti = false; break; }
+    }
+    prova('IL FRENO NON PUNISCE CHI IL CODICE CE L HA: venti entrate giuste passano',
+          tutti);
+  }
+
   prova('un altro sito non riceve il permesso di leggere la risposta',
         !estraneo.headers.get('access-control-allow-origin'));
   const nostro = await chiedi(env, '/api/calendario/I1');
@@ -325,6 +344,15 @@ async function entra(env, codice) {
     { metodo: 'POST', gettone: g, corpo: { nick: 'ab' } }));
   prova('e uno da due lettere non va bene', corto.stato === 400);
 
+  /* il nome e' per sempre: e' quello che tiene insieme la classifica */
+  const cambio = await leggi(await chiedi(env, '/api/nick',
+    { metodo: 'POST', gettone: g, corpo: { nick: 'Cristiano' } }));
+  prova('IL NOME NON SI CAMBIA PIU: chi perde non si ribattezza e riparte',
+        cambio.stato === 409 && cambio.corpo.nick === 'Cristian', cambio.stato);
+  const stesso = await leggi(await chiedi(env, '/api/nick',
+    { metodo: 'POST', gettone: g, corpo: { nick: 'Cristian' } }));
+  prova('ma rimetterlo uguale non e un errore', stesso.stato === 200);
+
   /* due persone, lo stesso nome */
   const cod2 = await creaCodice(env, { tipo: 'vip', nome: 'due' });
   const g2 = (await entra(env, cod2)).corpo.gettone;
@@ -379,10 +407,55 @@ async function entra(env, codice) {
     corpo: { esiti: [{ chiave: pend.corpo.schedine[0].chiave, vinta: true }] } }));
   prova('una schedina saldata due volte non paga due volte', dinuovo.corpo.saldate === 0);
 
+  /* IL TRASLOCO: l'ospite che paga non ricomincia da capo */
+  {
+    const o = await leggi(await chiedi(env, '/api/ospite', { metodo: 'POST' }));
+    const go = o.corpo.gettone;
+    await chiedi(env, '/api/nick', { metodo: 'POST', gettone: go, corpo: { nick: 'Provetta' } });
+    await chiedi(env, '/api/schedina', { metodo: 'POST', gettone: go, corpo: {
+      gambe: [{ lega: 'I1', d: giorno(3), c: 'Inter', v: 'Milan', mercato: 'O15', quota: 1.3 }] } });
+
+    const codVip = await creaCodice(env, { tipo: 'vip', nome: 'era ospite' });
+    const r2 = await chiedi(env, '/api/codice',
+      { metodo: 'POST', gettone: go, corpo: { codice: codVip } });
+    const dentro = await leggi(r2);
+    const io2 = await leggi(await chiedi(env, '/api/io', { gettone: dentro.corpo.gettone }));
+    prova('e l app lo sa subito, senza doverlo richiedere',
+          dentro.corpo.nick === 'Provetta', dentro.corpo.nick);
+    prova('CHI PAGA NON RICOMINCIA DA CAPO: nome e punti lo seguono',
+          io2.corpo.nick === 'Provetta' && io2.corpo.tutto === true, JSON.stringify(io2.corpo));
+
+    /* e la schedina gia' registrata paga LUI, non l'ospite che non c'e' piu' */
+    const cl2 = await leggi(await chiedi(env, '/api/classifica', { gettone: dentro.corpo.gettone }));
+    prova('e le giocate gia fatte traslocano con lui',
+          cl2.corpo.io && cl2.corpo.io.nick === 'Provetta' && cl2.corpo.io.giocate === 1,
+          JSON.stringify(cl2.corpo.io));
+    prova('e l ospite di prima sparisce dalla classifica invece di restarci doppio',
+          cl2.corpo.classifica.filter(x => x.nick === 'Provetta').length === 1);
+
+    /* ma due abbonamenti veri non si fondono */
+    const cod3 = await creaCodice(env, { tipo: 'vip', nome: 'terzo' });
+    const g3 = (await entra(env, cod3)).corpo.gettone;
+    await chiedi(env, '/api/nick', { metodo: 'POST', gettone: g3, corpo: { nick: 'Terzo' } });
+    const cod4 = await creaCodice(env, { tipo: 'vip', nome: 'quarto' });
+    const dopo4 = await leggi(await chiedi(env, '/api/codice',
+      { metodo: 'POST', gettone: g3, corpo: { codice: cod4 } }));
+    const io4 = await leggi(await chiedi(env, '/api/io', { gettone: dopo4.corpo.gettone }));
+    prova('DUE ABBONAMENTI VERI NON SI FONDONO MAI', !io4.corpo.nick, io4.corpo.nick);
+  }
+
   /* l'ospite: niente codice, ma un nome e un posto */
-  const osp = await leggi(await chiedi(env, '/api/ospite', { metodo: 'POST' }));
+  const osp = await leggi(await chiedi(env, '/api/ospite', { metodo: 'POST', ip: '7.7.7.7' }));
   prova('chi non ha un codice puo comunque avere un nome',
         osp.stato === 200 && !!osp.corpo.gettone && osp.corpo.tutto === false);
+
+  /* ma non dieci: le fabbriche di identita' si fermano */
+  let bloccato = false;
+  for (let i = 0; i < 8; i++) {
+    const r = await chiedi(env, '/api/ospite', { metodo: 'POST', ip: '8.8.8.8' });
+    if (r.status === 429) { bloccato = true; break; }
+  }
+  prova('NIENTE DIECI ACCOUNT A TESTA: le identita a raffica si fermano', bloccato);
   const go = osp.corpo.gettone;
   const nickOsp = await leggi(await chiedi(env, '/api/nick',
     { metodo: 'POST', gettone: go, corpo: { nick: 'Ospite1' } }));

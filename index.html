@@ -604,6 +604,34 @@ details.note summary:active{opacity:.6;}
   align-items:center;justify-content:center;color:var(--mute);
   background:var(--card2);border:1px solid var(--line);}
 .serr svg{width:21px;height:21px;}
+.segnaq{flex:none;width:30px;height:30px;margin-left:8px;border-radius:9px;
+  border:1px solid var(--line);background:var(--card2);color:var(--mute);
+  display:flex;align-items:center;justify-content:center;cursor:pointer;
+  transition:transform .15s var(--molla),color .15s,border-color .15s;}
+.segnaq svg{width:15px;height:15px;}
+.segnaq:active{transform:scale(.9);}
+.segnaq:hover{color:var(--accent);border-color:var(--accent);}
+
+/* la schermata del nome, al primo avvio */
+.benv{min-height:100dvh;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;padding:28px 24px 40px;text-align:center;gap:0;}
+.benvm{width:76px;height:76px;color:var(--ink);margin-bottom:20px;}
+.benvm svg{width:100%;height:100%;display:block;}
+.benvt{font-size:30px;font-weight:700;letter-spacing:-1px;margin:0 0 10px;}
+.benvp{font-size:14.5px;line-height:1.55;color:var(--mute);margin:0 0 22px;max-width:320px;
+  letter-spacing:-.1px;}
+/* diciassette e non quindici: sotto i sedici pixel iPhone ingrandisce la
+   pagina da solo appena tocchi il campo, e non la rimpicciolisce piu' */
+.benvi{width:100%;max-width:320px;padding:15px 16px;border:1px solid var(--line);
+  border-radius:14px;background:var(--card);color:var(--ink);outline:none;
+  font-size:17px;font-weight:600;text-align:center;letter-spacing:.3px;
+  -webkit-appearance:none;}
+.benvi:focus{border-color:var(--accent);}
+.benvb{max-width:320px;margin-top:12px;}
+.benvn{max-width:320px;margin-top:12px;}
+.benvd{margin-top:18px;background:none;border:0;color:var(--mute);font-size:13px;
+  cursor:pointer;padding:8px 14px;font-family:inherit;}
+
 /* la classifica */
 .cla{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:.5px solid var(--line);}
 .cla:last-child{border-bottom:0;}
@@ -739,7 +767,7 @@ var S = {
   /* l'abbonamento: il gettone, cosa dice, e quanto si vede per campionato */
   diritti: null, muro: {},
   /* la classifica: null vuol dire "non ancora chiesta", [] "chiesta e vuota" */
-  classifica: null, ioInClassifica: null, classificaQuanti: 0, vistaLibro: 'mio',
+  classifica: null, ioInClassifica: null, classificaQuanti: 0, vistaLibro: 'classifica',
   capo: {}, schedinaFatta: null, schedinaInCorso: null
 };
 var VERSIONE = '3.4';
@@ -896,7 +924,9 @@ function scegliNick(){
   }).catch(function(e){
     S.nickInCorso = false;
     S.nickErrore = e.message === 'questo nome e gia preso'
-      ? 'Questo nome ce l\'ha gia\' qualcun altro. Provane un altro.'
+      ? 'Questo nome ce l\'ha gi\u00e0 qualcun altro. Provane un altro.'
+      : e.message === 'il nome si sceglie una volta sola'
+      ? 'Il tuo nome \u00e8 gi\u00e0 scelto e non si cambia: serve a tenere insieme i tuoi punti.'
       : e.message;
     render();
   });
@@ -937,7 +967,16 @@ function quotaDaRegistrare(scelte){
 function giocaSchedina(chiave){
   var sc = (S._schedineMostrate || {})[chiave];
   if(!sc || !sc.length) return;
-  if(!ilMioNick()){ S.vistaLibro = 'classifica'; vai('libro'); return; }
+  /* Senza nome non si registra. Chi aveva risposto "lo metto dopo" e' arrivato
+     al momento in cui serve davvero: gli si richiede qui, invece di mandarlo
+     a cercare il campo da qualche altra parte. */
+  if(!ilMioNick()){
+    S._nomeDopo = false;
+    try{ localStorage.removeItem(CHIAVE_NOME_DOPO); }catch(e){}
+    S.nickErrore = null;
+    render(); window.scrollTo(0, 0);
+    return;
+  }
   S.schedinaInCorso = chiave; S.schedinaErrore = null; S._ultimaSchedina = chiave; render();
   var gambe = sc.map(function(x){
     return {lega: (x.lega && x.lega.id) || LEGA_CASA,
@@ -964,7 +1003,9 @@ function entraColCodice(){
   chiediApi('/api/codice', {metodo:'POST', corpo:{codice: codice}}).then(function(r){
     salvaGettone(r.gettone);
     S.diritti = {tipo: r.tipo, nome: r.nome, scade: r.scade,
-                 tutto: true, capo: !!r.capo};
+                 tutto: true, capo: !!r.capo, nick: r.nick || null,
+                 punti: r.punti || 0, vinte: r.vinte || 0};
+    S.classifica = null;
     S.mostraAccesso = false;
     cambiatoIlDiritto();
   }).catch(function(e){
@@ -2645,7 +2686,7 @@ function cardMuroSchedine(){
    chiunque, la vista "il mio libro" no. Il muro sta dentro la linguetta e non
    davanti, perche' la classifica e' il pezzo che fa venire voglia di pagare —
    chiuderla vorrebbe dire nascondere proprio la vetrina. */
-var SEZIONI_LIBERE = ['giornata', 'precisione', 'dati', 'libro'];
+var SEZIONI_LIBERE = ['giornata', 'precisione', 'dati', 'classifica'];
 
 function sezioneChiusa(tab){
   if(!cancelloAcceso() || haTutto()) return false;
@@ -2658,7 +2699,7 @@ function sezioneChiusa(tab){
    com'era un minuto fa, e l'ho scoperto rileggendo — chiuderebbe anche la
    classifica, cioe' esattamente il pezzo che fa venire voglia di pagare. */
 function libroChiuso(){ return cancelloAcceso() && !haTutto(); }
-function lucchettoSu(k){ return k === 'libro' ? libroChiuso() : sezioneChiusa(k); }
+function lucchettoSu(k){ return k === 'classifica' ? libroChiuso() : sezioneChiusa(k); }
 
 var PERCHE_CHIUSA = {
   schedine: ['Le schedine', 'Quante gambe, a che quota, e quanto spesso un mese ' +
@@ -2874,6 +2915,58 @@ function revocaCodice(codice){
     .catch(function(e){ S.capo.errore = e.message; render(); });
 }
 
+/* IL NOME, CHIESTO UNA VOLTA SOLA
+
+   Prima stava in mezzo alla classifica, e li' aveva due difetti. Il primo:
+   chi non ci arrivava non aveva un nome, e quindi non esisteva per nessuno.
+   Il secondo: il campo compariva mentre la classifica stava ancora
+   arrivando, cioe' nel peggior momento possibile per toccarlo.
+
+   Adesso si chiede all'apertura, su una schermata dove non sta succedendo
+   nient'altro: niente che si ricarica sotto, niente che si ridisegna mentre
+   scrivi. Il nome poi resta — sta sul server, attaccato al gettone, e con lui
+   restano i punti: cambi telefono, rimetti il codice, e ritrovi il tuo posto.
+
+   "Lo metto dopo" c'e', e ci deve essere. Un modulo obbligatorio davanti alla
+   porta e' il modo piu' efficiente di far chiudere l'app a chi era appena
+   arrivato: chi lo salta vede comunque tutto quello che vedrebbe, e il nome
+   glielo si richiede quando servira' davvero, cioe' quando prova a giocare
+   una schedina. */
+var CHIAVE_NOME_DOPO = 'monthline_nome_dopo_v1';
+function nomeRimandato(){
+  if(S._nomeDopo !== undefined) return S._nomeDopo;
+  try{ S._nomeDopo = localStorage.getItem(CHIAVE_NOME_DOPO) === '1'; }
+  catch(e){ S._nomeDopo = false; }
+  return S._nomeDopo;
+}
+function rimandaNome(){
+  S._nomeDopo = true;
+  try{ localStorage.setItem(CHIAVE_NOME_DOPO, '1'); }catch(e){}
+  render();
+}
+function serveIlNome(){
+  return cancelloAcceso() && S.stato === 'pronto' && !ilMioNick() && !nomeRimandato();
+}
+
+function schermataNome(){
+  return '<div class="benv">' +
+    '<div class="benvm">' + MARCHIO_SVG + '</div>' +
+    '<h1 class="benvt">Come ti chiami?</h1>' +
+    '<p class="benvp">Serve un nome per la classifica: quello che vedono gli altri ' +
+      'accanto ai tuoi punti. Non ti chiedo nient\'altro — niente email, niente ' +
+      'password, niente numero di telefono.<br><b>Si sceglie una volta sola</b>, ' +
+      'e poi resta: i punti stanno attaccati l\u00ec.</p>' +
+    '<input id="campoNick" type="text" maxlength="16" autocomplete="nickname" ' +
+      'autocapitalize="words" autocorrect="off" spellcheck="false" ' +
+      'placeholder="Il tuo nome" class="benvi" ' +
+      'onkeydown="if(event.key===\'Enter\')scegliNick()">' +
+    '<button class="btn acc benvb"' + (S.nickInCorso ? ' disabled' : '') + ' ' +
+      'onclick="scegliNick()">' + (S.nickInCorso ? 'Un attimo…' : 'Entra') + '</button>' +
+    (S.nickErrore ? '<div class="note warn benvn">' + esc(S.nickErrore) + '</div>' : '') +
+    '<button class="benvd" onclick="rimandaNome()">Lo metto dopo</button>' +
+  '</div>';
+}
+
 function cardNick(){
   if(!cancelloAcceso()) return '';
   var nick = ilMioNick();
@@ -2891,7 +2984,7 @@ function cardNick(){
     '<div class="h3" style="margin-top:0">Come ti chiami</div>' +
     '<p class="lede">Serve un nome per stare in classifica. Lo vedono gli altri, ' +
     'quindi mettici quello che vuoi far vedere — non ti chiedo nient\'altro: ' +
-    'niente email, niente password.</p>' +
+    'niente email, niente password. Si sceglie <b>una volta sola</b>.</p>' +
     '<div class="riga-punta" style="gap:9px">' +
       '<input id="campoNick" type="text" maxlength="16" autocomplete="off" ' +
         'placeholder="Il tuo nome" style="flex:1;width:auto;font-size:17px" ' +
@@ -3405,11 +3498,12 @@ function schedaSchedina(profilo, scelte){
       '<div><div class="l">Selezioni</div><div class="v">'+scelte.length+'</div>'+
         '<div class="s">più ne metti, meno esce</div></div>'+
     '</div>'+
-    scelte.map(function(s){
+    scelte.map(function(s, i){
       return '<div class="row"><span class="dot" style="background:var(--c1)"></span>'+
         '<div class="n">'+esc(s.nome)+'<em>'+esc(s.partita.c)+' – '+esc(s.partita.v)+
         ' · '+esc(dataBreve(s.partita.d))+'</em></div>'+
-        '<div class="v">'+pc(s.p)+'<span>min '+pc(s.p05)+'</span></div></div>';
+        '<div class="v">'+pc(s.p)+'<span>min '+pc(s.p05)+'</span></div>'+
+        segnaQui(profilo.id || profilo.nome, i)+'</div>';
     }).join('')+
     '<div class="note">'+esc(profilo.testo)+'</div>'+
     bottoneGioca(profilo, scelte, c)+
@@ -3421,6 +3515,35 @@ function schedaSchedina(profilo, scelte){
    La quota che si manda non e' quella equa — quella non te la da' nessuno —
    ma quella realistica, col ricarico del banco tolto: e' quella che ti
    pagherebbero davvero, e quindi l'unica onesta su cui contare i punti. */
+/* Il "segna" accanto alla giocata, riga per riga.
+
+   Prima stava solo dentro la scheda della partita: per segnare una gamba di
+   una schedina bisognava uscire dalle Schedine, aprire la Giornata, trovare
+   la partita, aprirla, e cercare il mercato giusto. Cinque passaggi per una
+   cosa che si fa mentre si ha il biglietto in mano.
+
+   Segna QUESTA selezione, quella che stai guardando — niente ricerche per
+   nome, niente possibilita' di segnare per sbaglio un mercato diverso da
+   quello che hai davanti. */
+function segnaQui(chiave, i){
+  return '<button class="segnaq" title="Segna questa giocata" ' +
+    'onclick="event.stopPropagation();segnaDaSchedina(\'' + esc(chiave) + '\',' + i + ')">' +
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" ' +
+      'stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg>' +
+  '</button>';
+}
+
+function segnaDaSchedina(chiave, i){
+  var sc = (S._schedineMostrate || {})[chiave];
+  var x = sc && sc[i];
+  if(!x) return;
+  var p = x.partita;
+  apriSegna({d: p.d, c: p.c, v: p.v, mercato: x.id, nome: x.nome,
+             p: x.p, p05: x.p05, equa: 1 / Math.max(1e-6, x.p), suggerita: false,
+             qmax: p.qmax || null, qex: p.qex || null,
+             qoumax: p.qoumax || null, qou: p.qou || null});
+}
+
 function bottoneGioca(profilo, scelte, c){
   if(!cancelloAcceso()) return '';
   var chiave = profilo.id || profilo.nome;
@@ -5520,7 +5643,7 @@ function confermaSegna(){
   });
   salvaLibro();
   chiudi();
-  S.tab = 'libro'; render(); window.scrollTo(0,0);
+  S.tab = 'classifica'; S.vistaLibro = 'mio'; render(); window.scrollTo(0,0);
 }
 
 /* Il quadrante del ricarico tiene in memoria la posizione scelta. Quando il
@@ -5718,19 +5841,18 @@ function cardClv(){
     '</div></div>';
 }
 
-function tabLibro(){
-  /* Due viste sotto la stessa linguetta: il registro tuo, e la classifica di
-     tutti. Una settima linguetta in fondo allo schermo non ci stava, e
-     soprattutto le due cose rispondono alla stessa domanda da due lati —
-     come sto andando io, e come vado rispetto agli altri. */
-  /* Chi non ha il codice arriva sulla classifica, non sul muro: il muro lo ha
-     gia' visto altrove, e la classifica e' la ragione per cui potrebbe
-     decidere di pagare. Chi ha pagato arriva sul suo libro, che e' la cosa
-     che ha comprato. */
-  var vista = S.vistaLibro || (libroChiuso() ? 'classifica' : 'mio');
+/* Una linguetta sola per le due domande che si somigliano: come vanno gli
+   altri, e come vado io. Prima erano due sezioni — "Libro", con la classifica
+   nascosta dentro — e la separazione non aiutava nessuno: il registro
+   personale e' proprio la lista delle giocate che fanno i punti.
+
+   Davanti sta la classifica, perche' e' la cosa che si apre per guardare; il
+   registro sta dietro, perche' e' la cosa che si apre per controllare. */
+function tabClassifica(){
+  var vista = S.vistaLibro || 'classifica';
   var h = '<div class="forme">' +
-    [['mio', 'Il mio libro', 'le tue giocate'],
-     ['classifica', 'Classifica', 'tutti quanti']].map(function(o){
+    [['classifica', 'Classifica', 'tutti quanti'],
+     ['mio', 'Le mie giocate', 'quanto torna']].map(function(o){
       return '<button class="formab' + (vista === o[0] ? ' on' : '') + '" ' +
         'onclick="vaiVistaLibro(\'' + o[0] + '\')"><b>' + o[1] + '</b><em>' + o[2] + '</em></button>';
     }).join('') + '</div>';
@@ -5937,7 +6059,7 @@ function importaLibro(){
   });
   salvaLibro();
   chiudi();
-  S.tab = 'libro'; render(); window.scrollTo(0,0);
+  S.tab = 'classifica'; S.vistaLibro = 'mio'; render(); window.scrollTo(0,0);
 }
 
 function cardPerchePersonale(){
@@ -5961,11 +6083,13 @@ var TABS = [
   {k:'giornata',  n:'Giornata',  p:'M4 6h16M4 12h16M4 18h10'},
   {k:'schedine',  n:'Schedine',  p:'M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6'},
   {k:'squadre',   n:'Squadre',   p:'M12 3l7 4v6c0 4-3 6.5-7 8-4-1.5-7-4-7-8V7z'},
-  {k:'libro',     n:'Libro',     p:'M4 5a2 2 0 0 1 2-2h13v18H6a2 2 0 0 1-2-2zM9 8h7M9 12h7'},
+  /* podio: tre gradini, il piu' alto al centro. Un trofeo sarebbe stato piu'
+     ovvio e meno onesto — qui non si vince niente, ci si misura. */
+  {k:'classifica',n:'Classifica',p:'M4 20h16M9 20v-6H5v6M15 20V8h-4v12M19 20v-9h-4'},
   {k:'precisione',n:'Precisione',p:'M4 18L9 12l4 3 7-9M4 20h16'},
   {k:'dati',      n:'Dati',      p:'M4 7c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3zM4 7v10c0 1.7 3.6 3 8 3s8-1.3 8-3V7'}
 ];
-var TITOLI = {giornata:'Giornata', schedine:'Schedine', libro:'Il mio libro',
+var TITOLI = {giornata:'Giornata', schedine:'Schedine', classifica:'Classifica',
               squadre:'Squadre', precisione:'Precisione', dati:'Dati'};
 /* I sottotitoli erano in maiuscoletto da terminale, e in maiuscolo una frase
    smette di essere una frase: diventa un'insegna. Qui sotto il titolo ci va
@@ -5986,6 +6110,16 @@ var TITOLI = {giornata:'Giornata', schedine:'Schedine', libro:'Il mio libro',
    con un ciclo di corsa a quattro fotogrammi, come gli sprite di trent'anni
    fa, e il pallone gira con velocita' proporzionale a quanto corre.
    ══════════════════════════════════════════════════════════════ */
+/* Il marchio, scritto una volta e usato dove serve: la schermata di carico e
+   quella del nome. Due copie dello stesso disegno vuol dire che prima o poi
+   ne cambi una sola. */
+var MARCHIO_SVG =
+  '<svg viewBox="0 0 180 180" aria-hidden="true">' +
+    '<path d="M52 122V54l28 32 28-32v68" fill="none" stroke="currentColor" stroke-width="17"' +
+    ' stroke-linecap="round" stroke-linejoin="round"/>' +
+    '<rect x="24" y="128" width="132" height="12" rx="6" fill="var(--accent)"/>' +
+  '</svg>';
+
 function schermataCarico(){
   var q = Math.max(0, Math.min(1, S.avanzamento || 0));
   var pct = Math.round(q * 100);
@@ -5993,12 +6127,7 @@ function schermataCarico(){
     /* Il marchio sta qui e solo qui: e' l'unica schermata in cui l'app non
        ha ancora niente da dire, e l'unica in cui guardare un logo non toglie
        il posto a un numero. */
-    '<div class="marchio">' +
-      '<svg viewBox="0 0 180 180" aria-hidden="true">' +
-        '<path d="M52 122V54l28 32 28-32v68" fill="none" stroke="currentColor" stroke-width="17"' +
-        ' stroke-linecap="round" stroke-linejoin="round"/>' +
-        '<rect x="24" y="128" width="132" height="12" rx="6" fill="var(--accent)"/>' +
-      '</svg>' +
+    '<div class="marchio">' + MARCHIO_SVG +
       '<span>Monthline</span>' +
     '</div>' +
     '<div class="campo">' +
@@ -6060,8 +6189,53 @@ function sottotitolo(){
   return SOTTO[S.tab] || ((S.risultato ? S.risultato.partiteUsate : 0) + ' PARTITE');
 }
 
+/* IL FUOCO SOPRAVVIVE AL RIDISEGNO
+
+   Questa app ridisegna tutto sostituendo innerHTML: e' semplice, e va bene
+   per una schermata che si guarda. Per una in cui si SCRIVE no — l'elemento
+   su cui stai scrivendo viene distrutto e rifatto, e con lui se ne va il
+   fuoco. Su un telefono vuol dire che la tastiera si chiude da sola; su
+   iPhone, se il ridisegno capita fra il momento in cui appoggi il dito e
+   quello in cui lo stacchi, il tocco non arriva mai al campo e la tastiera
+   non si apre affatto.
+
+   Non e' teorico: e' successo sulla classifica, dove il campo del nome
+   compare mentre la classifica sta ancora arrivando dal server. Chi tocca
+   in quel mezzo secondo tocca un campo che sta per sparire.
+
+   La cura e' qui e vale per TUTTI i campi dell'app, non solo per quello:
+   prima di ridisegnare ci si segna chi aveva il fuoco e dove stava il
+   cursore, e dopo si rimette com'era. Cosi' nessuna schermata puo' piu'
+   rubare la tastiera a chi sta scrivendo. */
 function render(){
   var app = document.getElementById('app');
+  var att = document.activeElement;
+  var fuoco = null;
+  if(att && att.id && (att.tagName === 'INPUT' || att.tagName === 'TEXTAREA')){
+    /* Si salva anche QUELLO CHE HAI SCRITTO, e non solo dove stava il cursore.
+       Rimettere il fuoco su un campo svuotato e' peggio che non rimetterlo:
+       la tastiera resta aperta e le lettere sono sparite. Succede perche' il
+       testo appena battuto vive solo nel DOM — nessuno lo ha ancora messo da
+       nessuna parte — e ridisegnare ricostruisce il campo da capo. */
+    fuoco = {id: att.id, a: null, b: null, testo: att.value};
+    try{ fuoco.a = att.selectionStart; fuoco.b = att.selectionEnd; }catch(e){}
+  }
+  var finito = function(){
+    if(!fuoco) return;
+    var rif = document.getElementById(fuoco.id);
+    if(!rif || rif === document.activeElement) return;
+    try{
+      if(fuoco.testo != null && rif.value !== fuoco.testo) rif.value = fuoco.testo;
+      rif.focus({preventScroll: true});
+      if(fuoco.a != null) rif.setSelectionRange(fuoco.a, fuoco.b);
+    }catch(e){}
+  };
+  var vero = disegna(app);
+  finito();
+  return vero;
+}
+
+function disegna(app){
   if(S.stato === 'carico' || S.stato === 'calcolo'){
     app.innerHTML = schermataCarico();
     return;
@@ -6084,9 +6258,10 @@ function render(){
       '<button class="btn acc" style="margin-top:12px" onclick="ricalcola()">Riprova</button></div></div>';
     return;
   }
+  if(serveIlNome()) { app.innerHTML = schermataNome(); return; }
   var corpo = sezioneChiusa(S.tab) ? cardSezioneChiusa(S.tab) :
     S.tab==='schedine'   ? tabSchedine() :
-    S.tab==='libro'      ? tabLibro() :
+    S.tab==='classifica' ? tabClassifica() :
     S.tab==='squadre'    ? tabSquadre() :
     S.tab==='precisione' ? tabPrecisione() :
     S.tab==='dati'       ? tabDati() : tabGiornata();

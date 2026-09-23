@@ -44,6 +44,7 @@ const TENTATIVI_ORA = 12;         /* codici sbagliati tollerati, per indirizzo *
 const GAMBE_MAX = 8;              /* gambe per schedina: oltre, non e' piu' una giocata */
 const CLASSIFICA_QUANTI = 50;     /* quanti se ne mandano */
 const NICK_MIN = 3, NICK_MAX = 16;
+const OSPITI_ORA = 4;             /* identita' da ospite per indirizzo, all'ora */
 
 /* ─────────────────────────── utilita' ─────────────────────────── */
 
@@ -155,13 +156,30 @@ function vale(voce) {
 
 /* Il freno sui tentativi. Senza, un codice da dodici caratteri si trova a
    forza bruta con abbastanza pazienza e abbastanza richieste. */
+function chiaveFreno(ip) {
+  return 'freno:' + ip + ':' + Math.floor(Date.now() / 3600000);
+}
 async function troppiTentativi(env, ip) {
   if (!env.CODICI || !ip) return false;
-  const k = 'freno:' + ip + ':' + Math.floor(Date.now() / 3600000);
+  const n = parseInt(await env.CODICI.get(chiaveFreno(ip)) || '0', 10);
+  return n >= TENTATIVI_ORA;
+}
+
+/* Si contano solo i codici SBAGLIATI, e la differenza non e' un dettaglio.
+
+   Contando anche quelli giusti, il freno pensato contro chi tira a indovinare
+   colpiva prima di tutto la gente normale: dodici attivazioni riuscite nella
+   stessa ora e il tredicesimo resta fuori. E "la stessa ora dallo stesso
+   indirizzo" non vuol dire "la stessa persona" — dietro la rete mobile
+   l'indirizzo e' condiviso fra migliaia di abbonati, quindi sarebbe bastato
+   che dodici sconosciuti attivassero il codice quel pomeriggio per murare il
+   tredicesimo, che ha pagato. Chi indovina un codice da dodici caratteri non
+   lo indovina sbagliando poche volte: il freno deve contare gli errori. */
+async function segnaTentativo(env, ip) {
+  if (!env.CODICI || !ip) return;
+  const k = chiaveFreno(ip);
   const n = parseInt(await env.CODICI.get(k) || '0', 10);
-  if (n >= TENTATIVI_ORA) return true;
   await env.CODICI.put(k, String(n + 1), { expirationTtl: 3700 });
-  return false;
 }
 
 /* ─────────────────────────── i diritti ─────────────────────────── */
@@ -191,11 +209,17 @@ async function postCodice(req, env) {
   let corpo;
   try { corpo = await req.json(); } catch (e) { return json({ errore: 'richiesta illeggibile' }, 400); }
   const codice = normalizza(corpo && corpo.codice);
-  if (codice.length < 6) return json({ errore: 'codice non valido' }, 400);
+  if (codice.length < 6) {
+    await segnaTentativo(env, ip);
+    return json({ errore: 'codice non valido' }, 400);
+  }
 
   const grezzo = await env.CODICI.get('codice:' + codice);
   const voce = grezzo ? JSON.parse(grezzo) : null;
-  if (!vale(voce)) return json({ errore: 'codice non valido o scaduto' }, 403);
+  if (!vale(voce)) {
+    await segnaTentativo(env, ip);
+    return json({ errore: 'codice non valido o scaduto' }, 403);
+  }
 
   /* si segna quando e' stato usato l'ultima volta, cosi' si vede chi e' vivo
      e chi no senza chiedere niente a nessuno */
@@ -213,13 +237,65 @@ async function postCodice(req, env) {
      mettessimo il codice gli regalerebbe l'accesso per sempre, e senza
      saperlo. L'impronta identifica e non rivela. */
   const gid = await chiaveGiocatore(codice, env.SEGRETO);
+  await traslocaOspite(req, env, gid);
   const gettone = await firmaGettone({
     tipo: voce.tipo, nome: voce.nome || '', scade: voce.scade || null,
     capo: voce.tipo === 'capo', gid: gid,
     exp: Date.now() + GETTONE_GIORNI * 86400000,
   }, env.SEGRETO);
+  /* Il nome di chi entra viaggia con la risposta. Senza, l'app che ha appena
+     fatto entrare qualcuno non sa come si chiama, e gli rimette davanti la
+     schermata "come ti chiami?" — a uno che il nome ce l'ha gia' e magari se
+     l'e' appena portato dietro traslocando. Il server lo sapeva: bastava
+     dirlo, invece di farlo chiedere un'altra volta. */
+  const mio = await leggiGiocatore(env, gid);
   return json({ gettone, tipo: voce.tipo, nome: voce.nome || '',
-                scade: voce.scade || null, capo: voce.tipo === 'capo' });
+                scade: voce.scade || null, capo: voce.tipo === 'capo',
+                nick: (mio && mio.nick) || null,
+                punti: (mio && mio.punti) || 0, vinte: (mio && mio.vinte) || 0 });
+}
+
+/* IL TRASLOCO
+
+   Il percorso normale di chi paga e' questo: prova l'app gratis, si mette un
+   nome, gioca qualche schedina sulle tre partite che vede, e poi prende il
+   codice. Se mettere il codice gli desse un'identita' nuova di zecca, in quel
+   momento perderebbe nome e punti — e il nome non potrebbe nemmeno
+   riprenderselo, perche' risulterebbe gia' occupato da se stesso di cinque
+   minuti prima. Il premio per aver pagato sarebbe ricominciare da capo.
+
+   Quindi quando un OSPITE entra con un codice si porta dietro quello che ha:
+   nome, punti, schedine. Solo da ospite: due abbonamenti veri non si fondono
+   mai — quello sarebbe un modo per sommare i punti di due persone — e non si
+   trasloca sopra a un giocatore che esiste gia'. */
+async function traslocaOspite(req, env, nuovo) {
+  const vecchioIo = await chiSono(req, env);
+  if (!vecchioIo || vecchioIo.id === nuovo) return;
+  if (vecchioIo.tipo !== 'libero') return;             /* solo dagli ospiti */
+
+  const g = await leggiGiocatore(env, vecchioIo.id);
+  if (!g || !g.nick) return;
+  if (await env.CODICI.get('gioc:' + nuovo)) return;   /* il nuovo esiste gia' */
+
+  g.aggiornato = new Date().toISOString();
+  await env.CODICI.put('gioc:' + nuovo, JSON.stringify(g));
+  await env.CODICI.put('nick:' + g.nick.toLowerCase(), nuovo);
+  await env.CODICI.delete('gioc:' + vecchioIo.id);
+
+  /* e le schedine gia' registrate: senza, quelle in attesa pagherebbero
+     punti a un giocatore che non c'e' piu' */
+  let cursore;
+  do {
+    const p = await env.CODICI.list({ prefix: 'sch:' + vecchioIo.id + ':', cursor: cursore });
+    for (const k of p.keys) {
+      const v = await env.CODICI.get(k.name);
+      if (v) {
+        await env.CODICI.put('sch:' + nuovo + ':' + k.name.split(':')[2], v);
+        await env.CODICI.delete(k.name);
+      }
+    }
+    cursore = p.list_complete ? null : p.cursor;
+  } while (cursore);
 }
 
 async function getIo(req, env) {
@@ -452,6 +528,19 @@ async function chiSono(req, env) {
    E vedere non e' entrare: l'ospite resta libero, con le sue tre partite per
    campionato. Il gettone dice chi e', non cosa puo'. */
 async function postOspite(req, env) {
+  /* Un'identita' da ospite non costa niente e non apre niente, ma dieci
+     identita' sono dieci righe in classifica: un freno ci vuole lo stesso.
+     Quattro all'ora per indirizzo — piu' che abbastanza per una famiglia,
+     poco per una fabbrica. */
+  const ip = req.headers.get('CF-Connecting-IP') || '';
+  if (ip && env.CODICI) {
+    const k = 'ospiti:' + ip + ':' + Math.floor(Date.now() / 3600000);
+    const n = parseInt(await env.CODICI.get(k) || '0', 10);
+    if (n >= OSPITI_ORA) {
+      return json({ errore: 'troppi nomi nuovi da qui, riprova fra un\'ora' }, 429);
+    }
+    await env.CODICI.put(k, String(n + 1), { expirationTtl: 3700 });
+  }
   const seme = base64url(crypto.getRandomValues(new Uint8Array(18)).buffer);
   const gid = await chiaveGiocatore('ospite:' + seme, env.SEGRETO);
   const gettone = await firmaGettone({
@@ -476,8 +565,23 @@ async function postNick(req, env) {
   if (gia && gia !== io.id) return json({ errore: 'questo nome e gia preso' }, 409);
 
   const vecchio = await leggiGiocatore(env, io.id);
-  if (vecchio && vecchio.nick && vecchio.nick.toLowerCase() !== nick.toLowerCase()) {
-    await env.CODICI.delete('nick:' + vecchio.nick.toLowerCase());
+  /* IL NOME SI SCEGLIE UNA VOLTA SOLA.
+
+     Non e' rigidita': e' l'unica cosa che rende leggibile una classifica.
+     Se il nome si cambia, la persona dietro il terzo posto di oggi non e'
+     necessariamente quella di ieri, e chi perde una settimana si ribattezza
+     e riparte come se fosse un altro. Un punteggio ha senso solo se resta
+     attaccato a un nome, e il nome a una persona.
+
+     E' anche la difesa piu' semplice contro chi si fabbrica dieci identita':
+     i nomi buoni finiscono, e nessuno si costruisce una reputazione da
+     ricominciare ogni volta. */
+  if (vecchio && vecchio.nick) {
+    if (vecchio.nick.toLowerCase() === nick.toLowerCase()) {
+      return json({ nick: vecchio.nick, punti: vecchio.punti || 0, vinte: vecchio.vinte || 0,
+                    giocate: vecchio.giocate || 0, tipo: vecchio.tipo || io.tipo });
+    }
+    return json({ errore: 'il nome si sceglie una volta sola', nick: vecchio.nick }, 409);
   }
   const g = Object.assign({ punti: 0, vinte: 0, giocate: 0 }, vecchio || {},
                           { nick, tipo: io.tipo, aggiornato: new Date().toISOString() });
