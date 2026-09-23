@@ -1085,6 +1085,82 @@ def test_giro_leggero_aggiorna_le_quote():
           'il contatore esiste per vedere arrivare la fine della quota')
 
 
+def test_cancello_e_deposito():
+    """Il calendario deve USCIRE dal repository pubblico, o il cancello e' finto.
+
+    E' il punto piu' delicato di tutto l'abbonamento, e non da' nessun segnale
+    quando si rompe: l'app continua a funzionare benissimo, semplicemente
+    chiunque conosca l'indirizzo del file si prende tutto senza pagare. Un
+    cancello che non tiene si riconosce solo guardando cosa finisce su disco.
+    """
+    doc = {'lega': 'Prova', 'partite': [{'d': '2020-01-01', 'c': 'A', 'v': 'B', 'gc': 1, 'gv': 0}],
+           'calendario': [{'d': '2026-10-10', 'c': 'A', 'v': 'B', 'q': [2, 3, 4]}]}
+    lega = {'id': 'ZZ', 'nome': 'Prova', 'paese': 'x', 'file': 'leghe/ZZ.json'}
+
+    vecchio_env = dict(os.environ)
+    scritto = {}
+
+    def finta_scrittura(percorso, *a, **k):
+        return io.StringIO()
+
+    # ── cancello SPENTO: tutto nel file, come prima ──
+    for k in ('MONTHLINE_API', 'MONTHLINE_ADMIN'):
+        os.environ.pop(k, None)
+    prova('senza deposito il cancello e spento', not B.cancello_acceso())
+
+    import tempfile
+    cartella = tempfile.mkdtemp()
+    vero_data = B.DATA
+    try:
+        B.DATA = cartella
+        B.scrivi_lega(lega, doc, {})
+        with open(os.path.join(cartella, 'leghe', 'ZZ.json'), encoding='utf-8') as f:
+            fuori = json.load(f)
+        prova('e il calendario resta nel file, cosi niente si rompe',
+              len(fuori.get('calendario') or []) == 1)
+
+        # ── cancello ACCESO, ma il deposito non risponde ──
+        os.environ['MONTHLINE_API'] = 'https://deposito-che-non-esiste.invalid'
+        os.environ['MONTHLINE_ADMIN'] = 'segreto'
+        prova('col deposito configurato il cancello e acceso', B.cancello_acceso())
+
+        esiti = {}
+        vera_pausa = B.time.sleep
+        B.time.sleep = lambda *a, **k: None
+        try:
+            B.scrivi_lega(lega, doc, esiti)
+        finally:
+            B.time.sleep = vera_pausa
+        with open(os.path.join(cartella, 'leghe', 'ZZ.json'), encoding='utf-8') as f:
+            fuori = json.load(f)
+        prova('IL CALENDARIO NON TORNA NEL FILE SE IL DEPOSITO FALLISCE',
+              not fuori.get('calendario'), list(fuori.keys()))
+        prova('e il fallimento si dichiara invece di sparire',
+              'FALLITO' in str(esiti.get('deposito ZZ', '')), esiti.get('deposito ZZ'))
+        prova('l\'archivio resta comunque nel file: sono risultati pubblici',
+              len(fuori.get('partite') or []) == 1)
+        prova('e il file dice che il calendario sta altrove',
+              fuori.get('calendarioAltrove') is True)
+    finally:
+        B.DATA = vero_data
+        os.environ.clear(); os.environ.update(vecchio_env)
+
+    sorgente = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                            'scripts', 'build_data.py')
+    testo = io.open(sorgente, encoding='utf-8').read()
+    prova('anche la Serie A passa dal deposito, non solo gli altri quattro',
+          "deposita_calendario(LEGA_CASA['id']" in testo)
+    prova('il segreto non finisce nei messaggi di errore',
+          "replace(segreto, '***')" in testo)
+
+    percorso = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                            '.github', 'workflows', 'aggiorna-dati.yml')
+    if os.path.exists(percorso):
+        wf = io.open(percorso, encoding='utf-8').read()
+        prova('il robot sa dove sta il deposito',
+              'MONTHLINE_API' in wf and 'MONTHLINE_ADMIN' in wf)
+
+
 def test_notizie_degli_altri_campionati():
     """Le notizie erano solo Serie A: tre feed italiani, e zero negli altri
     quattro archivi.
@@ -1240,6 +1316,7 @@ def main():
     test_service_worker()
     test_crediti_solo_a_chi_gioca()
     test_notizie_degli_altri_campionati()
+    test_cancello_e_deposito()
     test_validatori()
     test_quote()
     test_calendario_ha_le_stesse_quote()

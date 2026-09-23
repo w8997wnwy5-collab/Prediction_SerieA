@@ -65,6 +65,11 @@ jobs:
           FOOTBALL_DATA_TOKEN: ${{ secrets.FOOTBALL_DATA_TOKEN }}
           APIFOOTBALL_KEY: ${{ secrets.APIFOOTBALL_KEY }}
           ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+          # Il deposito dove finiscono i calendari. Finche' questi due non ci
+          # sono il giro scrive tutto nel repository come prima, senza cancello:
+          # e' apposta, cosi' niente si rompe mentre il Worker non c'e' ancora.
+          MONTHLINE_API: ${{ secrets.MONTHLINE_API }}
+          MONTHLINE_ADMIN: ${{ secrets.MONTHLINE_ADMIN }}
           # Solo il giro delle 05:17 rilegge tutto l'archivio; gli altri
           # aggiornano calendario, quote e arbitri e basta.
           #
@@ -85,6 +90,11 @@ jobs:
           FOOTBALL_DATA_TOKEN: ${{ secrets.FOOTBALL_DATA_TOKEN }}
           APIFOOTBALL_KEY: ${{ secrets.APIFOOTBALL_KEY }}
           ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+          # Il deposito dove finiscono i calendari. Finche' questi due non ci
+          # sono il giro scrive tutto nel repository come prima, senza cancello:
+          # e' apposta, cosi' niente si rompe mentre il Worker non c'e' ancora.
+          MONTHLINE_API: ${{ secrets.MONTHLINE_API }}
+          MONTHLINE_ADMIN: ${{ secrets.MONTHLINE_ADMIN }}
           MODO: ${{ (github.event.schedule == '47 9,12,15,17 * * *' || github.event.schedule == '17 23 * * *') && 'leggero' || 'completo' }}
         run: |
           git config user.name  "github-actions[bot]"

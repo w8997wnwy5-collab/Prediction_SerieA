@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<title>Monthline · codici</title>
+<!--
+  Il pannello dei codici.
+
+  Sta nel repository pubblico e va benissimo: qui dentro non c'e' nessun
+  segreto. Il segreto lo scrivi tu una volta, resta sul tuo telefono, e senza
+  quello questa pagina e' un modulo che non apre niente.
+
+  Non e' collegato dall'app e non compare da nessuna parte: ci si arriva solo
+  conoscendo l'indirizzo.
+-->
+<style>
+:root{
+  color-scheme:light dark;
+  --bg:#F5F7F5; --card:#FFF; --ink:#16211D; --mute:#6B7A74; --line:#E1E7E2;
+  --accent:#178A57; --warn:#C4453A;
+  --sys:-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',system-ui,sans-serif;
+  --mono:ui-monospace,'SF Mono','Menlo',monospace;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#121714; --card:#1C221F; --ink:#ECF1EE; --mute:#95A29B; --line:#2C3531; --accent:#2AA96F;
+}}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sys);
+  padding:max(18px,env(safe-area-inset-top)) 18px 60px;}
+.w{max-width:620px;margin:0 auto}
+h1{font-size:27px;letter-spacing:-.7px;margin:0 0 3px}
+.sub{color:var(--mute);font-size:14px;margin-bottom:22px}
+.card{background:var(--card);border:.5px solid var(--line);border-radius:18px;padding:16px;
+  margin-bottom:13px;box-shadow:0 1px 2px rgba(20,32,27,.05),0 10px 26px -14px rgba(20,32,27,.16)}
+label{display:block;font-size:11px;letter-spacing:.7px;text-transform:uppercase;
+  color:var(--mute);margin-bottom:6px}
+input,select{width:100%;padding:12px;border:1px solid var(--line);border-radius:11px;
+  background:var(--bg);color:var(--ink);font-size:16px;font-family:inherit}
+input[type=password],.codice{font-family:var(--mono)}
+.riga{display:flex;gap:10px}.riga>*{flex:1}
+button{margin-top:12px;width:100%;padding:13px;border:0;border-radius:12px;background:var(--accent);
+  color:#fff;font-size:16px;font-weight:600;font-family:inherit;cursor:pointer;
+  transition:transform .2s cubic-bezier(.22,.9,.28,1.2)}
+button:active{transform:scale(.97)}
+button.piano{background:transparent;color:var(--mute);border:1px solid var(--line)}
+.nato{margin-top:14px;padding:16px;border-radius:14px;background:var(--accent);color:#fff;text-align:center}
+.nato .c{font-family:var(--mono);font-size:26px;font-weight:700;letter-spacing:1.5px;margin:6px 0}
+.nato small{opacity:.85;font-size:12px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+td,th{text-align:left;padding:9px 6px;border-bottom:1px solid var(--line)}
+th{font-size:10px;letter-spacing:.6px;text-transform:uppercase;color:var(--mute);font-weight:600}
+td.c{font-family:var(--mono);font-weight:600;white-space:nowrap}
+.tag{font-size:10px;padding:2px 7px;border-radius:6px;background:var(--line);color:var(--mute)}
+.tag.vip{background:var(--accent);color:#fff}
+.tag.morto{background:var(--warn);color:#fff}
+.rev{border:0;background:none;color:var(--warn);font-size:12px;cursor:pointer;padding:4px;width:auto;margin:0}
+.nota{font-size:12.5px;color:var(--mute);line-height:1.5;margin-top:10px}
+.err{color:var(--warn);font-size:13px;margin-top:10px}
+</style>
+</head>
+<body>
+<div class="w">
+  <h1>Codici</h1>
+  <div class="sub">Monthline · chi entra e fino a quando</div>
+
+  <div class="card" id="porta">
+    <label>Indirizzo dell'API</label>
+    <input id="api" placeholder="https://monthline.tuonome.workers.dev">
+    <label style="margin-top:12px">Segreto del pannello</label>
+    <input id="seg" type="password" placeholder="SEGRETO_ADMIN">
+    <button onclick="entra()">Entra</button>
+    <div class="nota">Restano su questo telefono e non vengono mandati da nessuna parte
+      tranne che alla tua API.</div>
+    <div class="err" id="errPorta"></div>
+  </div>
+
+  <div id="dentro" hidden>
+    <div class="card">
+      <label>Nuovo codice</label>
+      <input id="nome" placeholder="per chi è (solo per te: “Marco”, “gruppo bar”)">
+      <div class="riga" style="margin-top:12px">
+        <div>
+          <label>Tipo</label>
+          <select id="tipo" onchange="cambiaTipo()">
+            <option value="vip">VIP — non scade mai</option>
+            <option value="abbonato">Abbonato — a scadenza</option>
+          </select>
+        </div>
+        <div id="boxMesi" hidden>
+          <label>Mesi</label>
+          <select id="mesi">
+            <option>1</option><option>3</option><option>6</option><option>12</option>
+          </select>
+        </div>
+      </div>
+      <button onclick="crea()">Crea il codice</button>
+      <div id="nato"></div>
+    </div>
+
+    <div class="card">
+      <label>Chi ha un codice <span id="conta" style="float:right;text-transform:none"></span></label>
+      <table><thead><tr><th>codice</th><th>chi</th><th>fino a</th><th></th></tr></thead>
+        <tbody id="elenco"></tbody></table>
+      <button class="piano" onclick="carica()">Aggiorna</button>
+    </div>
+  </div>
+</div>
+
+<script>
+var API='', SEG='';
+function $(x){return document.getElementById(x)}
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){
+  return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+
+try{ $('api').value = localStorage.getItem('ml_api')||''; SEG = localStorage.getItem('ml_seg')||'';
+     $('seg').value = SEG; }catch(e){}
+
+function chiama(via, opz){
+  opz = opz||{};
+  return fetch(API+via, {
+    method: opz.metodo||'GET',
+    headers: Object.assign({'Authorization':'Bearer '+SEG},
+      opz.corpo?{'content-type':'application/json'}:{}),
+    body: opz.corpo?JSON.stringify(opz.corpo):undefined
+  }).then(function(r){
+    return r.json().then(function(j){ if(!r.ok) throw new Error(j.errore||('HTTP '+r.status)); return j; });
+  });
+}
+
+function entra(){
+  API = $('api').value.trim().replace(/\/+$/,'');
+  SEG = $('seg').value.trim();
+  $('errPorta').textContent = '';
+  if(!API || !SEG){ $('errPorta').textContent='Servono tutti e due.'; return; }
+  chiama('/api/admin/elenco').then(function(){
+    try{ localStorage.setItem('ml_api',API); localStorage.setItem('ml_seg',SEG); }catch(e){}
+    $('porta').hidden = true; $('dentro').hidden = false;
+    mostra();
+  }).catch(function(e){ $('errPorta').textContent = 'Non entra: '+e.message; });
+}
+
+function cambiaTipo(){ $('boxMesi').hidden = $('tipo').value !== 'abbonato'; }
+
+function crea(){
+  chiama('/api/admin/crea', {metodo:'POST', corpo:{
+    tipo: $('tipo').value, mesi: parseInt($('mesi').value,10)||1, nome: $('nome').value.trim()
+  }}).then(function(v){
+    $('nato').innerHTML = '<div class="nato">da dare a chi vuoi'+
+      '<div class="c">'+esc(v.codice)+'</div><small>'+
+      (v.tipo==='vip' ? 'VIP, non scade' : 'fino al '+esc((v.scade||'').slice(0,10)))+
+      '</small></div>';
+    if(navigator.clipboard) navigator.clipboard.writeText(v.codice).catch(function(){});
+    $('nome').value=''; carica();
+  }).catch(function(e){ $('nato').innerHTML = '<div class="err">'+esc(e.message)+'</div>'; });
+}
+
+function carica(){ mostra(); }
+function mostra(){
+  chiama('/api/admin/elenco').then(function(d){
+    $('conta').textContent = d.validi+' validi su '+d.quanti;
+    $('elenco').innerHTML = d.codici.map(function(c){
+      var stato = c.revocato ? '<span class="tag morto">revocato</span>'
+        : c.tipo==='vip' ? '<span class="tag vip">VIP</span>'
+        : !c.valido ? '<span class="tag morto">scaduto</span>'
+        : esc((c.scade||'').slice(0,10));
+      return '<tr><td class="c">'+esc(c.codice.replace(/(.{4})(?=.)/g,'$1-'))+'</td>'+
+        '<td>'+esc(c.nome||'—')+'<br><span class="tag">'+(c.usi||0)+' usi</span></td>'+
+        '<td>'+stato+'</td>'+
+        '<td>'+(c.revocato?'':'<button class="rev" onclick="revoca(\''+esc(c.codice)+'\')">revoca</button>')+'</td></tr>';
+    }).join('') || '<tr><td colspan="4" style="color:var(--mute)">ancora nessuno</td></tr>';
+  }).catch(function(e){ $('elenco').innerHTML='<tr><td colspan="4" class="err">'+esc(e.message)+'</td></tr>'; });
+}
+
+function revoca(codice){
+  if(!confirm('Revocare '+codice+'? Chi ce l\'ha resta fuori al prossimo accesso.')) return;
+  chiama('/api/admin/revoca',{metodo:'POST',corpo:{codice:codice}}).then(mostra);
+}
+
+if(API && SEG){ /* se il telefono se li ricorda, si entra da soli */ setTimeout(entra, 60); }
+</script>
+</body>
+</html>

@@ -2215,13 +2215,88 @@ def costruisci_lega(lega, stagioni, esiti):
             'partite': partite_ord, 'calendario': calendario})
 
 
-def scrivi_lega(lega, doc):
+# ────────────────────────────── il deposito ──────────────────────────────
+#
+# Il calendario esce dal repository pubblico.
+#
+# Questo e' il passo senza il quale il cancello non vale niente. L'app puo'
+# nascondere quanto vuole: se il calendario resta in un file su GitHub, chi ne
+# conosce l'indirizzo se lo prende senza nemmeno vedere la schermata
+# d'accesso. Non e' un difetto dell'app, e' quello che vuol dire "sito
+# statico" — non c'e' nessuno, li' sopra, che possa dire di no.
+#
+# Cosa resta pubblico e cosa no, e il criterio e' onesto:
+#
+#   l'ARCHIVIO (le partite giocate) resta nel repository. Sono i risultati di
+#   football-data.co.uk, scaricabili da chiunque in dieci secondi: metterli
+#   sotto chiave non proteggerebbe niente e costringerebbe a far passare tre
+#   megabyte e mezzo per il server a ogni apertura dell'app.
+#
+#   il CALENDARIO (le partite in arrivo, con le quote) va nel deposito. E' la
+#   sola cosa che ha senso vendere: le quote costano crediti veri, e sono
+#   quelle che servono per giocare.
+#
+# Se il deposito non risponde il giro NON si ferma e NON riscrive il
+# calendario nel repository: si limita a dirlo. Un guasto di rete non deve
+# poter spalancare il cancello.
+
+def deposita_calendario(lega_id, calendario, esiti):
+    """Manda un calendario al Worker. Torna True se e' arrivato."""
+    api = os.environ.get('MONTHLINE_API', '').strip().rstrip('/')
+    segreto = os.environ.get('MONTHLINE_ADMIN', '').strip()
+    if not api or not segreto:
+        esiti['deposito %s' % lega_id] = 'saltato: manca MONTHLINE_API o MONTHLINE_ADMIN'
+        return False
+    corpo = json.dumps({'calendario': calendario}).encode('utf-8')
+    url = '%s/api/admin/carica/%s' % (api, lega_id)
+    req = urllib.request.Request(url, data=corpo, method='POST', headers={
+        'content-type': 'application/json',
+        'authorization': 'Bearer %s' % segreto,
+        'User-Agent': 'Monthline/deposito',
+    })
+    for tentativo in range(3):
+        try:
+            with urllib.request.urlopen(req, timeout=30) as r:
+                risposta = json.loads(r.read().decode('utf-8'))
+            esiti['deposito %s' % lega_id] = 'ok: %d partite depositate' % (
+                risposta.get('partite', len(calendario)))
+            return True
+        except Exception as e:                    # noqa: BLE001
+            # il segreto puo' finire in un messaggio di errore: mai stamparlo
+            motivo = str(e).replace(segreto, '***')[:90]
+            if tentativo == 2:
+                esiti['deposito %s' % lega_id] = 'FALLITO: %s' % motivo
+                return False
+            time.sleep(2 * (tentativo + 1))
+    return False
+
+
+def cancello_acceso():
+    """C'e' un deposito dove mandare i calendari? Se no, si resta come prima:
+    tutto nel repository, nessun cancello. Serve a non rompere niente mentre
+    il Worker non c'e' ancora."""
+    return bool(os.environ.get('MONTHLINE_API', '').strip() and
+                os.environ.get('MONTHLINE_ADMIN', '').strip())
+
+
+def scrivi_lega(lega, doc, esiti=None):
     """Un file per campionato. Tutti insieme farebbero 3.9 MB — misurati — e un
-    telefono li scaricherebbe a ogni apertura."""
+    telefono li scaricherebbe a ogni apertura.
+
+    Col cancello acceso il CALENDARIO non entra nel file: va nel deposito, e
+    nel file resta solo l'archivio. Se il deposito rifiuta, il calendario NON
+    torna nel file di ripiego — si perde quel giro e si riprova al prossimo.
+    Un guasto di rete non deve poter spalancare il cancello."""
     percorso = os.path.join(DATA, *lega['file'].split('/'))
     os.makedirs(os.path.dirname(percorso), exist_ok=True)
+    da_scrivere = doc
+    if cancello_acceso():
+        deposita_calendario(lega['id'], doc.get('calendario') or [],
+                            esiti if esiti is not None else {})
+        da_scrivere = {k: v for k, v in doc.items() if k != 'calendario'}
+        da_scrivere['calendarioAltrove'] = True
     with open(percorso, 'w', encoding='utf-8') as f:
-        json.dump(doc, f, ensure_ascii=False, separators=(',', ':'))
+        json.dump(da_scrivere, f, ensure_ascii=False, separators=(',', ':'))
     return os.path.getsize(percorso)
 
 
@@ -2276,7 +2351,7 @@ def aggiorna_lega_leggero(lega, stagioni, esiti):
                         key=lambda x: (x['d'], x.get('c', '')))
     doc['calendario'] = calendario
     doc['aggiornato'] = datetime.now(timezone.utc).isoformat(timespec='seconds')
-    scrivi_lega(lega, doc)
+    scrivi_lega(lega, doc, esiti)
     con_quote = len([x for x in calendario if x.get('q') or x.get('qex')])
     log('  %s: %d in arrivo, %d con quote' % (lega['nome'], len(calendario), con_quote))
     return {'id': lega['id'], 'nome': lega['nome'], 'paese': lega['paese'],
@@ -2297,7 +2372,7 @@ def costruisci_altre_leghe(stagioni, esiti, voci):
             continue
         if not doc:
             continue
-        peso = scrivi_lega(lega, doc)
+        peso = scrivi_lega(lega, doc, esiti)
         in_arrivo = len(doc['calendario'])
         con_quote = len([x for x in doc['calendario'] if x.get('q') or x.get('qex')])
         log('  %d partite, %d in arrivo (%d con quote), %.0f KB'
@@ -2530,8 +2605,16 @@ def main():
         doc['marcatori'] = marcatori
     if notizie:
         doc['notizie'] = notizie
+    # Anche il campionato di casa. Senza questo pezzo la Serie A sarebbe
+    # l'unico con il cancello spalancato — e per giunta proprio quello che si
+    # apre per primo.
+    da_scrivere = doc
+    if cancello_acceso():
+        deposita_calendario(LEGA_CASA['id'], calendario, esiti)
+        da_scrivere = {k: v for k, v in doc.items() if k != 'calendario'}
+        da_scrivere['calendarioAltrove'] = True
     with open(FILE_DATI, 'w', encoding='utf-8') as f:
-        json.dump(doc, f, ensure_ascii=False, separators=(',', ':'))
+        json.dump(da_scrivere, f, ensure_ascii=False, separators=(',', ':'))
 
     # ── gli altri quattro campionati ──
     # Vengono DOPO, e apposta: se qualcosa qui sotto si rompe, la Serie A e'

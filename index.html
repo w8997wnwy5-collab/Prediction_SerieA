@@ -546,6 +546,14 @@ details.note summary{transition:opacity .15s;}
 details.note summary:active{opacity:.6;}
 .match{transition:transform .2s var(--molla);}
 
+/* il muro */
+.muro{text-align:center;padding:22px 18px;}
+.murot{font-size:19px;font-weight:700;letter-spacing:-.4px;}
+.murop{font-size:13.5px;line-height:1.5;color:var(--mute);margin:8px 0 14px;}
+.muroq{font-family:var(--mono);font-size:15px;color:var(--mute);margin-bottom:13px;}
+.muroq b{font-size:26px;color:var(--ink);font-weight:700;}
+.murom{font-size:11.5px;color:var(--mute);margin-top:10px;}
+
 /* i grafici */
 .grafc{padding:15px 16px 13px;}
 .grafn{font-size:12.5px;line-height:1.5;color:var(--mute);margin-top:9px;letter-spacing:-.1px;}
@@ -659,10 +667,173 @@ var S = {
   aggiornando: false, tempoCalcolo: 0,
   /* i cinque campionati: l'indice, i documenti, i modelli e quale si guarda */
   leghe: null, docs: {}, mods: {}, simPerLega: {}, lega: null,
-  legheInCorso: false, legheFatte: ''
+  legheInCorso: false, legheFatte: '',
+  /* l'abbonamento: il gettone, cosa dice, e quanto si vede per campionato */
+  diritti: null, muro: {}
 };
 var VERSIONE = '3.4';
 var LEGA_CASA = 'I1';
+
+/* ══════════════════════════════════════════════════════════════
+   L'ABBONAMENTO
+
+   Una riga, e decide tutto: finche' e' vuota l'app funziona esattamente come
+   prima — nessun cancello, calendario dai file, tutto visibile. Appena ci si
+   mette l'indirizzo del Worker, il calendario comincia a passare da li' e chi
+   non ha un codice vede tre partite per campionato.
+
+   E' apposta che sia una riga sola. Il cancello si accende quando il server
+   c'e', non quando il codice viene scritto, e nel frattempo niente si rompe.
+
+   Una cosa che questo file NON puo' fare, e che vale la pena avere scritta
+   accanto al codice che sembra farla: nascondere qualcosa. Sta su un sito
+   statico, lo legge chiunque, e tutto quello che c'e' qui dentro e' una
+   cortesia verso chi non ha pagato — non una difesa. La difesa e' che il
+   calendario, dal file pubblico, sia proprio USCITO. Se un giorno qualcuno
+   rimettesse i calendari nel repository "per comodita'", questo codice
+   continuerebbe a mostrare il muro e l'abbonamento smetterebbe di valere
+   niente, senza che nessun errore lo dica. */
+var API = '';
+
+var CHIAVE_GETTONE = 'monthline_gettone_v1';
+function gettone(){
+  if(S.gettone !== undefined) return S.gettone;
+  try{ S.gettone = localStorage.getItem(CHIAVE_GETTONE) || null; }catch(e){ S.gettone = null; }
+  return S.gettone;
+}
+function salvaGettone(g){
+  S.gettone = g || null;
+  try{
+    if(g) localStorage.setItem(CHIAVE_GETTONE, g);
+    else localStorage.removeItem(CHIAVE_GETTONE);
+  }catch(e){}
+}
+function cancelloAcceso(){ return !!API; }
+/* Chi non ha un cancello davanti vede tutto: e' il caso di prima che il
+   Worker esista, e di chi apre il file in locale. */
+function haTutto(){ return !cancelloAcceso() || !!(S.diritti && S.diritti.tutto); }
+
+function chiediApi(via, opz){
+  opz = opz || {};
+  var testate = {};
+  if(gettone()) testate['Authorization'] = 'Bearer ' + gettone();
+  if(opz.corpo) testate['content-type'] = 'application/json';
+  return fetch(API.replace(/\/+$/, '') + via, {
+    method: opz.metodo || 'GET', headers: testate,
+    body: opz.corpo ? JSON.stringify(opz.corpo) : undefined
+  }).then(function(r){
+    return r.json().catch(function(){ return {}; }).then(function(j){
+      if(!r.ok) throw new Error(j.errore || ('HTTP ' + r.status));
+      return j;
+    });
+  });
+}
+
+function entraColCodice(){
+  var campo = document.getElementById('campoCodice');
+  var avviso = document.getElementById('avvisoCodice');
+  var codice = (campo && campo.value || '').trim();
+  if(!codice){ if(avviso) avviso.textContent = 'Scrivi il codice.'; return; }
+  if(avviso) avviso.textContent = 'Controllo…';
+  chiediApi('/api/codice', {metodo:'POST', corpo:{codice: codice}}).then(function(r){
+    salvaGettone(r.gettone);
+    S.diritti = {tipo: r.tipo, nome: r.nome, scade: r.scade, tutto: true};
+    S.mostraAccesso = false;
+    cambiatoIlDiritto();
+  }).catch(function(e){
+    if(avviso) avviso.textContent = e.message === 'codice non valido o scaduto'
+      ? 'Questo codice non apre. Controlla di averlo copiato tutto.'
+      : e.message;
+  });
+}
+function esci(){
+  salvaGettone(null);
+  S.diritti = null;
+  cambiatoIlDiritto();
+}
+
+/* Il diritto e' cambiato: si e' entrati con un codice, o si e' usciti.
+
+   Quello che cambia e' UNA cosa sola — quante partite manda il server — e
+   quella cosa sta in cinque calendari. Non cambia niente di quello che e'
+   costato caro: gli archivi, che sono tre megabyte e mezzo, e i cinque
+   modelli, che sono minuti di conti. Rifare tutto sarebbe stato piu' semplice
+   da scrivere e molto peggio da usare: mezzo minuto di clessidra per
+   riscaricare roba identica a quella che si ha gia' in mano.
+
+   Qui invece si ripigliano i cinque calendari e basta. Poi si buttano le
+   cose che DIPENDONO dal calendario e non dai dati: le prossime partite in
+   cache, le simulazioni della giornata, la media della giornata. Sono le tre
+   che, lasciate in piedi, farebbero mostrare le tre partite di prima a uno
+   che ha appena pagato — il tipo di bug che sembra un mancato pagamento. */
+function cambiatoIlDiritto(){
+  /* Se l'app non e' nemmeno in piedi (primo avvio andato storto), allora si',
+     serve il giro intero. */
+  if(S.stato !== 'pronto'){ carica(true); return; }
+  S.fase = 'Rileggo i calendari'; render();
+  rinfrescaCalendari().then(function(){
+    S.fase = null;
+    render();
+    window.scrollTo(0, 0);
+  });
+}
+
+/* I cinque calendari, ripresi dal server e rimessi al loro posto. */
+function rinfrescaCalendari(){
+  var leghe = (S.leghe && S.leghe.length) ? S.leghe : [{id: LEGA_CASA}];
+  return leghe.reduce(function(catena, l){
+    return catena.then(function(){
+      var doc = (l.id === LEGA_CASA) ? S.doc : S.docs[l.id];
+      if(!doc) return;
+      return prendiCalendario(l, doc).then(function(c){
+        doc.calendario = c.calendario;
+        S.muro[l.id] = c;
+      });
+    }).catch(function(){ /* un campionato che non risponde non ferma gli altri */ });
+  }, Promise.resolve()).then(function(){
+    S._prossime = null;
+    S._sim = null;
+    _mediaGiornata = null;
+    S.simCache = {};
+    (S.leghe || []).forEach(function(l){ S.simPerLega[l.id] = {}; });
+    S.simPerLega[LEGA_CASA] = S.simCache;
+  });
+}
+
+/* Il calendario, da dove va preso.
+
+   Col cancello acceso arriva dal server, che decide quante partite mandare.
+   Senza, sta ancora dentro il file dell'archivio, com'e' sempre stato. Le due
+   strade tornano la stessa cosa, cosi' il resto dell'app non deve sapere
+   quale delle due e' in funzione. */
+function prendiCalendario(lega, doc){
+  if(!cancelloAcceso()){
+    /* Due interruttori, e vanno accesi tutti e due: il segreto nella Action,
+       che manda i calendari sul server e li toglie dai file pubblici, e
+       l'indirizzo qui sotto, che dice all'app dove andarli a riprendere.
+       Accendere il primo e scordare il secondo e' l'errore che uno fa davvero,
+       e il risultato sarebbe un'app vuota per tutti — abbonati compresi — che
+       dice "nessuna partita in calendario", cioe' la bugia piu' comoda.
+       Il file stesso lo dichiara, quindi qui ce ne si accorge e si dice cosa
+       manca invece di far finta che la stagione sia finita. */
+    if(doc && doc.calendarioAltrove){
+      return Promise.resolve({calendario: [], totale: 0, tutto: false,
+        guasto: 'i calendari sono gia\' sul server, ma questa copia dell\'app non sa ' +
+                'dove: manca l\'indirizzo del Worker in var API dentro index.html'});
+    }
+    return Promise.resolve({calendario: doc.calendario || [],
+                            totale: (doc.calendario || []).length, tutto: true});
+  }
+  return chiediApi('/api/calendario/' + lega.id).then(function(r){
+    return {calendario: r.calendario || [], totale: r.totale || 0,
+            mostrate: r.mostrate, tutto: !!r.tutto};
+  }).catch(function(e){
+    /* Se il server non risponde NON si ripiega sul file: il file non ce l'ha
+       piu'. Si dice che manca, e si mostra quello che si puo'. */
+    return {calendario: [], totale: 0, tutto: false, guasto: e.message};
+  });
+}
+
 /* Il peso dell'ancoraggio per i campionati che non sono quello di casa.
 
    Non e' una comodita': e' il risultato della misura piu' netta di tutto il
@@ -909,11 +1080,15 @@ function caricaAltreLeghe(forza){
   return da.reduce(function(catena, l){
     return catena.then(function(){
       return prendi('data/' + l.file, forza).then(function(doc){
-        var mod = modelloLeggero(doc);
-        if(!mod) return;
-        S.docs[l.id] = doc;
-        S.mods[l.id] = mod;
-        S.simPerLega[l.id] = {};
+        return prendiCalendario(l, doc).then(function(c){
+          doc.calendario = c.calendario;
+          S.muro[l.id] = c;
+          var mod = modelloLeggero(doc);
+          if(!mod) return;
+          S.docs[l.id] = doc;
+          S.mods[l.id] = mod;
+          S.simPerLega[l.id] = {};
+        });
       }).catch(function(){ /* un campionato che non risponde non ferma gli altri */ })
         .then(function(){
           fatte++;
@@ -932,6 +1107,13 @@ function carica(forza){
   return prendi('data/serie-a.json', forza).then(function(doc){
     S.doc = doc;
     S.docs[LEGA_CASA] = doc;
+    /* Il calendario non sta piu' nel file quando il cancello e' acceso: si
+       chiede al server, che decide quante partite mandare. */
+    return prendiCalendario({id: LEGA_CASA}, doc).then(function(c){
+      doc.calendario = c.calendario;
+      S.muro[LEGA_CASA] = c;
+    });
+  }).then(function(){
     return prendi('data/meta.json', forza).catch(function(){ return null; });
   }).then(function(meta){
     S.meta = meta;
@@ -2117,6 +2299,126 @@ function avvisoRitardo(){
    mostra le sue partite con la sua "piu' solida". Tutto il resto della vista
    non sa nemmeno che esistono cinque campionati — legge S.doc e S.mod come ha
    sempre fatto, e quei due puntano al campionato scelto qui. */
+/* ══════════════════════════════════════════════════════════════
+   IL MURO
+
+   Chi non ha un codice vede le prime tre partite di ogni campionato. Non e'
+   un assaggio finto: sono tre partite vere, con la selezione vera e i conti
+   veri. Quello che manca e' il resto — e il muro dice quante ne restano
+   dietro, perche' un muro che non dichiara cosa nasconde non convince
+   nessuno ad aprirlo.
+
+   Sta sotto le partite e non sopra: chi arriva deve prima vedere che la cosa
+   funziona, e poi scoprire che ce n'e' altra. Un muro messo davanti a tutto
+   e' un modulo d'iscrizione, e i moduli d'iscrizione si chiudono.
+   ══════════════════════════════════════════════════════════════ */
+var PREZZO = '4,99';
+
+function muroDi(legaId){ return S.muro[legaId] || null; }
+
+function cardMuro(legaId){
+  var m = muroDi(legaId);
+  if(!m || m.tutto) return '';
+  if(m.guasto){
+    return '<div class="card"><div class="empty"><b>Il calendario non arriva</b>' +
+      'Le partite in arrivo le tiene il server, e adesso non risponde. ' +
+      'L\'archivio e i conti funzionano lo stesso.' +
+      '<div class="note warn" style="margin-top:10px">Dettaglio: ' + esc(m.guasto) + '</div>' +
+      '</div></div>';
+  }
+  var dietro = Math.max(0, (m.totale || 0) - (m.calendario || []).length);
+  if(!dietro) return '';
+  var lg = (S.leghe || []).filter(function(l){ return l.id === legaId; })[0];
+  return '<div class="card muro">' +
+    '<div class="murot">Altre <b>' + dietro + '</b> partite' +
+      (lg ? ' di ' + esc(lg.nome) : '') + '</div>' +
+    '<p class="murop">Stai vedendo le prime tre. Dietro ci sono le altre ' + dietro +
+      ', con le quote e le schedine costruite su tutti e cinque i campionati.</p>' +
+    '<div class="muroq"><b>' + PREZZO + '</b> al mese</div>' +
+    '<button class="btn acc" onclick="apriAccesso()">Ho un codice</button>' +
+    '<div class="murom">Si sblocca con un codice. Se non ce l\'hai, scrivimi.</div>' +
+  '</div>';
+}
+
+/* Il muro delle schedine, che e' un conto diverso da quello della Giornata.
+
+   In Giornata manca un campionato alla volta e si vede: tre partite dove ce
+   ne sono dieci. Nelle schedine no — la schedina esce comunque, con le sue
+   percentuali e la sua quota, e sembra completa. E' invece la migliore fra
+   quindici partite invece che fra millecinquecento, che e' un'altra cosa:
+   il valore di questa app sta tutto nel pescare in un mucchio grosso.
+
+   Un taglio che non si vede e' il peggiore dei due. Quindi qui si dice. */
+function cardMuroSchedine(){
+  if(haTutto()) return '';
+  var viste = 0, tutte = 0, guasti = 0;
+  (S.leghe || []).forEach(function(l){
+    var m = S.muro[l.id];
+    if(!m) return;
+    if(m.guasto){ guasti++; return; }
+    viste += (m.calendario || []).length;
+    tutte += (m.totale || 0);
+  });
+  var dietro = Math.max(0, tutte - viste);
+  if(!dietro) return '';
+  return '<div class="card muro">' +
+    '<div class="murot">Scelte fra <b>' + viste + '</b> partite su ' + tutte + '</div>' +
+    '<p class="murop">Queste schedine sono le migliori fra le ' + viste + ' partite che stai ' +
+      'vedendo. Le altre ' + dietro + ' non sono state nemmeno guardate: il mestiere di questa app ' +
+      '\u00e8 pescare le poche giocate solide in un mucchio grosso, e adesso il mucchio \u00e8 piccolo.</p>' +
+    '<div class="muroq"><b>' + PREZZO + '</b> al mese</div>' +
+    '<button class="btn acc" onclick="apriAccesso()">Ho un codice</button>' +
+  '</div>';
+}
+
+/* Il campo del codice sta in fondo, sotto le partite e sotto il muro, perche'
+   li' sta il pulsante che lo apre. Saltare in cima come faceva prima voleva
+   dire premere "Ho un codice" e vedere la pagina scappare dall'altra parte,
+   col campo comparso fuori schermo: uguale a un pulsante rotto. */
+function apriAccesso(){
+  S.mostraAccesso = true;
+  render();
+  setTimeout(function(){
+    var c = document.getElementById('campoCodice');
+    if(!c) return;
+    c.scrollIntoView({block: 'center', behavior: 'smooth'});
+    try{ c.focus({preventScroll: true}); }catch(e){ try{ c.focus(); }catch(e2){} }
+  }, 30);
+}
+function chiudiAccesso(){ S.mostraAccesso = false; render(); }
+
+function cardAccesso(){
+  if(!S.mostraAccesso) return '';
+  return '<div class="card">' +
+    '<div class="h3" style="margin-top:0">Il tuo codice</div>' +
+    '<div class="riga-punta" style="gap:9px">' +
+      '<input id="campoCodice" type="text" inputmode="text" autocapitalize="characters" ' +
+        'autocomplete="off" spellcheck="false" placeholder="ABCD-EFGH-JKLM" ' +
+        'style="flex:1;width:auto;font-size:17px;letter-spacing:1.5px" ' +
+        'onkeydown="if(event.key===\'Enter\')entraColCodice()">' +
+    '</div>' +
+    '<button class="btn acc" style="margin-top:11px" onclick="entraColCodice()">Entra</button>' +
+    '<button class="btn" style="margin-top:8px" onclick="chiudiAccesso()">Annulla</button>' +
+    '<div class="note" id="avvisoCodice" style="margin-top:10px"></div>' +
+  '</div>';
+}
+
+/* Chi e' dentro deve poterlo vedere, e poter uscire. Un abbonamento che non
+   dice quando scade e' un abbonamento che si scopre scaduto. */
+function cardChiSei(){
+  if(!cancelloAcceso() || !S.diritti || !S.diritti.tutto) return '';
+  var d = S.diritti;
+  return '<div class="card">' +
+    '<div class="row"><div class="n">' +
+      (d.tipo === 'vip' ? 'Accesso VIP' : 'Abbonamento attivo') +
+      '<em>' + (d.tipo === 'vip' ? 'non scade'
+        : 'fino al ' + esc(String(d.scade || '').slice(0, 10))) +
+      (d.nome ? ' · ' + esc(d.nome) : '') + '</em></div>' +
+      '<div class="v"><button class="rev" onclick="esci()" ' +
+        'style="border:0;background:none;color:var(--mute);font-size:12px;cursor:pointer">esci</button>' +
+      '</div></div></div>';
+}
+
 function selettoreLeghe(){
   if(!(S.leghe||[]).length || S.leghe.length < 2) return '';
   var pronte = {};
@@ -2142,6 +2444,8 @@ function tabGiornata(){
   var prossime = prossimePartite();
   var h = selettoreLeghe();
   if(!prossime.length){
+    h += cardAccesso();
+    h += cardMuro(S.lega);
     h += '<div class="card"><div class="empty"><b>Nessuna partita in calendario</b>'+
       'Il file dei dati non contiene partite future. Succede fra una stagione e l\'altra, '+
       'oppure se la fonte del calendario era irraggiungibile durante l\'ultimo aggiornamento.</div></div>';
@@ -2161,6 +2465,12 @@ function tabGiornata(){
   h += avvisoSenzaQuote(g.partite);
   h += avvisoMonotonia(g.partite);
   h += g.partite.map(function(p){ return schedaPartita(p, prossime.indexOf(p)); }).join('');
+  /* Il muro sta QUI, sotto le partite: chi arriva deve prima vedere che la
+     cosa funziona, e poi scoprire che ce n'e' altra. Messo davanti a tutto
+     sarebbe un modulo d'iscrizione, e quelli si chiudono. */
+  h += cardAccesso();
+  h += cardMuro(S.lega);
+  h += cardChiSei();
   h += sceltaPrudenza();
   h += sceltaDistintiva();
   if(gruppi.length > 1){
@@ -3508,7 +3818,8 @@ function tabSchedine(){
   if(!(S._prossime||[]).length) S._prossime = prossimePartite();
   var partite = partiteGiornata();
   if(!partite.length){
-    return '<div class="card"><div class="empty"><b>Nessuna partita in calendario</b>'+
+    return cardAccesso() + cardMuro(S.lega) +
+      '<div class="card"><div class="empty"><b>Nessuna partita in calendario</b>'+
       'Le schedine si costruiscono sulle partite in arrivo.</div></div>';
   }
   var h = '<div class="h2">Quanto ci punti</div>'+
@@ -3526,6 +3837,8 @@ function tabSchedine(){
     'un\'altra. A parità di quota scelgo la combinazione su cui il modello è più sicuro — quella col '+
     'pavimento più alto, non con la media più alta.</div>';
   h += '<div id="schedElenco">'+elencoSchedine()+'</div>';
+  h += cardAccesso();
+  h += cardMuroSchedine();
   h += '<div class="note warn"><p>La colonna <b>"prendi"</b> usa la quota equa: quella che renderebbe '+
     'la giocata un pareggio nel lungo periodo. Nessun operatore te la offre. La colonna '+
     '<b>"realistico"</b> toglie il ricarico che hai scelto qui sopra ('+(100*ricarico().v).toFixed(1)+

@@ -1,0 +1,27 @@
+# Monthline — il cancello.
+#
+# Due depositi separati e non uno, e non e' pignoleria: i CODICI sono la cosa
+# che non si puo' perdere (se sparisce quel deposito, sparisce chi ha pagato),
+# i DATI si riscrivono da soli al prossimo giro. Tenerli divisi vuol dire
+# poter svuotare l'uno senza rischiare l'altro.
+
+name = "monthline"
+main = "worker.js"
+compatibility_date = "2026-09-01"
+
+# Gli indirizzi da cui l'app puo' parlare con questa API. Un asterisco qui
+# vorrebbe dire che qualunque sito puo' usare il gettone di chi passa.
+[vars]
+ORIGINI = "https://w8997wnwy5-collab.github.io"
+
+[[kv_namespaces]]
+binding = "CODICI"
+id = "METTI_QUI_L_ID_DEL_DEPOSITO_CODICI"
+
+[[kv_namespaces]]
+binding = "DATI"
+id = "METTI_QUI_L_ID_DEL_DEPOSITO_DATI"
+
+# I due segreti NON si scrivono qui: questo file finisce su GitHub.
+#   npx wrangler secret put SEGRETO         # firma i gettoni
+#   npx wrangler secret put SEGRETO_ADMIN   # apre il pannello dei codici
