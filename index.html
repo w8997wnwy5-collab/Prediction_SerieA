@@ -844,8 +844,17 @@ function rileggiDiritti(){
   if(!cancelloAcceso() || !gettone()) return Promise.resolve(null);
   return chiediApi('/api/io').then(function(r){
     /* "Non vale" e "non apre" sono due cose diverse: il gettone da ospite e'
-       validissimo e non apre niente. Si butta solo quello che non vale. */
-    if(!r || !r.valido){ salvaGettone(null); S.diritti = null; return null; }
+       validissimo e non apre niente. Si butta solo quello che non vale.
+
+       E se il server e' piu' VECCHIO dell'app — succede, perche' il sito si
+       aggiorna da solo a ogni push e il Worker lo si aggiorna a mano — quel
+       campo non c'e' proprio. Leggerlo come "non vale" vorrebbe dire buttare
+       il gettone di un abbonato a ogni apertura: lo sbatterebbe fuori l'app,
+       per un campo che manca. Quando non c'e', si crede a quello che il
+       vecchio server sa dire. */
+    if(!r){ salvaGettone(null); S.diritti = null; return null; }
+    var vale = (r.valido === undefined) ? !!r.tutto : !!r.valido;
+    if(!vale){ salvaGettone(null); S.diritti = null; return null; }
     S.diritti = {tipo: r.tipo, nome: r.nome, scade: r.scade,
                  tutto: !!r.tutto, capo: !!r.capo, nick: r.nick || null,
                  punti: r.punti || 0, vinte: r.vinte || 0};
