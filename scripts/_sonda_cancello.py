@@ -25,14 +25,32 @@ import urllib.error
 import urllib.request
 
 
-def chiedi(via):
+def posta(via, corpo=None, gettone=None):
+    dati = json.dumps(corpo or {}).encode('utf-8')
+    testate = {'User-Agent': 'monthline-sonda', 'content-type': 'application/json'}
+    if gettone:
+        testate['Authorization'] = 'Bearer ' + gettone
+    req = urllib.request.Request(via, data=dati, headers=testate, method='POST')
+    try:
+        with urllib.request.urlopen(req, timeout=20) as r:
+            return r.status, r.read().decode('utf-8', 'replace')
+    except urllib.error.HTTPError as e:
+        return e.code, e.read().decode('utf-8', 'replace')
+    except Exception as e:                      # noqa: BLE001
+        return None, str(e)[:200]
+
+
+def chiedi(via, gettone=None):
     """Torna (stato, corpo INTERO). Il taglio si fa quando si STAMPA.
 
     Prima si tagliava qui a quattrocento caratteri, e la sonda diceva "200 ma
     corpo illeggibile" sui campionati con la risposta piu' lunga: non era il
     server, era il taglio che spezzava il JSON a meta'. Una sonda che accusa
     il sorvegliato del proprio difetto e' peggio di nessuna sonda."""
-    req = urllib.request.Request(via, headers={'User-Agent': 'monthline-sonda'})
+    testate = {'User-Agent': 'monthline-sonda'}
+    if gettone:
+        testate['Authorization'] = 'Bearer ' + gettone
+    req = urllib.request.Request(via, headers=testate)
     try:
         with urllib.request.urlopen(req, timeout=20) as r:
             return r.status, r.read().decode('utf-8', 'replace')
@@ -84,6 +102,45 @@ def main():
         else:
             vuoti.append(lega)
             print(lega, '->', stato, breve(corpo))
+
+    # ── le rotte della classifica ──
+    # Che il file sia cambiato non vuol dire che il server risponda: si chiede.
+    # Un ospite senza nome non lascia niente dietro di se' — il server lo
+    # registra solo quando un nome ce lo mette — quindi questa prova non
+    # sporca la classifica vera.
+    print('--- classifica ---')
+    stato, corpo = posta(base + '/api/ospite')
+    gettone = None
+    if stato == 200:
+        try:
+            gettone = json.loads(corpo).get('gettone')
+        except Exception:                       # noqa: BLE001
+            pass
+    print('/api/ospite ->', stato, 'gettone' if gettone else breve(corpo))
+    if not gettone:
+        print('VERDETTO CLASSIFICA: il server non conosce gli ospiti. E\' ancora la versione vecchia.')
+        return 0
+
+    stato, corpo = chiedi(base + '/api/classifica', gettone)
+    quanti = None
+    if stato == 200:
+        try:
+            d = json.loads(corpo)
+            quanti = d.get('quanti')
+            print('/api/classifica ->', stato, quanti, 'in gara')
+        except Exception:                       # noqa: BLE001
+            print('/api/classifica -> 200 ma corpo illeggibile:', breve(corpo))
+    else:
+        print('/api/classifica ->', stato, breve(corpo))
+
+    # un nome da due lettere DEVE essere rifiutato: se passa, non sta
+    # controllando niente
+    stato, corpo = posta(base + '/api/nick', {'nick': 'ab'}, gettone)
+    print('/api/nick con un nome storto ->', stato, breve(corpo, 60))
+    if stato == 400 and quanti is not None:
+        print('VERDETTO CLASSIFICA: in piedi e sveglia.')
+    else:
+        print('VERDETTO CLASSIFICA: risponde, ma non come dovrebbe. Guardare sopra.')
 
     if len(vuoti) == 5:
         print('VERDETTO: cancello in piedi, depositi VUOTI. Manca il primo giro dei dati.')
