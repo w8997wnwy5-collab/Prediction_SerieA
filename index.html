@@ -25,7 +25,18 @@
      arancione. Leggibili, ma di un'altra app. Questi tre nascono dal verde del
      progetto — casa è il colore di casa, la trasferta è un mattone caldo che ci
      sta di fronte senza urlare, il pari sta in mezzo e non chiede attenzione. */
-  --sq-casa:#2D6A4F; --sq-pari:#94A09A; --sq-via:#B4593A;
+  /* I due poli della barra 1X2. Non sono scelti a occhio: 1X2 non e' una
+     tavolozza categorica, e' una scala DIVERGENTE — casa da una parte,
+     trasferta dall'altra, il pareggio neutro in mezzo — e i due poli devono
+     leggersi come opposti anche per chi non distingue i colori. Passati al
+     validatore: separazione CVD 9.2 (deuteranopia), 27.3 a vista normale,
+     contrasto sullo sfondo sopra 3:1. La coppia di prima falliva il pavimento
+     di croma: il verde e il grigio leggevano quasi uguali. */
+  --sq-casa:#178A57; --sq-pari:#9AA5A0; --sq-via:#D14310;
+  --r-s:12px; --r-m:16px; --r-l:20px; --r-xl:26px;
+  --molla:cubic-bezier(.22,.9,.28,1.2);
+  --ombra:0 1px 2px rgba(20,32,27,.05), 0 10px 26px -14px rgba(20,32,27,.18);
+  --ombra-alta:0 2px 6px rgba(20,32,27,.07), 0 18px 40px -18px rgba(20,32,27,.26);
   --c1:#2a78d6; --c2:#eb6834; --c3:#1baf7a; --c4:#eda100; --c5:#e87ba4;
   --c6:#008300; --c7:#4a3aa7; --c8:#e34948; --c9:#8A968F;
   --seq1:#cde2fb; --seq2:#9ec5f4; --seq3:#6da7ec; --seq4:#3987e5; --seq5:#256abf; --seq6:#184f95;
@@ -35,7 +46,11 @@
 }
 @media (prefers-color-scheme:dark){
   :root{
-    --sq-casa:#4E9E78; --sq-pari:#77857F; --sq-via:#CC7355;
+    /* Gli stessi due poli, ristretti sul fondo scuro invece che schiariti a
+       caso: passati al validatore contro #121714, tutti i controlli verdi. */
+    --sq-casa:#2AA96F; --sq-pari:#7B8781; --sq-via:#E05F2C;
+    --ombra:0 1px 2px rgba(0,0,0,.35), 0 10px 26px -14px rgba(0,0,0,.6);
+    --ombra-alta:0 2px 6px rgba(0,0,0,.4), 0 18px 40px -18px rgba(0,0,0,.7);
     --bg:#121714; --card:#1C221F; --card2:#232A26; --ink:#ECF1EE; --mute:#95A29B;
     --line:#2C3531; --line2:#242B27; --accent:#6BC49A; --accent-soft:#1B2C24;
     --ok:#5FBF88; --ok-soft:#172A20; --warn:#F08A80; --warn-soft:#2E1D1B;
@@ -54,16 +69,18 @@ h1,h2,h3,h4{margin:0;}
 
 #app{padding-bottom:calc(96px + var(--safeb));}
 .top{position:sticky;top:0;z-index:20;background:var(--bg);
-  background:color-mix(in srgb,var(--bg) 92%,transparent);
-  backdrop-filter:saturate(180%) blur(14px);-webkit-backdrop-filter:saturate(180%) blur(14px);
-  border-bottom:1px solid var(--line);padding:calc(var(--safet) + 12px) 16px 11px;
+  background:color-mix(in srgb,var(--bg) 80%,transparent);
+  backdrop-filter:saturate(200%) blur(22px);-webkit-backdrop-filter:saturate(200%) blur(22px);
+  border-bottom:.5px solid var(--line);padding:calc(var(--safet) + 14px) 18px 12px;
   display:flex;align-items:flex-end;gap:10px;}
 .top .ttl{flex:1;min-width:0;}
-.top h1{font-size:24px;font-weight:700;letter-spacing:-.5px;}
-.top .sub{font-family:var(--mono);font-size:10px;color:var(--mute);letter-spacing:.6px;
-  margin-top:3px;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.top .ico{flex:none;border:1px solid var(--line);background:var(--card);border-radius:10px;
-  width:38px;height:38px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--mute);}
+.top h1{font-size:30px;font-weight:700;letter-spacing:-.9px;line-height:1.05;}
+.top .sub{font-size:13px;color:var(--mute);letter-spacing:-.1px;margin-top:2px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.top .ico{flex:none;border:.5px solid var(--line);background:var(--card);border-radius:50%;
+  width:40px;height:40px;display:flex;align-items:center;justify-content:center;cursor:pointer;
+  color:var(--mute);box-shadow:var(--ombra);transition:transform .2s var(--molla),opacity .15s;}
+.top .ico:active{transform:scale(.9);opacity:.7;}
 .top .ico svg{width:18px;height:18px;}
 .top .ico.gira svg{animation:gira 1s linear infinite;}
 @keyframes gira{to{transform:rotate(360deg)}}
@@ -79,16 +96,21 @@ h1,h2,h3,h4{margin:0;}
 .tab span{font-size:9px;font-weight:500;white-space:nowrap;}
 .tab svg{width:20px;height:20px;}
 .tab{padding:9px 0 8px;}
+.tab{transition:transform .2s var(--molla);}
+.tab:active{transform:scale(.88);}
 .tab.on{color:var(--accent);}
+.tab.on svg{transform:scale(1.06);}
+.tab svg{transition:transform .25s var(--molla);}
 
-.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:12px;}
-.card.tap{cursor:pointer;}
-.card.tap:active{opacity:.8;}
-.h2{font-size:11.5px;font-weight:600;letter-spacing:.9px;text-transform:uppercase;color:var(--mute);
-  margin:26px 0 10px;display:flex;align-items:baseline;gap:8px;}
+.card{background:var(--card);border:.5px solid var(--line);border-radius:var(--r-l);
+  padding:17px;margin-bottom:12px;box-shadow:var(--ombra);}
+.card.tap{cursor:pointer;transition:transform .2s var(--molla);}
+.card.tap:active{transform:scale(.985);}
+.h2{font-size:12px;font-weight:600;letter-spacing:.7px;text-transform:uppercase;color:var(--mute);
+  margin:28px 0 11px;display:flex;align-items:baseline;gap:8px;padding:0 3px;}
 .h2:first-child{margin-top:0;}
 .h2 .r{margin-left:auto;font-family:var(--mono);font-size:11px;letter-spacing:.2px;text-transform:none;}
-.lede{font-size:13px;line-height:1.55;color:var(--mute);margin:0 0 12px;}
+.lede{font-size:14px;line-height:1.5;color:var(--mute);margin:0 0 13px;padding:0 3px;letter-spacing:-.1px;}
 .lede b{color:var(--ink);}
 
 .kpi{display:flex;gap:9px;margin-bottom:12px;}
@@ -282,10 +304,56 @@ svg.chart{display:block;width:100%;overflow:visible;}
 .grab{width:36px;height:4px;border-radius:2px;background:var(--line);margin:0 auto 12px;}
 
 /* ── caricamento ── */
-.load{padding:60px 24px;text-align:center;}
-.load .pb{height:6px;background:var(--line2);border-radius:4px;overflow:hidden;margin:18px auto 12px;max-width:280px;}
-.load .pb i{display:block;height:100%;background:var(--accent);border-radius:4px;transition:width .3s;}
-.load h3{font-size:17px;font-weight:600;margin-bottom:6px;}
+.load{padding:22px;text-align:center;min-height:78vh;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;}
+
+/* ── il campo, e il tizio che ci corre sopra ──
+   Il corridore avanza in proporzione all'avanzamento VERO del conto: se il
+   calcolo si impianta, lui si ferma. Una barra che arriva sempre in fondo
+   comunque vada e' una bugia, e questa app non ne dice. */
+/* width:100% non e' decorativo: dentro un contenitore flex centrato un blocco
+   si stringe sul contenuto, e il contenuto qui sono elementi in posizione
+   assoluta — cioe' niente. La striscia del campo collassava a larghezza zero
+   e il corridore restava fermo al centro qualunque fosse l'avanzamento. */
+.campo{position:relative;width:100%;max-width:290px;margin:0 auto 32px;height:86px;}
+.erba{position:absolute;left:0;right:0;bottom:6px;height:22px;border-radius:6px;
+  background:repeating-linear-gradient(90deg,
+    color-mix(in srgb,var(--accent) 10%,transparent) 0 14px,
+    color-mix(in srgb,var(--accent) 5%,transparent) 14px 28px);}
+.linea{position:absolute;left:0;right:0;bottom:0;height:5px;background:var(--line2);
+  border-radius:3px;overflow:hidden;}
+.linea i{display:block;height:100%;background:var(--accent);border-radius:3px;
+  transition:width .45s cubic-bezier(.3,.8,.4,1);}
+.corsa{position:absolute;bottom:4px;width:0;transition:left .45s cubic-bezier(.3,.8,.4,1);}
+
+/* Lo sprite: quattro pose intere che si alternano, non pezzi che ruotano.
+   E' come funzionavano gli sprite di trent'anni fa, e ha il pregio di non
+   potersi rompere: niente perni, niente origini di trasformazione, niente
+   arti che finiscono dentro il busto se il browser interpreta diversamente. */
+.omino{position:absolute;bottom:0;left:-25px;width:50px;height:62px;overflow:visible;}
+.omino g{opacity:0;animation:sprite .48s steps(1,end) infinite;}
+.omino path{fill:none;stroke:var(--ink);stroke-width:3.2;stroke-linecap:round;stroke-linejoin:round;}
+.omino .busto{stroke-width:3.8;}
+.omino .testa{fill:var(--ink);stroke:none;}
+.omino .p1{animation-delay:0s;} .omino .p2{animation-delay:.12s;}
+.omino .p3{animation-delay:.24s;} .omino .p4{animation-delay:.36s;}
+@keyframes sprite{0%,24.9%{opacity:1} 25%,100%{opacity:0}}
+
+.palla{position:absolute;bottom:1px;left:19px;width:21px;height:21px;
+  animation:rotola .38s linear infinite;}
+.palla circle{fill:var(--card);stroke:var(--ink);stroke-width:1.7;}
+.palla path{fill:var(--ink);stroke:none;}
+@keyframes rotola{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){
+  .omino g,.palla{animation:none!important;}
+  .omino .p1{opacity:1;}
+}
+
+.caricat{font-size:19px;font-weight:600;letter-spacing:-.3px;}
+.caricaq{font-family:var(--mono);font-size:13px;color:var(--mute);margin-top:4px;
+  font-variant-numeric:tabular-nums;}
+.caricap{font-size:13.5px;line-height:1.55;color:var(--mute);margin:16px auto 0;max-width:330px;
+  letter-spacing:-.1px;}
 .load p{font-size:13px;color:var(--mute);line-height:1.55;margin:0;}
 .slider{width:100%;accent-color:var(--accent);margin:6px 0 2px;}
 .sl{display:flex;justify-content:space-between;align-items:baseline;font-size:12.5px;color:var(--mute);}
@@ -463,7 +531,25 @@ select{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:1
 
 .forme.leghe{padding-bottom:12px;}
 .forme.leghe .formab{min-width:96px;}
-.formab.spenta{opacity:.45;cursor:default;}
+.formab.spenta{opacity:.4;cursor:default;}
+.formab{transition:transform .2s var(--molla),border-color .15s,background .15s;}
+.formab:active:not(:disabled){transform:scale(.94);}
+.formab.on{box-shadow:0 0 0 1px var(--accent) inset;}
+.prudb,.copia,.riga-punta input{transition:transform .2s var(--molla);}
+.prudb:active,.copia:active{transform:scale(.95);}
+details.note summary{transition:opacity .15s;}
+details.note summary:active{opacity:.6;}
+.match{transition:transform .2s var(--molla);}
+
+/* i grafici */
+.grafc{padding:15px 16px 13px;}
+.grafn{font-size:12.5px;line-height:1.5;color:var(--mute);margin-top:9px;letter-spacing:-.1px;}
+.grafn b{color:var(--ink);}
+.graf{display:block;width:100%;height:auto;margin:4px 0 2px;overflow:visible;}
+.gasse{stroke:var(--line);stroke-width:1;}
+.gsoglia{stroke:var(--mute);stroke-width:1;stroke-opacity:.5;}
+.graf .gv{font-family:var(--mono);font-size:10px;font-weight:700;fill:var(--ink);}
+.graf .ga{font-family:var(--mono);font-size:9px;fill:var(--mute);}
 
 /* le schedine scritte per esteso: quale partita, in quale, a quanto */
 .forme{display:flex;gap:7px;overflow-x:auto;padding:2px 0 10px;
@@ -570,7 +656,7 @@ var S = {
   leghe: null, docs: {}, mods: {}, simPerLega: {}, lega: null,
   legheInCorso: false, legheFatte: ''
 };
-var VERSIONE = '3.3';
+var VERSIONE = '3.4';
 var LEGA_CASA = 'I1';
 /* Il peso dell'ancoraggio per i campionati che non sono quello di casa.
 
@@ -2065,8 +2151,8 @@ function tabGiornata(){
   var lg = legaCorrente();
   h += '<div class="h2">'+(lg && S.leghe.length>1 ? esc(lg.nome) : 'Prossime partite')+
     '<span class="r">'+g.partite.length+'</span></div>';
-  h += '<p class="lede">Dal '+esc(dataBreve(g.inizio))+(g.fine!==g.inizio?' al '+esc(dataBreve(g.fine)):'')+
-    '. Su ogni partita <b>la più solida</b> — tocca per tutte le altre.</p>';
+  h += '<p class="lede">'+esc(dataBreve(g.inizio))+(g.fine!==g.inizio?' – '+esc(dataBreve(g.fine)):'')+
+    ' · tocca una partita per tutti i mercati.</p>';
   h += avvisoSenzaQuote(g.partite);
   h += avvisoMonotonia(g.partite);
   h += g.partite.map(function(p){ return schedaPartita(p, prossime.indexOf(p)); }).join('');
@@ -2554,9 +2640,9 @@ function cardQuanteNePrendi(){
   var almeno = function(k){ var s=0; for(var i=k;i<dist.length;i++) s+=dist[i]; return s; };
 
   var h = '<div class="h2">Quante ne prendi<span class="r">'+n+'</span></div><div class="card">'+
-    '<p class="lede" style="margin:0 0 12px">Se giocassi <b>la più solida di ogni partita</b> di '+
-    'questa giornata, ecco quante ne uscirebbero. Il conto è esatto: con '+n+' selezioni gli '+
-    'scenari possibili sono '+nu(Math.pow(2,n),0)+' e li ho contati tutti.</p>'+
+    graficoQuante(dist, attesi)+
+    '<div class="grafn">Su <b>'+n+'</b> partite, quante ne escono. Il conto è esatto: '+
+    nu(Math.pow(2,n),0)+' scenari, contati tutti.</div>'+
     '<div class="dist">';
   for(var k = 0; k < dist.length; k++){
     if(dist[k] < 0.004 && k !== n) continue;
@@ -2775,7 +2861,7 @@ function cercaPerFascia(fascia){
       if(!r) continue;
       fuori.push({L: L, m: m, selezioni: sel, gruppi: gruppi, quote: quote,
                   probSchedine: r.schedine.map(function(x){ return x.p; }),
-                  pAttivo: r.pAttivo, atteso: r.atteso, speso: r.speso,
+                  pAttivo: r.pAttivo, atteso: r.atteso, speso: r.speso, mese: r,
                   perSchedina: pt / m, fascia: fascia,
                   quotaMedia: quote.reduce(function(x, y){ return x + y; }, 0) / quote.length,
                   /* quante schedine vincenti servono davvero per stare sopra:
@@ -2851,6 +2937,131 @@ function copiaSchedina(b){
   }
 }
 
+/* ══════════════════════════════════════════════════════════════
+   I GRAFICI
+
+   Tre cose che erano numeri e adesso sono forme.
+
+   "Chiudi il mese in attivo il 64% delle volte" e' esatto e non dice niente
+   di come ci arrivi: non dice che la massa a sinistra e' un muro stretto — o
+   vinci qualcosa o resti a zero — e quella a destra e' una coda lunga e
+   sottile. La forma e' il motivo per cui questa app esiste, e si capisce
+   guardandola.
+
+   Le regole a cui stanno: barre sottili con la punta arrotondata e il piede
+   squadrato sulla linea di base, due pixel di stacco fra una barra e l'altra
+   fatti col colore dello sfondo e non con un bordo, assi grigi di un passo,
+   ed etichette solo dove servono — un numero su ogni barra non lo legge
+   nessuno. Una serie sola non vuole legenda: lo dice il titolo.
+   ══════════════════════════════════════════════════════════════ */
+function _sicuro(n, dec){ return isFinite(n) ? nu(n, dec == null ? 0 : dec) : '—'; }
+
+/* Colonne con una parte in evidenza. Il caso d'uso e' sempre lo stesso:
+   c'e' una soglia, e quello che conta e' quanta roba ci sta sopra. */
+function colonne(voci, opz){
+  opz = opz || {};
+  var L = 300, A = opz.altezza || 96, base = A - 18, cima = 8;
+  var n = voci.length;
+  if(!n) return '';
+  var max = Math.max.apply(null, voci.map(function(v){ return v.q; }));
+  if(!(max > 0)) return '';
+  var stacco = n > 1 ? 2 : 0;
+  var larghezza = Math.min(26, (L - stacco * (n - 1)) / n);
+  var passo = n > 1 ? (L - larghezza) / (n - 1) : 0;
+  var d = '';
+  voci.forEach(function(v, i){
+    var h = Math.max(1.5, (v.q / max) * (base - cima));
+    var x = n > 1 ? i * passo : (L - larghezza) / 2;
+    var y = base - h;
+    var r = Math.min(4, larghezza / 2, h);
+    /* punta arrotondata, piede squadrato: il dato cresce dalla linea di base */
+    d += '<path d="M' + nu(x,1) + ' ' + nu(base,1) + 'V' + nu(y + r,1) +
+         'a' + nu(r,1) + ' ' + nu(r,1) + ' 0 0 1 ' + nu(r,1) + ' -' + nu(r,1) +
+         'h' + nu(larghezza - 2*r,1) +
+         'a' + nu(r,1) + ' ' + nu(r,1) + ' 0 0 1 ' + nu(r,1) + ' ' + nu(r,1) +
+         'V' + nu(base,1) + 'z" fill="' + (v.forte ? 'var(--accent)' : 'var(--line)') + '"/>';
+    if(v.etichetta){
+      d += '<text x="' + nu(x + larghezza/2,1) + '" y="' + nu(y - 4,1) +
+           '" class="gv" text-anchor="middle">' + esc(v.etichetta) + '</text>';
+    }
+    if(v.sotto){
+      d += '<text x="' + nu(x + larghezza/2,1) + '" y="' + nu(base + 12,1) +
+           '" class="ga" text-anchor="middle">' + esc(v.sotto) + '</text>';
+    }
+  });
+  var soglia = '';
+  if(opz.soglia != null && opz.soglia >= 0 && opz.soglia <= n){
+    var xs = opz.soglia * passo - stacco / 2 + larghezza / 2;
+    soglia = '<line x1="' + nu(xs,1) + '" y1="2" x2="' + nu(xs,1) + '" y2="' + nu(base,1) +
+      '" class="gsoglia"/>' +
+      (opz.etichettaSoglia
+        ? (function(){
+            /* L'etichetta si appoggia alla linea, ma le barre passano di li'.
+               Un rettangolo del colore dello sfondo sotto il testo e' il modo
+               standard di risolverlo: niente bordo, niente riquadro — solo un
+               buco nel disegno grande quanto le lettere. */
+            var aDestra = xs < L * 0.6;
+            var largo = esc(opz.etichettaSoglia).length * 5.4 + 8;
+            var xr = aDestra ? xs + 4 : xs - 4 - largo;
+            return '<rect x="' + nu(xr,1) + '" y="0" width="' + nu(largo,1) +
+              '" height="13" rx="3" fill="var(--card)"/>' +
+              '<text x="' + nu(xr + largo/2,1) + '" y="9.5" class="ga" text-anchor="middle">' +
+              esc(opz.etichettaSoglia) + '</text>';
+          })()
+        : '');
+  }
+  return '<svg class="graf" viewBox="0 0 ' + L + ' ' + A + '" role="img" aria-label="' +
+    esc(opz.descrizione || '') + '">' +
+    '<line x1="0" y1="' + nu(base,1) + '" x2="' + L + '" y2="' + nu(base,1) + '" class="gasse"/>' +
+    soglia + d + '</svg>';
+}
+
+/* Come finisce il mese: l'unica immagine che mostra perche' la probabilita'
+   di chiudere sopra non si legge dal ritorno medio. */
+function graficoMese(r){
+  if(!r || !r.celle) return '';
+  var celle = Object.keys(r.celle).map(Number).sort(function(a, b){ return a - b; });
+  if(celle.length < 2) return '';
+  /* Con poche uscite possibili si disegnano quelle: sono gia' la verita'.
+     Con tante si raggruppa, perche' trenta stecchini non sono una forma. */
+  var voci;
+  if(celle.length <= 14){
+    voci = celle.map(function(c){
+      var v = c * r.passo;
+      return {q: r.celle[c], forte: v > r.speso + 1e-9,
+              sotto: celle.length <= 7 ? nu(v, 0) : ''};
+    });
+  } else {
+    var min = celle[0] * r.passo, max = celle[celle.length-1] * r.passo;
+    var N = 14, ampiezza = (max - min) / N || 1, secchi = [];
+    for(var i = 0; i < N; i++) secchi.push({q: 0, da: min + i*ampiezza, a: min + (i+1)*ampiezza});
+    celle.forEach(function(c){
+      var v = c * r.passo;
+      var k = Math.min(N - 1, Math.floor((v - min) / ampiezza));
+      secchi[k].q += r.celle[c];
+    });
+    voci = secchi.map(function(b){ return {q: b.q, forte: b.a > r.speso + 1e-9}; });
+  }
+  /* dove cade la spesa, in unita' di colonna */
+  var dentro = voci.filter(function(v){ return !v.forte; }).length;
+  return colonne(voci, {altezza: 104, soglia: dentro - 0.5,
+    etichettaSoglia: 'pari ' + nu(r.speso, 0),
+    descrizione: 'Come finisce il mese: le colonne a destra della linea sono i mesi chiusi in attivo.'});
+}
+
+/* Quante selezioni ne prendi: la distribuzione esatta, non "tutte o niente". */
+function graficoQuante(dist, attesi){
+  if(!dist || dist.length < 3) return '';
+  var picco = dist.indexOf(Math.max.apply(null, dist));
+  var voci = dist.map(function(q, k){
+    return {q: q, forte: k >= Math.round(attesi),
+            etichetta: k === picco ? pc(q, 0) : '',
+            sotto: (k === 0 || k === dist.length - 1 || k === picco) ? String(k) : ''};
+  });
+  return colonne(voci, {altezza: 100,
+    descrizione: 'Quante selezioni ne prendi, su ' + (dist.length - 1) + '.'});
+}
+
 function cardLeTueSchedine(){
   var fasce = tutteLeFasce();
   if(!fasce.length) return '';
@@ -2882,6 +3093,16 @@ function cardLeTueSchedine(){
         pc(migliore.scelta.pAttivo) + '), ma il rischio lo scegli tu.') +
     '</div></div>';
 
+  /* La forma di come finisce il mese. Il numero da solo non dice che la massa
+     a sinistra e' un muro — o vinci o resti a zero — e quella a destra una
+     coda lunga. Il grafico si': ed e' la cosa che si guarda per prima. */
+  if(o.mese && o.mese.celle){
+    h += '<div class="card grafc">' + graficoMese(o.mese) +
+      '<div class="grafn">Ognuna è un modo in cui può finire il mese. ' +
+      'A destra della linea sei <b>sopra</b> i ' + nu(o.mese.speso, 0) + ' chf spesi: ' +
+      'è il <b>' + pc(o.pAttivo) + '</b>.</div></div>';
+  }
+
   /* La manopola vera: la quota che vuoi. Tutto il resto — quante gambe,
      quante schedine, quali partite — lo decide il conto dentro quella scelta. */
   h += '<div class="forme">' + fasce.map(function(x){
@@ -2890,10 +3111,8 @@ function cardLeTueSchedine(){
       '<b>' + esc(x.fascia.nome) + '</b><em>' + nu(x.scelta.quotaMedia, 1) + '× · ' +
       pc(x.scelta.pAttivo) + '</em></button>';
   }).join('') + '</div>';
-  h += '<div class="note" style="margin:-4px 0 12px"><b>' + esc(corrente.fascia.testo) + '</b><br>' +
-    'La prima cifra è la quota per schedina, la seconda quante volte su cento il <b>mese</b> ' +
-    'chiude sopra. Non salgono insieme: c\'è un punto in cui la quota paga abbastanza senza ' +
-    'che le vincite diventino troppo rare, e il conto lo cerca lì.</div>';
+  h += '<div class="grafn" style="margin:-2px 3px 14px">' + esc(corrente.fascia.testo) +
+    ' <span style="opacity:.75">Quota · mesi in attivo.</span></div>';
 
   o.gruppi.forEach(function(gr, k){
     var testo = testoSchedina(o, k);
@@ -4840,28 +5059,91 @@ var TABS = [
 ];
 var TITOLI = {giornata:'Giornata', schedine:'Schedine', libro:'Il mio libro',
               squadre:'Squadre', precisione:'Precisione', dati:'Dati'};
+/* I sottotitoli erano in maiuscoletto da terminale, e in maiuscolo una frase
+   smette di essere una frase: diventa un'insegna. Qui sotto il titolo ci va
+   una riga normale, come la scrive chiunque. */
+/* ══════════════════════════════════════════════════════════════
+   IL CARICAMENTO
+
+   Dura una ventina di secondi, e non per pigrizia: e' il backtest che rigioca
+   cinque stagioni una giornata alla volta per sapere di quanto ci si puo'
+   fidare delle previsioni di oggi. Venti secondi di barra grigia sono venti
+   secondi in cui sembra che l'app sia morta.
+
+   Quindi c'e' un tizio che corre. Avanza in proporzione all'avanzamento VERO,
+   non a un timer: se il conto si impianta, lui si ferma — una finta barra che
+   arriva sempre in fondo e' peggio di nessuna barra.
+
+   Tutto in SVG e CSS, niente immagini: il corridore e' fatto di sei segmenti
+   con un ciclo di corsa a quattro fotogrammi, come gli sprite di trent'anni
+   fa, e il pallone gira con velocita' proporzionale a quanto corre.
+   ══════════════════════════════════════════════════════════════ */
+function schermataCarico(){
+  var q = Math.max(0, Math.min(1, S.avanzamento || 0));
+  var pct = Math.round(q * 100);
+  return '<div class="load">' +
+    '<div class="campo">' +
+      '<div class="erba"></div>' +
+      '<div class="corsa" style="left:' + nu(q * 100, 1) + '%">' +
+        '<svg class="omino" viewBox="0 0 42 52" aria-hidden="true">' +
+          '<g class="p1">' +
+            '<circle class="testa" cx="21" cy="9" r="6.2"/>' +
+            '<path class="busto" d="M21 16 L20 31"/>' +
+            '<path d="M20 31 L27 38 L31 47 M20 31 L13 37 L9 45"/>' +
+            '<path d="M21 18 L28 23 L31 17 M21 18 L14 22 L10 27"/>' +
+          '</g>' +
+          '<g class="p2">' +
+            '<circle class="testa" cx="21" cy="9" r="6.2"/>' +
+            '<path class="busto" d="M21 16 L20 31"/>' +
+            '<path d="M20 31 L24 40 L22 48 M20 31 L16 38 L19 45"/>' +
+            '<path d="M21 18 L26 24 L28 20 M21 18 L16 23 L13 26"/>' +
+          '</g>' +
+          '<g class="p3">' +
+            '<circle class="testa" cx="21" cy="9" r="6.2"/>' +
+            '<path class="busto" d="M21 16 L20 31"/>' +
+            '<path d="M20 31 L13 38 L9 47 M20 31 L27 37 L31 45"/>' +
+            '<path d="M21 18 L14 23 L11 17 M21 18 L28 22 L32 27"/>' +
+          '</g>' +
+          '<g class="p4">' +
+            '<circle class="testa" cx="21" cy="9" r="6.2"/>' +
+            '<path class="busto" d="M21 16 L20 31"/>' +
+            '<path d="M20 31 L16 40 L18 48 M20 31 L24 38 L21 45"/>' +
+            '<path d="M21 18 L16 24 L14 20 M21 18 L26 23 L29 26"/>' +
+          '</g>' +
+        '</svg>' +
+        '<svg class="palla" viewBox="0 0 20 20" aria-hidden="true">' +
+          '<circle cx="10" cy="10" r="9"/>' +
+          '<path d="M10 3.5l4.2 3-1.6 4.9H7.4L5.8 6.5z"/>' +
+        '</svg>' +
+      '</div>' +
+      '<div class="linea"><i style="width:' + pct + '%"></i></div>' +
+    '</div>' +
+    '<div class="caricat">' + esc(S.fase || 'Carico') + '</div>' +
+    '<div class="caricaq">' + pct + '%</div>' +
+    '<p class="caricap">' + (S.stato === 'calcolo'
+      ? 'Sto rigiocando cinque stagioni una giornata alla volta, per sapere di quanto ci si può fidare delle previsioni di oggi. Succede una volta sola: poi resta in memoria.'
+      : 'Scarico i cinque campionati.') + '</p>' +
+  '</div>';
+}
+
 var SOTTO = {
-  giornata:   'COSA HA DI DIVERSO OGNI PARTITA',
-  schedine:   'QUOTA, PROBABILITÀ E VINCITA POSSIBILE',
-  libro:      'LE MIE GIOCATE, E COSA DICONO DI ME',
-  squadre:    'CHI SEGNA, CHI CONCEDE, CHI TIRA CORNER',
-  precisione: 'QUANTO MI POSSO SBAGLIARE',
-  dati:       'DA DOVE ARRIVA TUTTO'
+  giornata:   'Cosa ha di diverso ogni partita',
+  schedine:   'Quanto rischi, e quanto chiudi il mese sopra',
+  libro:      'Le mie giocate, e cosa dicono di me',
+  squadre:    'Chi segna, chi concede, chi tira corner',
+  precisione: 'Quanto mi posso sbagliare',
+  dati:       'Da dove arriva tutto'
 };
 
 function sottotitolo(){
-  if(S.stato !== 'pronto') return 'MODELLO SERIE A';
+  if(S.stato !== 'pronto') return 'Cinque campionati, un modello per uno';
   return SOTTO[S.tab] || ((S.risultato ? S.risultato.partiteUsate : 0) + ' PARTITE');
 }
 
 function render(){
   var app = document.getElementById('app');
   if(S.stato === 'carico' || S.stato === 'calcolo'){
-    app.innerHTML = '<div class="load"><h3>'+esc(S.fase)+'…</h3>'+
-      '<div class="pb"><i style="width:'+Math.round((S.avanzamento||0)*100)+'%"></i></div>'+
-      '<p>'+(S.stato==='calcolo'
-        ? 'Sto rifacendo tutte le previsioni delle stagioni passate per sapere quanto ci si può fidare di quelle di oggi.<br>Ci vogliono pochi secondi, e succede una volta sola: poi resta in memoria.'
-        : 'Un attimo.')+'</p></div>';
+    app.innerHTML = schermataCarico();
     return;
   }
   if(S.stato === 'senzadati'){

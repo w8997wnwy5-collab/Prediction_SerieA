@@ -797,6 +797,24 @@ prova('e nessuna selezione finisce in due schedine',
   prova('e le fasce di rischio sono quattro, dalla prudente alla molto alta',
         /FASCE_RISCHIO = \[[\s\S]{0,900}molto/.test(html));
 
+  /* ─── la schermata di caricamento ───
+
+     Venti secondi di barra grigia sono venti secondi in cui sembra che l'app
+     sia morta. Adesso c'e' un corridore, e la cosa che conta e' che avanzi in
+     proporzione all'avanzamento VERO: una barra che arriva sempre in fondo
+     comunque vada e' una bugia, e questa app non ne dice. */
+  prova('il corridore avanza con l\'avanzamento vero, non con un timer',
+        /function schermataCarico[\s\S]{0,700}S\.avanzamento/.test(html) &&
+        /class="corsa" style="left:' \+ nu\(q \* 100/.test(html));
+  prova('lo sprite ha quattro pose intere, non arti che ruotano',
+        (html.match(/class="p[1-4]"/g) || []).length === 4);
+  prova('e si alternano una alla volta',
+        /@keyframes sprite\{0%,24\.9%\{opacity:1\} 25%,100%\{opacity:0\}\}/.test(html));
+  prova('chi ha chiesto meno movimento non se lo prende comunque',
+        /prefers-reduced-motion:reduce[\s\S]{0,160}animation:none/.test(html));
+  prova('la striscia del campo ha una larghezza, o il corridore resta fermo al centro',
+        /\.campo\{position:relative;width:100%/.test(html));
+
   /* Il tetto sulle gambe. Era stato tolto per far funzionare "una da 10", e
      con quarantotto selezioni la tabella e' arrivata a proporre "1 da 48":
      una schedina che nessun banco accetta e che comunque non esce mai. */

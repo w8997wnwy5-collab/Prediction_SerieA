@@ -1463,7 +1463,13 @@ function probMeseInAttivo(dist, giornate) {
   return { pAttivo: sopra / Math.max(1e-12, tot), pPari: pari / Math.max(1e-12, tot),
            /* esatta: giornate indipendenti, quindi la media del mese è la media
               della giornata moltiplicata. Nessuna griglia in mezzo. */
-           atteso: dist.atteso * giornate, speso: speso, giornate: giornate };
+           atteso: dist.atteso * giornate, speso: speso, giornate: giornate,
+           /* La distribuzione intera, non solo la fetta sopra la spesa. Serve a
+              disegnarla: "chiudi in attivo il 64% delle volte" è un numero, e
+              un numero non mostra che la massa a sinistra è un muro stretto
+              mentre quella a destra è una coda lunga. La forma la si capisce
+              guardandola, e la forma è il motivo per cui questa app esiste. */
+           passo: dist.passo, celle: corrente };
 }
 
 /* Le strutture sensate per n selezioni: tutte insieme, a gruppi, tutte singole.
