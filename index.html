@@ -597,6 +597,13 @@ details.note summary:active{opacity:.6;}
 .muroq{font-family:var(--mono);font-size:15px;color:var(--mute);margin-bottom:13px;}
 .muroq b{font-size:26px;color:var(--ink);font-weight:700;}
 .murom{font-size:11.5px;color:var(--mute);margin-top:10px;}
+.serr{width:44px;height:44px;margin:0 auto 12px;border-radius:50%;display:flex;
+  align-items:center;justify-content:center;color:var(--mute);
+  background:var(--card2);border:1px solid var(--line);}
+.serr svg{width:21px;height:21px;}
+.tab.chiusa{opacity:.55;}
+.tab .tabl{position:absolute;width:9px;height:9px;top:5px;right:calc(50% - 17px);opacity:.75;}
+.tab{position:relative;}
 
 /* i grafici */
 .grafc{padding:15px 16px 13px;}
@@ -2464,6 +2471,79 @@ function cardMuroSchedine(){
    li' sta il pulsante che lo apre. Saltare in cima come faceva prima voleva
    dire premere "Ho un codice" e vedere la pagina scappare dall'altra parte,
    col campo comparso fuori schermo: uguale a un pulsante rotto. */
+/* ══════════════════════════════════════════════════════════════
+   LE SEZIONI CHIUSE
+
+   Il taglio del calendario da solo non bastava: chi non paga vedeva tre
+   partite, ma poi girava per Schedine, Squadre e Libro come tutti gli altri.
+
+   Sulla PORTATA di questa chiusura bisogna pero' essere onesti, perche' due
+   cose che sembrano uguali qui non lo sono per niente:
+
+     - le PARTITE IN ARRIVO con le quote non partono proprio dal server a chi
+       non ha diritto. Quella e' una serratura vera: si puo' rompere solo
+       rompendo il server.
+
+     - l'ARCHIVIO delle partite giocate sta in un file pubblico sul sito, e
+       nascondere le schermate che lo mostrano non lo nasconde. Chi sa aprire
+       gli strumenti del browser se lo scarica lo stesso. E non c'e' niente da
+       fare, perche' quei risultati arrivano da football-data.co.uk, dove sono
+       pubblici per tutti: metterli sotto chiave non proteggerebbe un dato
+       nostro, farebbe passare tre megabyte e mezzo dal server a ogni apertura
+       per difendere una cosa che si scarica gratis da un'altra parte.
+
+   Quindi: qui si chiude il LAVORO — le schedine, le forze delle squadre, il
+   registro — non i dati grezzi di dominio pubblico. Ed e' la chiusura giusta,
+   perche' il valore di questa app non sono i risultati di football-data: e'
+   quello che ci si fa sopra.
+
+   Precisione resta aperta apposta, ed e' l'unica eccezione: e' la sezione che
+   dice quanto il modello ci prende davvero, misurato su giornate che non
+   aveva mai visto. Chiuderla vorrebbe dire chiedere 4,99 a uno che non ha
+   nessun motivo per crederti. E' la vetrina, non la merce. Se cambi idea
+   basta togliere 'precisione' dalla riga qui sotto. */
+var SEZIONI_LIBERE = ['giornata', 'precisione', 'dati'];
+
+function sezioneChiusa(tab){
+  if(!cancelloAcceso() || haTutto()) return false;
+  return SEZIONI_LIBERE.indexOf(tab) < 0;
+}
+
+var PERCHE_CHIUSA = {
+  schedine: ['Le schedine', 'Quante gambe, a che quota, e quanto spesso un mese ' +
+    'del genere chiude in attivo. È il mestiere dell\'app: scegliere poche giocate ' +
+    'solide fra millecinquecento partite.'],
+  squadre: ['Le forze delle squadre', 'Attacco e difesa di ogni squadra stimati ' +
+    'partita per partita, e cosa ha di diverso questa giornata rispetto al solito.'],
+  libro: ['Il tuo libro', 'Il registro delle giocate: quanto hai puntato, quanto ' +
+    'è tornato, e se il mese sta andando come doveva.']
+};
+
+function cardSezioneChiusa(tab){
+  var t = PERCHE_CHIUSA[tab] || ['Questa sezione', 'Fa parte dell\'abbonamento.'];
+  var viste = 0, tutte = 0;
+  (S.leghe || []).forEach(function(l){
+    var m = S.muro[l.id];
+    if(!m || m.guasto) return;
+    viste += (m.calendario || []).length; tutte += (m.totale || 0);
+  });
+  return cardAccesso() +
+    '<div class="card muro">' +
+      '<div class="serr"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+        'stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">' +
+        '<rect x="4" y="10" width="16" height="11" rx="2.5"/>' +
+        '<path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></div>' +
+      '<div class="murot">' + esc(t[0]) + '</div>' +
+      '<p class="murop">' + t[1] + '</p>' +
+      (tutte ? '<p class="murop" style="margin-top:-6px">Con il codice si aprono anche le altre <b>' +
+        (tutte - viste) + '</b> partite, su tutti e cinque i campionati.</p>' : '') +
+      '<div class="muroq"><b>' + PREZZO + '</b> al mese</div>' +
+      '<button class="btn acc" onclick="apriAccesso()">Ho un codice</button>' +
+      '<div class="murom">Nella <b>Giornata</b> resti libero di vedere le prime tre ' +
+        'partite di ogni campionato, e in <b>Precisione</b> quanto ci prende davvero.</div>' +
+    '</div>';
+}
+
 function apriAccesso(){
   S.mostraAccesso = true;
   render();
@@ -5714,7 +5794,7 @@ function render(){
       '<button class="btn acc" style="margin-top:12px" onclick="ricalcola()">Riprova</button></div></div>';
     return;
   }
-  var corpo =
+  var corpo = sezioneChiusa(S.tab) ? cardSezioneChiusa(S.tab) :
     S.tab==='schedine'   ? tabSchedine() :
     S.tab==='libro'      ? tabLibro() :
     S.tab==='squadre'    ? tabSquadre() :
@@ -5727,9 +5807,18 @@ function render(){
     '<path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg></button></div>';
   h += '<div class="wrap">'+corpo+'</div>';
   h += '<div class="tabs">'+TABS.map(function(t){
-    return '<button class="tab '+(S.tab===t.k?'on':'')+'" onclick="vai(\''+t.k+'\')">'+
+    /* La linguetta chiusa resta VISIBILE e si puo' premere. Nasconderla
+       sarebbe l'errore: chi non paga non saprebbe nemmeno cosa si perde, e
+       nessuno paga per una cosa di cui ignora l'esistenza. Premendola si
+       arriva al muro, che spiega cosa c'e' dietro. */
+    var chiusa = sezioneChiusa(t.k);
+    return '<button class="tab '+(S.tab===t.k?'on':'')+(chiusa?' chiusa':'')+'" onclick="vai(\''+t.k+'\')">'+
       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="'+t.p+'"/></svg>'+
-      '<span>'+t.n+'</span></button>';
+      '<span>'+t.n+'</span>'+
+      (chiusa ? '<svg class="tabl" viewBox="0 0 24 24" fill="none" stroke="currentColor" '+
+        'stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">'+
+        '<rect x="4" y="10" width="16" height="11" rx="2.5"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>' : '')+
+      '</button>';
   }).join('')+'</div>';
   app.innerHTML = h;
 }
