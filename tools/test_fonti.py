@@ -1080,6 +1080,9 @@ def test_giro_leggero_aggiorna_le_quote():
           .split('def ')[0])
     prova('il conto dei crediti guarda tutte e cinque le leghe, e prende il piu basso',
           'min(restano)' in testo)
+    prova('e se nessuna lega gioca, il contatore tiene l\'ultimo numero invece di sparire',
+          'crediti_quote' in testo.split('def _crediti_rimasti')[1].split('\ndef ')[0],
+          'il contatore esiste per vedere arrivare la fine della quota')
 
 
 def test_notizie_degli_altri_campionati():

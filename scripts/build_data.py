@@ -1060,8 +1060,14 @@ def _crediti_rimasti(esiti):
 
     Con cinque campionati le righe sono cinque, una per lega. Si prende la piu'
     BASSA, che e' quella dell'ultima chiamata fatta: e' l'unica che dice quanto
-    ne resta davvero. Prendere la prima direbbe quanti ce n'erano prima di
-    spendere gli altri quattro."""
+    ne resta davvero.
+
+    E se non c'e' NESSUNA riga si tiene l'ultimo numero conosciuto, invece di
+    lasciare il campo vuoto. Succede da quando si chiamano solo i campionati
+    che giocano: in pausa nazionali non parte una richiesta, quindi nessuno
+    dice quanti crediti restano — e un contatore che sparisce proprio quando
+    non si spende e' il modo piu' stupido di rompere una cosa che serviva a
+    non farsi sorprendere."""
     restano = []
     for chiave, testo in esiti.items():
         if not str(chiave).endswith('crediti'):
@@ -1069,7 +1075,13 @@ def _crediti_rimasti(esiti):
         m = re.search(r'restano (\d+)', str(testo or ''))
         if m:
             restano.append(int(m.group(1)))
-    return min(restano) if restano else None
+    if restano:
+        return min(restano)
+    try:
+        with open(FILE_META, encoding='utf-8') as f:
+            return (json.load(f) or {}).get('crediti_quote')
+    except Exception:                             # noqa: BLE001
+        return None
 
 def prendi_odds_api(esiti, sport=None, etichetta=None):
     """Le quote delle partite in arrivo, da 24 banchi e con 24 giorni di
