@@ -26,14 +26,25 @@ import urllib.request
 
 
 def chiedi(via):
+    """Torna (stato, corpo INTERO). Il taglio si fa quando si STAMPA.
+
+    Prima si tagliava qui a quattrocento caratteri, e la sonda diceva "200 ma
+    corpo illeggibile" sui campionati con la risposta piu' lunga: non era il
+    server, era il taglio che spezzava il JSON a meta'. Una sonda che accusa
+    il sorvegliato del proprio difetto e' peggio di nessuna sonda."""
     req = urllib.request.Request(via, headers={'User-Agent': 'monthline-sonda'})
     try:
         with urllib.request.urlopen(req, timeout=20) as r:
-            return r.status, r.read().decode('utf-8', 'replace')[:400]
+            return r.status, r.read().decode('utf-8', 'replace')
     except urllib.error.HTTPError as e:
-        return e.code, e.read().decode('utf-8', 'replace')[:400]
+        return e.code, e.read().decode('utf-8', 'replace')
     except Exception as e:                      # noqa: BLE001
         return None, str(e)[:200]
+
+
+def breve(testo, quanti=160):
+    testo = ' '.join(str(testo).split())
+    return testo if len(testo) <= quanti else testo[:quanti] + '…'
 
 
 def main():
@@ -48,7 +59,7 @@ def main():
     print('indirizzo:', base)
 
     stato, corpo = chiedi(base + '/api/io')
-    print('/api/io ->', stato, corpo)
+    print('/api/io ->', stato, breve(corpo))
     if stato != 200:
         print('VERDETTO: il cancello non risponde. Indirizzo sbagliato o Worker spento.')
         return 0
@@ -69,10 +80,10 @@ def main():
                 print(lega, '->', len(d.get('calendario') or []), 'partite mostrate su',
                       d.get('totale'), '| tutto =', d.get('tutto'))
             except Exception:                   # noqa: BLE001
-                print(lega, '-> 200 ma corpo illeggibile:', corpo[:120])
+                print(lega, '-> 200 ma corpo illeggibile:', breve(corpo))
         else:
             vuoti.append(lega)
-            print(lega, '->', stato, corpo[:120])
+            print(lega, '->', stato, breve(corpo))
 
     if len(vuoti) == 5:
         print('VERDETTO: cancello in piedi, depositi VUOTI. Manca il primo giro dei dati.')
