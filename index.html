@@ -597,6 +597,9 @@ details.note summary:active{opacity:.6;}
 .muroq{font-family:var(--mono);font-size:15px;color:var(--mute);margin-bottom:13px;}
 .muroq b{font-size:26px;color:var(--ink);font-weight:700;}
 .murom{font-size:11.5px;color:var(--mute);margin-top:10px;}
+.gradit{margin-left:9px;vertical-align:middle;cursor:pointer;display:inline-block;
+  transform:translateY(-3px);}
+.top h1{display:inline-block;}
 .serr{width:44px;height:44px;margin:0 auto 12px;border-radius:50%;display:flex;
   align-items:center;justify-content:center;color:var(--mute);
   background:var(--card2);border:1px solid var(--line);}
@@ -2542,6 +2545,14 @@ function cardSezioneChiusa(tab){
       '<div class="murom">Nella <b>Giornata</b> resti libero di vedere le prime tre ' +
         'partite di ogni campionato, e in <b>Precisione</b> quanto ci prende davvero.</div>' +
     '</div>';
+}
+
+/* Il grado si tocca. Chi comanda finisce dove fa i codici, chi e' fuori
+   dove lo mette: in tutti e due i casi il gesto porta dove si voleva andare. */
+function toccaGrado(){
+  if(S.diritti && S.diritti.capo){ vai('dati'); return; }
+  if(S.diritti && S.diritti.tutto){ vai('giornata'); apriAccesso(); return; }
+  apriAccesso();
 }
 
 function apriAccesso(){
@@ -5800,7 +5811,15 @@ function render(){
     S.tab==='squadre'    ? tabSquadre() :
     S.tab==='precisione' ? tabPrecisione() :
     S.tab==='dati'       ? tabDati() : tabGiornata();
-  var h = '<div class="top"><div class="ttl"><h1>'+TITOLI[S.tab]+'</h1>'+
+  /* Il grado sta in TESTA, accanto al titolo, e si vede in ogni schermata.
+     Prima stava dentro la carta "chi sei", in fondo alla Giornata sotto tutte
+     le partite: cioe' nel posto dove non guarda nessuno. Uno che ha appena
+     messo il codice deve vedere subito che e' entrato — e chi non ce l'ha
+     deve avere sotto gli occhi che gli manca qualcosa. Si tocca: chi comanda
+     va al pannello dei codici, chi e' fuori al campo dove si mette il suo. */
+  var h = '<div class="top"><div class="ttl"><h1>'+TITOLI[S.tab]+
+    (cancelloAcceso() ? '<span class="gradit" onclick="toccaGrado()">'+ilMioGrado()+'</span>' : '')+
+    '</h1>'+
     '<div class="sub">'+esc(sottotitolo())+'</div></div>'+
     '<button class="ico'+(S.aggiornando?' gira':'')+'" onclick="aggiorna()" aria-label="Aggiorna">'+
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+
