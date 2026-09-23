@@ -815,6 +815,30 @@ prova('e nessuna selezione finisce in due schedine',
   prova('la striscia del campo ha una larghezza, o il corridore resta fermo al centro',
         /\.campo\{position:relative;width:100%/.test(html));
 
+  /* ─── il nome e il marchio ───
+
+     Un'icona rotta non da' errori: da' un quadrato bianco sulla schermata
+     Home, e ci si accorge settimane dopo. Qui si controlla che il data URI
+     sia davvero un SVG e che il nome sia lo stesso dappertutto — titolo,
+     manifest, icona iOS — perche' tre nomi diversi sono tre app diverse. */
+  var favicon = /<link rel="icon" href="data:image\/svg\+xml,([^"]*)">/.exec(html);
+  prova('la favicon c\'e ed e un SVG, non un quadrato bianco',
+        !!favicon && decodeURIComponent(favicon[1]).indexOf('<svg') === 0);
+  prova('e disegna la M sulla linea, non il cerchio di prima',
+        !!favicon && /M52 122V54/.test(decodeURIComponent(favicon[1])) &&
+        !/circle/.test(decodeURIComponent(favicon[1])));
+  prova('il nome e lo stesso nel titolo e nell\'icona iOS',
+        /<title>Monthline<\/title>/.test(html) &&
+        /apple-mobile-web-app-title" content="Monthline"/.test(html));
+  var man;
+  try { man = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'manifest.webmanifest'), 'utf8')); }
+  catch (e) { man = null; }
+  prova('e anche nel manifest, o sulla Home ne compare un altro',
+        !!man && man.name === 'Monthline' && man.short_name === 'Monthline',
+        man && man.name + ' / ' + man.short_name);
+  prova('il marchio sta sul caricamento, l\'unica schermata senza numeri da mostrare',
+        /class="marchio"[\s\S]{0,500}Monthline/.test(html));
+
   /* Il tetto sulle gambe. Era stato tolto per far funzionare "una da 10", e
      con quarantotto selezioni la tabella e' arrivata a proporre "1 da 48":
      una schedina che nessun banco accetta e che comunque non esce mai. */

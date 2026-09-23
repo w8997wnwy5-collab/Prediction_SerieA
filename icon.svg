@@ -1,5 +1,13 @@
+<!-- Monthline.
+     Una M che sta SOPRA una linea, e la linea la supera da tutt'e due i lati:
+     cosi' e' una linea e non una sottolineatura. Il nome e' una storpiatura di
+     "moneyline", il mercato piu' giocato al mondo — solo che qui la linea che
+     conta non e' quella della partita, e' quella del mese.
+     Provata a 180, 64, 40 e 28 px prima di sceglierla: a 28 le altre diventavano
+     poltiglia. -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180" width="180" height="180">
   <rect width="180" height="180" rx="40" fill="#16211D"/>
-  <circle cx="90" cy="90" r="46" fill="none" stroke="#F5F7F5" stroke-width="9"/>
-  <path d="M90 52l26 19-10 31H74l-10-31z" fill="#F5F7F5"/>
+  <path d="M52 122V54l28 32 28-32v68" fill="none" stroke="#F5F7F5" stroke-width="17"
+        stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="24" y="128" width="132" height="12" rx="6" fill="#2AA96F"/>
 </svg>

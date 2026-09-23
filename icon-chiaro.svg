@@ -1,0 +1,8 @@
+<!-- La stessa, per quando serve su fondo bianco: stampe, anteprime, favicon
+     di browser che ignorano il tema scuro. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180" width="180" height="180">
+  <rect width="180" height="180" rx="40" fill="#FFFFFF"/>
+  <path d="M52 122V54l28 32 28-32v68" fill="none" stroke="#16211D" stroke-width="17"
+        stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="24" y="128" width="132" height="12" rx="6" fill="#178A57"/>
+</svg>

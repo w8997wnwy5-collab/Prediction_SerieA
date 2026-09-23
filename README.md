@@ -1,11 +1,30 @@
-# Modello Serie A
+<img src="icon.svg" width="72" align="left" alt="">
 
-Un modello statistico per la Serie A che gira interamente nel browser: forze di attacco e
-difesa di ogni squadra, probabilità di ogni partita su una sessantina di mercati, cartellini
-attesi per arbitro, corner, primo tempo — e, la parte che conta, **quanto sbaglia davvero**,
-misurato rigiocando le stagioni passate.
+# Monthline
 
-I dati si aggiornano da soli quattro volte al giorno, con un robot che vive su GitHub.
+### Non giochi la partita. Giochi il mese.
+
+<br clear="left">
+
+Il nome è una storpiatura di *moneyline*, il mercato più giocato al mondo. La storpiatura è
+il punto: qui la linea che conta non è quella della partita, è quella del **mese**.
+
+Un modello statistico per i cinque campionati europei — Serie A, Premier League, Bundesliga,
+Liga, Ligue 1 — che gira interamente nel browser: forze di attacco e difesa di ogni squadra,
+probabilità di ogni partita su una sessantina di mercati, e le schedine scelte non per quanto
+pagano, ma per la probabilità che il **mese** chiuda in attivo. E, la parte che conta,
+**quanto sbaglia davvero**, misurato rigiocando le stagioni passate.
+
+Due cose che quasi nessuna app di pronostici dice, e che qui sono misurate:
+
+- **Dove il banco quota, il banco ha ragione.** Il peso migliore da dare al modello sul
+  mercato quotato è zero — misurato su tutti e cinque i campionati. Il modello serve sui
+  quaranta mercati che il banco non quota, e sta zitto sugli altri tre.
+- **Per chiudere il mese sopra serve un numero intero di schedine vincenti**, e questo
+  crea dei gradini. A quota 1.98 servono tre vincite su quattro (28% dei mesi in attivo);
+  a quota 2.03 ne bastano due (63%). Cinque centesimi, trentacinque punti.
+
+I dati si aggiornano da soli cinque volte al giorno, con un robot che vive su GitHub.
 
 ---
 

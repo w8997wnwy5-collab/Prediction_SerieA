@@ -5,14 +5,14 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="Serie A">
-<meta name="description" content="Modello statistico per la Serie A: forze delle squadre, probabilità di ogni partita, arbitri, e quanto il modello sbaglia davvero.">
+<meta name="apple-mobile-web-app-title" content="Monthline">
+<meta name="description" content="Non giochi la partita, giochi il mese. Cinque campionati, un modello per uno, e le schedine scelte per la probabilità che il mese chiuda in attivo.">
 <meta name="theme-color" content="#F5F7F5" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#121714" media="(prefers-color-scheme: dark)">
-<title>Modello Serie A</title>
+<title>Monthline</title>
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'%3E%3Crect width='180' height='180' rx='40' fill='%2316211D'/%3E%3Ccircle cx='90' cy='90' r='46' fill='none' stroke='%23F5F7F5' stroke-width='9'/%3E%3Cpath d='M90 52l26 19-10 31H74l-10-31z' fill='%23F5F7F5'/%3E%3C/svg%3E">
-<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'%3E%3Crect width='180' height='180' rx='40' fill='%2316211D'/%3E%3Ccircle cx='90' cy='90' r='46' fill='none' stroke='%23F5F7F5' stroke-width='9'/%3E%3Cpath d='M90 52l26 19-10 31H74l-10-31z' fill='%23F5F7F5'/%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,<svg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%20180%20180'><rect%20width='180'%20height='180'%20rx='40'%20fill='%2316211D'/><path%20d='M52%20122V54l28%2032%2028-32v68'%20fill='none'%20stroke='%23F5F7F5'%20stroke-width='17'%20stroke-linecap='round'%20stroke-linejoin='round'/><rect%20x='24'%20y='128'%20width='132'%20height='12'%20rx='6'%20fill='%232AA96F'/></svg>">
+<link rel="apple-touch-icon" href="data:image/svg+xml,<svg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%20180%20180'><rect%20width='180'%20height='180'%20rx='40'%20fill='%2316211D'/><path%20d='M52%20122V54l28%2032%2028-32v68'%20fill='none'%20stroke='%23F5F7F5'%20stroke-width='17'%20stroke-linecap='round'%20stroke-linejoin='round'/><rect%20x='24'%20y='128'%20width='132'%20height='12'%20rx='6'%20fill='%232AA96F'/></svg>">
 <style>
 :root{
   color-scheme:light dark;
@@ -315,6 +315,11 @@ svg.chart{display:block;width:100%;overflow:visible;}
    si stringe sul contenuto, e il contenuto qui sono elementi in posizione
    assoluta — cioe' niente. La striscia del campo collassava a larghezza zero
    e il corridore restava fermo al centro qualunque fosse l'avanzamento. */
+.marchio{display:flex;align-items:center;gap:12px;margin-bottom:30px;color:var(--ink);}
+.marchio svg{width:39px;height:39px;flex:none;}
+.marchio span{font-size:23px;font-weight:700;letter-spacing:-.6px;}
+.claim{margin-top:20px;font-size:12px;letter-spacing:.4px;color:var(--mute);opacity:.75;}
+
 .campo{position:relative;width:100%;max-width:290px;margin:0 auto 32px;height:86px;}
 .erba{position:absolute;left:0;right:0;bottom:6px;height:22px;border-radius:6px;
   background:repeating-linear-gradient(90deg,
@@ -5085,6 +5090,17 @@ function schermataCarico(){
   var q = Math.max(0, Math.min(1, S.avanzamento || 0));
   var pct = Math.round(q * 100);
   return '<div class="load">' +
+    /* Il marchio sta qui e solo qui: e' l'unica schermata in cui l'app non
+       ha ancora niente da dire, e l'unica in cui guardare un logo non toglie
+       il posto a un numero. */
+    '<div class="marchio">' +
+      '<svg viewBox="0 0 180 180" aria-hidden="true">' +
+        '<path d="M52 122V54l28 32 28-32v68" fill="none" stroke="currentColor" stroke-width="17"' +
+        ' stroke-linecap="round" stroke-linejoin="round"/>' +
+        '<rect x="24" y="128" width="132" height="12" rx="6" fill="var(--accent)"/>' +
+      '</svg>' +
+      '<span>Monthline</span>' +
+    '</div>' +
     '<div class="campo">' +
       '<div class="erba"></div>' +
       '<div class="corsa" style="left:' + nu(q * 100, 1) + '%">' +
@@ -5126,6 +5142,7 @@ function schermataCarico(){
     '<p class="caricap">' + (S.stato === 'calcolo'
       ? 'Sto rigiocando cinque stagioni una giornata alla volta, per sapere di quanto ci si può fidare delle previsioni di oggi. Succede una volta sola: poi resta in memoria.'
       : 'Scarico i cinque campionati.') + '</p>' +
+    '<div class="claim">Non giochi la partita. Giochi il mese.</div>' +
   '</div>';
 }
 
@@ -5139,7 +5156,7 @@ var SOTTO = {
 };
 
 function sottotitolo(){
-  if(S.stato !== 'pronto') return 'Cinque campionati, un modello per uno';
+  if(S.stato !== 'pronto') return 'Non giochi la partita, giochi il mese';
   return SOTTO[S.tab] || ((S.risultato ? S.risultato.partiteUsate : 0) + ' PARTITE');
 }
 
