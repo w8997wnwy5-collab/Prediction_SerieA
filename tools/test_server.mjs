@@ -231,6 +231,25 @@ async function entra(env, codice) {
   const nostro = await chiedi(env, '/api/calendario/I1');
   prova('il nostro si', nostro.headers.get('access-control-allow-origin') === ORIGINE);
 }
+/* ═══ 8-bis. l'origine dimenticata ═══
+
+   Montando il Worker dal pannello di Cloudflare invece che da riga di comando,
+   le variabili si mettono a mano e ORIGINI e' facilissima da saltare. Senza
+   un valore predefinito il browser rifiuterebbe ogni risposta e il sintomo
+   sarebbe "il calendario non arriva": sembra il server rotto, e' una casella
+   vuota. Quindi senza ORIGINI vale l'indirizzo dell'app — e solo quello. */
+{
+  const env = ambiente(); delete env.ORIGINI;
+  await preparaDati(env);
+  const nostro = await chiedi(env, '/api/calendario/I1', { headers: { Origin: ORIGINE } });
+  prova('senza ORIGINI l\'app sua funziona lo stesso',
+        nostro.headers.get('access-control-allow-origin') === ORIGINE,
+        nostro.headers.get('access-control-allow-origin'));
+  const altrui = await chiedi(env, '/api/calendario/I1', { headers: { Origin: 'https://ladro.example' } });
+  prova('ma un altro sito no, nemmeno allora',
+        !altrui.headers.get('access-control-allow-origin'));
+}
+
 
 /* ═══ 8. il deposito dei dati ═══ */
 {

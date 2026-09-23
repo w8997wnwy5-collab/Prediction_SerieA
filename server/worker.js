@@ -30,6 +30,15 @@
    ══════════════════════════════════════════════════════════════════════════ */
 
 const GRATIS = 3;                 /* partite per campionato senza codice */
+
+/* L'indirizzo da cui l'app parla con questa API.
+   Si puo' cambiare con la variabile ORIGINI, ma un valore predefinito ci
+   vuole: senza, un ORIGINI dimenticato durante il montaggio vorrebbe dire
+   che il browser rifiuta OGNI richiesta, e l'unico sintomo sarebbe "il
+   calendario non arriva" — un guasto che sembra il server rotto e invece e'
+   una casella vuota. L'asterisco no: vorrebbe dire che qualunque sito puo'
+   far parlare il browser di chi passa con questa API usando il suo gettone. */
+const ORIGINI_PREDEFINITE = 'https://w8997wnwy5-collab.github.io';
 const GETTONE_GIORNI = 30;        /* ogni quanto il telefono deve ripresentarsi */
 const TENTATIVI_ORA = 12;         /* codici sbagliati tollerati, per indirizzo */
 
@@ -63,7 +72,7 @@ function json(dati, stato = 200, extra = {}) {
    che qualunque sito puo' far parlare il browser di chi passa con questa API
    usando il suo gettone. */
 function intestazioniCors(req, env) {
-  const ammesse = (env.ORIGINI || '').split(',').map(s => s.trim()).filter(Boolean);
+  const ammesse = (env.ORIGINI || ORIGINI_PREDEFINITE).split(',').map(s => s.trim()).filter(Boolean);
   const origine = req.headers.get('Origin') || '';
   if (!ammesse.includes(origine)) return null;
   return {
