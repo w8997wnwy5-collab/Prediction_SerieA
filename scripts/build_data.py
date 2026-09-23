@@ -2019,6 +2019,55 @@ class RisolutoreNomi(object):
 
 # ────────────────────────────── gli altri campionati ──────────────────────────────
 
+# Quanti giorni prima di una partita vale la pena chiedere le sue quote.
+#
+# Perche' esiste questa regola: ogni chiamata a The Odds API costa un credito
+# per campionato, e per mesi si e' pagato lo stesso prezzo tutti i giorni —
+# anche il 23 settembre, quando il prossimo turno era a diciassette giorni di
+# distanza e le chiamate tornavano quote di partite che non c'erano.
+#
+# Misurato sul calendario vero delle cinque leghe: ognuna gioca una
+# cinquantina di giorni su duecentocinquanta. Chiedere solo a chi gioca
+# davvero cambia il conto per intero:
+#
+#   sempre tutte, 3 giri            15.0 crediti/giorno   450 al mese
+#   10 giorni + 4 giri da 3 giorni  10.7 crediti/giorno   321 al mese
+#
+# Due finestre e non una, perche' servono a due cose diverse. Il giro
+# completo passa una volta al giorno e guarda LARGO: le quote compaiono con
+# dieci giorni di anticipo, che e' molto prima di quando si gioca. I giri
+# leggeri passano quattro volte e guardano STRETTO: rinfrescare il prezzo
+# serve solo quando la partita e' vicina.
+FINESTRA_QUOTE_COMPLETO = 10
+FINESTRA_QUOTE_LEGGERO = 3
+
+
+def gioca_presto(calendario, giorni):
+    """C'e' almeno una partita entro tot giorni? Se no, chiedere le quote
+    costa un credito e non porta niente."""
+    if not calendario:
+        return False
+    oggi = datetime.now(timezone.utc).date()
+    limite = (oggi + timedelta(days=giorni)).isoformat()
+    minimo = oggi.isoformat()
+    for p in calendario:
+        d = p.get('d')
+        if d and minimo <= d <= limite:
+            return True
+    return False
+
+
+def quote_se_gioca(esiti, lega, calendario, giorni, etichetta):
+    """Le quote, ma solo se c'e' qualcosa da quotare. Quando si salta lo si
+    DICE: un credito risparmiato in silenzio e un guasto silenzioso si
+    somigliano troppo perche' valga la pena confonderli."""
+    if not gioca_presto(calendario, giorni):
+        esiti['%s quote' % lega['id']] = ('saltata: nessuna partita entro %d giorni '
+                                          '(risparmiato 1 credito)' % giorni)
+        return []
+    return prendi_odds_api(esiti, lega['odds'], etichetta)
+
+
 def costruisci_lega(lega, stagioni, esiti):
     """Un campionato che non sia la Serie A: solo il cuore.
 
@@ -2071,7 +2120,8 @@ def costruisci_lega(lega, stagioni, esiti):
 
     # e le quote vere, che sono il motivo per cui tutto questo vale la pena:
     # l'ancoraggio al mercato e' la cosa piu' forte che l'app abbia.
-    quote = risolutore.applica(prendi_odds_api(mie, lega['odds'], '%s quote' % lega['id']))
+    quote = risolutore.applica(
+        quote_se_gioca(mie, lega, calendario, FINESTRA_QUOTE_COMPLETO, '%s quote' % lega['id']))
     if quote:
         calendario = unisci_calendario(calendario, quote)
     mie['%s nomi' % lega['id']] = risolutore.resoconto()
@@ -2141,7 +2191,8 @@ def aggiorna_lega_leggero(lega, stagioni, esiti):
     vicine = prendi_calendario(stagioni, esiti, lega['id'])
     if vicine:
         calendario = unisci_calendario(calendario, vicine)
-    quote = risolutore.applica(prendi_odds_api(esiti, lega['odds'], '%s quote' % lega['id']))
+    quote = risolutore.applica(
+        quote_se_gioca(esiti, lega, calendario, FINESTRA_QUOTE_LEGGERO, '%s quote' % lega['id']))
     if quote:
         calendario = unisci_calendario(calendario, quote)
     esiti['%s nomi (leggero)' % lega['id']] = risolutore.resoconto()
@@ -2283,7 +2334,15 @@ def main():
     # e soprattutto Betfair Exchange, che sulle partite future non c'era mai
     # stato. Sui campi che non porta (orario, giornata) non tocca niente,
     # perche' unisci_calendario scrive solo i valori non nulli.
-    calendario = unisci_calendario(calendario, prendi_odds_api(esiti))
+    # Anche il campionato di casa paga un credito a giro, e anche lui ha
+    # diciassette giorni di pausa nazionali in cui non c'e' niente da quotare.
+    # La finestra qui e' quella larga anche nei giri leggeri: la Serie A e'
+    # quella che si guarda tutti i giorni, e un credito e' un credito.
+    calendario = unisci_calendario(
+        calendario,
+        quote_se_gioca(esiti, LEGA_CASA, calendario,
+                       FINESTRA_QUOTE_LEGGERO if leggero else FINESTRA_QUOTE_COMPLETO,
+                       'The Odds API'))
     calendario = ricorda_prima_quota(vecchio_cal, calendario)
     if tsdb_future:
         calendario = unisci_calendario(calendario, tsdb_future)

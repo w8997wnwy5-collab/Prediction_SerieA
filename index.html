@@ -2619,38 +2619,207 @@ function cardQuanteNePrendi(){
    e' una scelta legittima su cui la matematica non ha l'ultima parola: una
    singola non si racconta, e questo non e' un argomento sciocco.
    ══════════════════════════════════════════════════════════════ */
-var CHIAVE_FORMA = 'seriea_forma_v2';
-function formaScelta(){
-  if(S.forma != null) return S.forma;
-  var v = null;
-  try{ v = localStorage.getItem(CHIAVE_FORMA); }catch(e){}
-  var pezzi = String(v || '').split(',');
-  S.forma = (pezzi.length === 2 && pezzi[0] > 0 && pezzi[1] > 0)
-    ? {L: parseInt(pezzi[0], 10), m: parseInt(pezzi[1], 10)} : null;
-  return S.forma;
+/* ══════════════════════════════════════════════════════════════
+   QUANTO VUOI RISCHIARE
+
+   Con cinque campionati le selezioni disponibili sono migliaia, e "prendi le
+   piu' solide" ha smesso di essere una risposta: ce ne sono centinaia tutte
+   all'87-88%, e una schedina da OTTO gambe delle migliori paga 1.80. Chi apre
+   l'app per rischiare si trovava davanti quote da libretto di risparmio.
+
+   Il difetto non era il conto, era la domanda. Massimizzare la probabilita'
+   di chiudere il mese in attivo, senza altri vincoli, porta sempre allo stesso
+   posto: le gambe piu' sicure che esistono. E' la risposta giusta a una
+   domanda che nessuno stava facendo.
+
+   Quindi adesso la quota bersaglio la scegli tu, e il conto lavora DENTRO
+   quella scelta: fra tutti i modi di arrivare a quella quota, trova quello
+   che chiude il mese in attivo piu' spesso.
+
+   Due cose misurate che governano tutto il resto.
+
+   A PARITA' DI QUOTA, MENO GAMBE E' SEMPRE MEGLIO. Il banco che ti offre Q su
+   una schedina da L gambe ti sta dando una probabilita' vera di 1/(Q(1+r)^L):
+   il ricarico si moltiplica a ogni gamba, quindi la stessa quota vale meno se
+   ci arrivi con otto gambe invece che con due. Misurato, per Q = 5:
+
+     1 gamba   p 18.9%   P(mese in attivo) 56.8%
+     2 gambe   p 17.9%                     54.6%
+     4 gambe   p 16.1%                     50.4%
+     8 gambe   p 12.9%                     42.5%
+
+   Monotona, sempre, per ogni quota. Per questo l'app cerca il numero MINIMO
+   di gambe che arriva alla quota che hai chiesto, invece del massimo.
+
+   QUANTE SCHEDINE, INVECE, NON E' MONOTONO. Dipende dalla soglia intera di
+   schedine vincenti che serve per stare sopra, e salta:
+
+     Q=2  la migliore e' 3 schedine    Q=5   1 schedina
+     Q=3  2 schedine                   Q=10  2 schedine   Q=20  3 schedine
+
+   Quello lo decide il conto, provandole tutte.
+   ══════════════════════════════════════════════════════════════ */
+var FASCE_RISCHIO = [
+  {id:'basso', nome:'Prudente',   min:1.5,  max:2.6,
+   testo:'Quote da giocare spesso. Paga poco, e per questo esce quasi sempre.'},
+  {id:'medio', nome:'Equilibrata', min:2.6, max:6,
+   testo:'Il punto in cui la quota comincia a valere qualcosa. Di solito è anche quello che chiude il mese in attivo più spesso.'},
+  {id:'alto',  nome:'Alta',       min:6,    max:16,
+   testo:'Una volta su sei o sette. Qui la fortuna comincia a contare più del modello.'},
+  {id:'molto', nome:'Molto alta', min:16,   max:60,
+   testo:'La schedina che si racconta. Guarda la probabilità prima di raccontarla.'}
+];
+var MAX_GAMBE = 6;    /* oltre, il ricarico si mangia la quota e non si gioca */
+var MAX_TABELLA = 8;  /* il tetto della tabella del mese: "1 da 48" non si gioca */
+
+/* Le selezioni che compongono UNA schedina alla quota bersaglio.
+
+   La regola viene dalla misura: si cerca il numero MINIMO di gambe che
+   arrivano alla fascia. Per ogni lunghezza si punta a una probabilita' per
+   gamba, e si prendono le selezioni piu' vicine a quel bersaglio — una per
+   partita, e a parita' di distanza quella su cui il modello e' piu' sicuro. */
+/* LE QUOTE CHE STANNO SOPRA UN GRADINO.
+
+   Questa e' la cosa piu' redditizia trovata in tutta la sezione, e si vede
+   solo guardando il conto del MESE invece di quello della giocata.
+
+   Per chiudere il mese sopra serve un numero INTERO di schedine vincenti. Con
+   m schedine a giornata e quattro giornate, la spesa e' 4·punti e ogni vincita
+   porta (punti/m)·Q. Quindi k vincite bastano quando k·Q/m > 4, cioe' quando
+
+       Q > 4m/k
+
+   Sotto quella soglia ne servono k+1, e la differenza non e' graduale: e' un
+   gradino. Misurato sui dati veri, una schedina singola:
+
+       quota 1.98  ->  servono 3 vincite su 4  ->  28% di mesi in attivo
+       quota 2.03  ->  ne bastano 2            ->  63%
+
+   Cinque centesimi di quota, trentacinque punti di probabilita'. E l'app
+   puntava al centro della fascia — la media geometrica fra minimo e massimo —
+   cioe' cadeva dove capitava, spesso dal lato sbagliato.
+
+   Adesso i bersagli si calcolano: per ogni k si prende la quota appena sopra
+   4m/k, con un dito di margine perche' la quota vera non centra mai il
+   bersaglio esatto. Si provano quelli, piu' il centro della fascia come
+   riserva, e vince chi chiude il mese in attivo piu' spesso. */
+function quoteBersaglio(fascia, m){
+  var fuori = [], k;
+  for(k = 1; k <= 12; k++){
+    var q = (GIORNATE_MESE * m / k) * 1.04;   /* il dito di margine */
+    if(q >= fascia.min && q <= fascia.max) fuori.push(q);
+  }
+  fuori.push(Math.sqrt(fascia.min * fascia.max));
+  return fuori;
 }
-/* m facoltativo: dal selettore arriva solo la lunghezza e il numero di
-   schedine lo sceglie il conto; dalla tabella del mese arrivano tutti e due,
-   perche' li' la riga E' la struttura. */
-function impostaForma(L, m){
-  S.forma = {L: L, m: m || 0};
-  try{ localStorage.setItem(CHIAVE_FORMA, L + ',' + (m || 0)); }catch(e){}
+
+function schedinaAllaQuota(cand, fascia, L, usate, bersaglioQ){
+  if(bersaglioQ == null) bersaglioQ = Math.sqrt(fascia.min * fascia.max);
+  var pSchedina = 1 / (bersaglioQ * Math.pow(1 + ricarico().v, L));
+  var pGamba = Math.pow(pSchedina, 1 / L);
+  if(!(pGamba > 0.05 && pGamba < 0.97)) return null;
+  var perPartita = {};
+  cand.forEach(function(c){
+    if(usate[c.iPartita]) return;
+    if(!(c.p >= 0.10 && c.p <= 0.93)) return;
+    var d = Math.abs(c.p - pGamba);
+    var attuale = perPartita[c.iPartita];
+    /* a parita' di distanza dal bersaglio vince la stima piu' stretta: il
+       pavimento piu' vicino alla media vuol dire meno incertezza */
+    if(!attuale || d < attuale.d - 1e-9 ||
+       (Math.abs(d - attuale.d) < 1e-9 && c.p05 > attuale.c.p05)){
+      perPartita[c.iPartita] = {d: d, c: c};
+    }
+  });
+  var scelte = Object.keys(perPartita).map(function(k){ return perPartita[k]; })
+    .sort(function(a, b){ return a.d - b.d; })
+    .slice(0, L).map(function(x){ return x.c; });
+  if(scelte.length < L) return null;
+  return scelte;
+}
+
+/* La struttura migliore DENTRO una fascia di quota: quante schedine, quante
+   gambe, e quali selezioni. Si prova ogni lunghezza dalla piu' corta, e ogni
+   numero di schedine, e si tiene quella che chiude il mese in attivo piu'
+   spesso. */
+function cercaPerFascia(fascia){
+  var cand = candidatiTutteLeLeghe();
+  if(!cand.length) return null;
+  var pt = puntata(), fuori = [], L, m, b;
+  for(L = 1; L <= MAX_GAMBE; L++){
+   for(m = 1; m <= 6; m++){
+    var bersagli = quoteBersaglio(fascia, m);
+    for(b = 0; b < bersagli.length; b++){
+      var usate = {}, gruppi = [], sel = [], ok = true, g;
+      for(g = 0; g < m; g++){
+        var pezzo = schedinaAllaQuota(cand, fascia, L, usate, bersagli[b]);
+        if(!pezzo){ ok = false; break; }
+        var indici = [];
+        pezzo.forEach(function(c){
+          usate[c.iPartita] = 1;
+          indici.push(sel.length);
+          sel.push(c);
+        });
+        gruppi.push(indici);
+      }
+      if(!ok) continue;
+      var quote = gruppi.map(function(gr){
+        var P = 1;
+        gr.forEach(function(i){ P *= sel[i].p; });
+        return quotaBanco(1 / P, gr.length);
+      });
+      /* tutte le schedine devono stare davvero nella fascia chiesta */
+      var dentro = quote.every(function(q){ return q >= fascia.min * 0.85 && q <= fascia.max * 1.15; });
+      if(!dentro) continue;
+      var r = valutaRipartizione(sel, gruppi, pt);
+      if(!r) continue;
+      fuori.push({L: L, m: m, selezioni: sel, gruppi: gruppi, quote: quote,
+                  probSchedine: r.schedine.map(function(x){ return x.p; }),
+                  pAttivo: r.pAttivo, atteso: r.atteso, speso: r.speso,
+                  perSchedina: pt / m, fascia: fascia,
+                  quotaMedia: quote.reduce(function(x, y){ return x + y; }, 0) / quote.length,
+                  /* quante schedine vincenti servono davvero per stare sopra:
+                     e' il numero che fa il gradino, e vale la pena mostrarlo */
+                  vinciteServono: Math.floor(GIORNATE_MESE * m /
+                     (quote.reduce(function(x, y){ return x + y; }, 0) / quote.length)) + 1});
+    }
+   }
+  }
+  if(!fuori.length) return null;
+  fuori.sort(function(a, b){
+    /* a parita' di probabilita' vince la schedina piu' corta: stessa quota,
+       meno ricarico pagato */
+    if(Math.abs(a.pAttivo - b.pAttivo) > 0.002) return b.pAttivo - a.pAttivo;
+    return a.L - b.L;
+  });
+  return fuori[0];
+}
+
+var _fasceCache = null;
+function tutteLeFasce(){
+  var firma = puntata() + '|' + ricarico().v + '|' + (S.leghe||[]).length + '|' +
+              legheCaricate().length + '|' + prudenza().id;
+  if(_fasceCache && _fasceCache.firma === firma) return _fasceCache.v;
+  var v = FASCE_RISCHIO.map(function(f){
+    return {fascia: f, scelta: cercaPerFascia(f)};
+  }).filter(function(x){ return x.scelta; });
+  _fasceCache = {firma: firma, v: v};
+  return v;
+}
+
+var CHIAVE_RISCHIO = 'seriea_rischio_v1';
+function rischioScelto(){
+  if(S.rischio) return S.rischio;
+  var id = null;
+  try{ id = localStorage.getItem(CHIAVE_RISCHIO); }catch(e){}
+  S.rischio = id || null;
+  return S.rischio;
+}
+function impostaRischio(id){
+  S.rischio = id;
+  try{ localStorage.setItem(CHIAVE_RISCHIO, id); }catch(e){}
   var el = document.getElementById('leTueSchedine');
   if(el) el.innerHTML = cardLeTueSchedine();
-  var pf = document.getElementById('schedProfilo');
-  if(pf) pf.innerHTML = cardQuanteNePrendi() + cardMeseInAttivo() + cardComeGiocarle();
-  if(el) el.scrollIntoView({behavior: 'smooth', block: 'start'});
-}
-/* La migliore struttura per ogni lunghezza di schedina: e' l'unico asse su cui
-   ha senso far scegliere: quante schedine, e quali partite dentro, sono conti
-   e non gusti. */
-function formeDisponibili(r){
-  var perL = {};
-  r.opzioni.forEach(function(o){
-    if(!perL[o.L] || o.pAttivo > perL[o.L].pAttivo) perL[o.L] = o;
-  });
-  return Object.keys(perL).map(function(k){ return perL[k]; })
-               .sort(function(a,b){ return a.L - b.L; });
 }
 
 function testoSchedina(o, k){
@@ -2683,84 +2852,54 @@ function copiaSchedina(b){
 }
 
 function cardLeTueSchedine(){
-  var r = cercaStruttureMese();
-  if(!r || !r.opzioni.length) return '';
-  var forme = formeDisponibili(r);
-  if(!forme.length) return '';
-  var best = r.opzioni[0];
-  /* Il valore predefinito NON e' l'ottimo assoluto, ed e' una scelta. L'ottimo
-     assoluto e' spesso la singola piu' solida giocata e rigiocata, che e' la
-     risposta giusta alla domanda posta e una risposta inutile alla persona che
-     la legge: le multiple corte le gioca perche' una singola non si racconta,
-     e un consiglio che nessuno seguira' non e' un buon consiglio. Quindi si
-     parte da li' e si dice, in chiaro, quanto costa. */
-  var corte = forme.filter(function(x){ return x.L >= 2 && x.L <= 4; })
-                   .sort(function(a,b){ return b.pAttivo - a.pAttivo; })[0];
-  var predef = corte || best;
-  /* La forma chiesta puo' non esistere: le altre tabelle dell'app propongono
-     anche spezzoni disuguali (dieci selezioni a gruppi di tre fanno tre
-     schedine da tre piu' una da una), che qui non hanno un posto. Si ripiega
-     sulla stessa lunghezza, e SI DICE — un ripiego silenzioso e' peggio di un
-     rifiuto: tocchi "2 da 5" e ti compare altro senza una parola. */
-  var vuole = formaScelta(), o = null, ripiego = null;
-  if(vuole){
-    var perL = r.opzioni.filter(function(x){ return x.L === vuole.L; })
-                        .sort(function(a,b){ return b.pAttivo - a.pAttivo; });
-    o = perL.filter(function(x){ return !vuole.m || x.m === vuole.m; })[0] || null;
-    if(!o && perL.length){
-      o = perL[0];
-      ripiego = vuole.m + ' schedin' + (vuole.m===1?'a':'e') + ' da ' + vuole.L;
-    }
-  }
-  var scelta = !!o;
-  if(!o) o = predef;
-  var pt = puntata();
+  var fasce = tutteLeFasce();
+  if(!fasce.length) return '';
+  /* Il valore predefinito non e' il piu' prudente: e' quello che chiude il
+     mese in attivo piu' spesso. Di solito e' l'Equilibrata, e non e' un caso —
+     troppo bassa e servono troppe vincite per stare sopra, troppo alta e non
+     ne arriva nessuna. */
+  var migliore = fasce.slice().sort(function(a,b){ return b.scelta.pAttivo - a.scelta.pAttivo; })[0];
+  var voluto = rischioScelto();
+  var corrente = fasce.filter(function(x){ return x.fascia.id === voluto; })[0] || migliore;
+  var o = corrente.scelta, pt = puntata();
+  var nSel = (o.selezioni || []).length;
 
-  var titolo = o.m + ' schedin' + (o.m===1?'a':'e') + ' da ' + o.L + ' gamb' + (o.L===1?'a':'e');
-  var nUsate = o.selezioni.length;
-  var h = '<div class="h2">Le tue schedine<span class="r">' + nUsate +
-    (nUsate === 1 ? ' partita' : ' partite') + ' su ' + r.tutte.length + '</span></div>';
+  var h = '<div class="h2">Le tue schedine<span class="r">' + nSel +
+    (nSel === 1 ? ' partita' : ' partite') + '</span></div>';
 
-  h += '<div class="hero"><div class="l">come giocarle, questa giornata</div>' +
-    '<div class="v">' + o.m + ' × ' + o.L + '</div>' +
-    '<div class="s"><b>' + esc(titolo) + '</b>, ' +
-    (o.m === 1
-      ? nu(pt,0) + ' chf sopra'
-      : nu(o.perSchedina,0) + ' chf l\'una — ' + nu(pt,0) + ' chf in tutto') +
-    '. Ripetuta per quattro giornate, chiude il mese in attivo il <b>' +
-    pc(o.pAttivo) + '</b> delle volte' +
-    (o === best
-      ? ', ed è la forma che ci riesce più spesso fra tutte quelle che ho provato.'
-      : '. Fa meglio <b>' + best.m + ' da ' + best.L + '</b> (' + pc(best.pAttivo) + ')' +
-        (scelta
-          ? (ripiego
-              ? '. Di <b>' + esc(ripiego) + '</b> non ce n\'è abbastanza in questa giornata — ' +
-                'servirebbero ' + (vuole.L * vuole.m) + ' partite e ce ne sono ' + r.tutte.length +
-                ' — quindi ti do la migliore con schedine da ' + o.L + '.'
-              : ', ma questa l\'hai scelta tu ed è una scelta legittima.')
-          : (best.L === 1
-              ? ' — ma è una singola, e le singole non si giocano. Parto dalle multiple corte perché sono quelle che giochi: cambia qui sotto quando vuoi.'
-              : ' — qui parto dalle multiple corte perché sono quelle che giochi. Cambia qui sotto quando vuoi.'))) +
+  h += '<div class="hero"><div class="l">' + esc(corrente.fascia.nome.toLowerCase()) +
+    ' · ' + o.m + (o.m === 1 ? ' schedina' : ' schedine') + ' da ' + o.L +
+    (o.L === 1 ? ' gamba' : ' gambe') + '</div>' +
+    '<div class="v">' + nu(o.quotaMedia, 2) + '</div>' +
+    '<div class="s">' + nu(o.perSchedina, 0) + ' chf ' + (o.m === 1 ? 'sopra' : 'l\'una') +
+    ' — se esce prendi <b>' + nu(o.perSchedina * o.quotaMedia, 0) + ' chf</b>. ' +
+    'Ti ' + (o.vinciteServono === 1 ? 'basta <b>una vincita</b>' :
+      'servono <b>' + o.vinciteServono + ' vincite</b>') + ' in tutto il mese per stare sopra. ' +
+    'Rigiocata ogni giornata, il mese chiude in attivo il <b>' + pc(o.pAttivo) + '</b> delle volte' +
+    (corrente === migliore
+      ? ', ed è la fascia che ci riesce più spesso.'
+      : '. La fascia che ci riesce più spesso è <b>' + esc(migliore.fascia.nome) + '</b> (' +
+        pc(migliore.scelta.pAttivo) + '), ma il rischio lo scegli tu.') +
     '</div></div>';
 
-  /* Il bottone della lunghezza scelta mostra la struttura che stai davvero
-     guardando, non la migliore a quella lunghezza: altrimenti il selettore
-     diceva "1 da 3, 29%" mentre sopra c'era scritto "2 da 3, 27%", e due
-     numeri diversi per la stessa cosa sono peggio di nessun numero. */
-  h += '<div class="forme">' + forme.map(function(f){
-    var q = (f.L === o.L) ? o : f;
-    return '<button class="formab' + (f.L===o.L?' on':'') + '" onclick="impostaForma(' + f.L + ',0)">' +
-      '<b>' + q.m + ' da ' + q.L + '</b><em>' + pc(q.pAttivo) + '</em></button>';
-  }).join('') + '</div>' +
-  '<div class="note" style="margin:-4px 0 12px">Scegli tu quante gambe per schedina — su quello la ' +
-  'matematica non ha l\'ultima parola, una singola non si racconta. Quante schedine e quali partite ' +
-  'dentro invece li decide il conto. La percentuale è quella del <b>mese</b>, non della giornata.</div>';
+  /* La manopola vera: la quota che vuoi. Tutto il resto — quante gambe,
+     quante schedine, quali partite — lo decide il conto dentro quella scelta. */
+  h += '<div class="forme">' + fasce.map(function(x){
+    return '<button class="formab' + (x === corrente ? ' on' : '') +
+      '" onclick="impostaRischio(\'' + x.fascia.id + '\')">' +
+      '<b>' + esc(x.fascia.nome) + '</b><em>' + nu(x.scelta.quotaMedia, 1) + '× · ' +
+      pc(x.scelta.pAttivo) + '</em></button>';
+  }).join('') + '</div>';
+  h += '<div class="note" style="margin:-4px 0 12px"><b>' + esc(corrente.fascia.testo) + '</b><br>' +
+    'La prima cifra è la quota per schedina, la seconda quante volte su cento il <b>mese</b> ' +
+    'chiude sopra. Non salgono insieme: c\'è un punto in cui la quota paga abbastanza senza ' +
+    'che le vincite diventino troppo rare, e il conto lo cerca lì.</div>';
 
   o.gruppi.forEach(function(gr, k){
     var testo = testoSchedina(o, k);
     h += '<div class="card sq">' +
       '<div class="sqt"><h3>Schedina ' + (k+1) + '</h3>' +
-        '<span class="sqp">' + nu(o.perSchedina,0) + ' chf</span></div>';
+        '<span class="sqp">' + nu(o.perSchedina, 0) + ' chf</span></div>';
     gr.forEach(function(i){
       var c = o.selezioni[i];
       h += '<div class="sqg"><span class="sqn">' + esc(c.nome) +
@@ -2770,62 +2909,55 @@ function cardLeTueSchedine(){
         '<i>' + nu(quotaBanco(1/c.p, 1), 2) + '</i></span></div>';
     });
     h += '<div class="sqf">' +
-      '<div><span>quota</span><b>' + nu(o.quote[k],2) + '</b></div>' +
+      '<div><span>quota</span><b>' + nu(o.quote[k], 2) + '</b></div>' +
       '<div><span>esce</span><b>' + pc(o.probSchedine[k]) + '</b></div>' +
       '<div><span>prendi</span><b class="big">' + nu(o.perSchedina * o.quote[k], 0) + '</b></div>' +
       '<button class="copia" data-t="' + esc(testo) + '" onclick="copiaSchedina(this)">copia</button>' +
       '</div></div>';
   });
 
-  /* Le cose che servono per giocarle davvero, e che nessuna app scrive perché
-     sembrano ovvie: non lo sono, e sbagliarne una annulla tutto il conto. */
   h += notaPiega('', 'Come si giocano, in pratica',
-    '<p><b>Sono ' + o.m + ' schedine separate, non una.</b> Se le unisci in una sola da ' +
-    (o.m * o.L) + ' gambe stai giocando un\'altra cosa: la quota si moltiplica, ma la probabilità ' +
-    'crolla e il ricarico del banco si applica ' + (o.m * o.L) + ' volte invece di ' + o.L + '. ' +
-    'La divisione <b>è</b> il punto — è quella che compra la probabilità di chiudere il mese sopra.</p>' +
-    '<p><b>' + nu(o.perSchedina,0) + ' chf su ciascuna</b>, uguali. Non ' + nu(pt,0) + ' su quella ' +
-    'che ti convince di più: se ne fossi più convinto, il conto l\'avrebbe già messa da sola in una ' +
-    'schedina più corta.</p>' +
-    '<p><b>Prima delle formazioni ufficiali</b>, come già fai. Le quote sono più alte prima che il ' +
-    'mercato sappia chi gioca, e quel margine è tuo. Quanto vale davvero lo misura il ' +
-    '<b>valore contro la chiusura</b> nel libro: è l\'unico numero che dice se stai comprando bene ' +
-    'invece che se sei stato fortunato.</p>' +
+    '<p><b>Sono ' + o.m + ' schedin' + (o.m===1?'a':'e') + ', ' + nu(o.perSchedina,0) +
+    ' chf ' + (o.m===1?'sopra':'l\'una') + '.</b>' +
+    (o.m > 1 ? ' Separate, non unite: se le fondi in una sola da ' + (o.m*o.L) +
+      ' gambe la quota si moltiplica ma il ricarico del banco si applica ' + (o.m*o.L) +
+      ' volte invece di ' + o.L + '.' : '') + '</p>' +
+    '<p><b>Prima delle formazioni</b>, come già fai: le quote sono più alte prima che il mercato ' +
+    'sappia chi gioca.</p>' +
     '<p><b>Ogni giornata, per quattro giornate.</b> Il ' + pc(o.pAttivo) + ' è la probabilità del ' +
-    'MESE, non di una domenica. Saltare una giornata non "risparmia": cambia il conto, e ' +
-    'quasi sempre in peggio, perché toglie proprio le occasioni di rifarsi.</p>' +
+    'MESE, non di una domenica.</p>' +
     '<p><b>Non aggiungere una gamba per arrotondare la quota.</b> È la mossa che sembra gratis e ' +
-    'costa di più: una gamba in più moltiplica il ricarico un\'altra volta, e il ' +
-    'ricarico è l\'unica cosa di cui si è sicuri in tutta questa faccenda.</p>');
+    'costa di più.</p>');
+
+  h += notaPiega('', 'Perché proprio quota ' + nu(o.quotaMedia, 2),
+    '<p>Per chiudere il mese sopra ti serve un numero <b>intero</b> di schedine vincenti, e questo ' +
+    'crea dei gradini. Con ' + o.m + ' schedin' + (o.m===1?'a':'e') + ' a giornata e quattro ' +
+    'giornate spendi ' + nu(o.speso,0) + ' chf, e ogni vincita porta ' +
+    nu(o.perSchedina * o.quotaMedia, 0) + ': quindi ' + o.vinciteServono +
+    (o.vinciteServono === 1 ? ' vincita basta' : ' vincite bastano') + '.</p>' +
+    '<p><b>Il gradino è ripido.</b> Misurato sui dati veri, con una schedina sola: a quota 1.98 ' +
+    'servono tre vincite su quattro e il mese chiude sopra il 28% delle volte; a quota <b>2.03</b> ' +
+    'ne bastano due, e diventa il 63%. Cinque centesimi di quota, trentacinque punti.</p>' +
+    '<p>Per questo la quota non viene presa a metà della fascia, ma calcolata: appena sopra ' +
+    '4·schedine/vincite, con un dito di margine. È la cosa che rende di più in tutta questa ' +
+    'sezione, e si vede solo guardando il conto del <b>mese</b> invece di quello della giocata.</p>') +
+    notaPiega('', 'Perché ' + o.L + (o.L === 1 ? ' gamba e non di più' : ' gambe e non di più'),
+    '<p>Il banco che ti offre <b>' + nu(o.quotaMedia,2) + '</b> su una schedina da ' + o.L +
+    ' gamb' + (o.L===1?'a':'e') + ' ti sta dando una probabilità vera di 1/(quota × ' +
+    (1+ricarico().v).toFixed(3) + '<sup>' + o.L + '</sup>): il ricarico si moltiplica a ogni gamba, ' +
+    'quindi <b>la stessa quota vale meno se ci arrivi con più gambe</b>.</p>' +
+    '<p>Misurato, per una quota di 5: una gamba sola chiude il mese in attivo il 56.8% delle volte, ' +
+    'due il 54.6%, quattro il 50.4%, otto il 42.5%. Monotona, per ogni quota. Per questo qui si ' +
+    'cerca il numero <b>minimo</b> di gambe che arriva dove hai chiesto — non il massimo.</p>' +
+    '<p>Quante schedine invece non è monotono, perché per stare sopra serve un numero <b>intero</b> ' +
+    'di schedine vincenti: a quota 2 ne convengono tre, a quota 5 una sola, a quota 20 di nuovo tre. ' +
+    'Quello lo decide il conto provandole tutte.</p>');
 
   h += notaPiega('', 'Le quote qui sopra sono le mie, non quelle del banco',
-    '<p>Accanto a ogni partita c\'è la quota che mi aspetto: la mia quota equa, meno il ricarico ' +
-    'che hai impostato (' + (100*ricarico().v).toFixed(1) + '% per selezione). ' +
-    '<b>Serve da metro, non da promessa.</b> Quando apri la schedina vera, confronta: se il banco ' +
-    'ti offre di meno, quella giocata vale meno di quanto scritto qui, e il conto del mese è ' +
-    'ottimista di conseguenza. Se ti offre di più, hai trovato qualcosa.</p>' +
-    '<p>È anche il motivo per cui vale la pena segnare le giocate nel <b>libro</b>: da otto in poi ' +
-    'il ricarico smette di essere una media europea e diventa il tuo, misurato sulle quote che ' +
-    'prendi davvero.</p>');
-
-  h += notaPiega('', 'Perché proprio queste partite in queste schedine',
-    '<p>Le ' + o.selezioni.length + ' selezioni sono le più solide della giornata, una per partita, ' +
-    'le stesse che vedi nella <b>Giornata</b>. Ma <i>quale</i> finisce in <i>quale</i> schedina non ' +
-    'è l\'ordine in cui capitano: ' +
-    (o.esatta
-      ? 'le ho provate <b>tutte e ' + o.provate + '</b> le ripartizioni possibili e questa è quella ' +
-        'che chiude il mese in attivo più spesso.'
-      : 'a ' + o.L + ' gamb' + (o.L===1?'a':'e') + ' per schedina le ripartizioni possibili sono ' +
-        'troppe da provare tutte su un telefono — e non serve: misurato su 25 giornate vere, a ' +
-        'questa lunghezza l\'ordine dalla più solida in giù coincide con la migliore in assoluto.') +
-    '</p>' +
-    '<p>Perché cambi qualcosa: ogni schedina paga <b>al contrario</b> della sua probabilità. ' +
-    'Il prodotto di tutte le probabilità è fisso — sono sempre le stesse gambe — quindi spostare ' +
-    'una partita da una schedina all\'altra <b>non cambia di un centesimo</b> quanto ti torna in ' +
-    'media. Sposta solo massa fra una schedina probabile che paga poco e una improbabile che paga ' +
-    'molto. E siccome per chiudere sopra ti serve un <b>numero intero</b> di schedine vincenti, ' +
-    'quello sposta eccome la probabilità di riuscirci: fino a 0.73 punti, gratis. Per anni sono ' +
-    'stati buttati via da un ordinamento che nessuno aveva scelto.</p>');
+    '<p>Sono la mia quota equa meno il ricarico che hai impostato (' +
+    (100*ricarico().v).toFixed(1) + '% per selezione). <b>Servono da metro, non da promessa.</b> ' +
+    'Quando apri la schedina vera confronta: se il banco offre di meno, quella giocata vale meno di ' +
+    'quanto scritto qui.</p>');
 
   return h;
 }
@@ -2854,21 +2986,13 @@ function cardComeGiocarle(){
       '<span>al massimo</span></div>';
   righe.forEach(function(r){
     var perso = q - r.atteso;
-    /* Questa e' la tabella che si guarda per prima, ed e' quella che diceva
-       "2 da 5" senza dire MAI quali cinque. Adesso ogni riga porta alle
-       schedine scritte per esteso: era l'unico pezzo che mancava, e mancava
-       da sempre. */
-    h += '<div class="timr scegli'+(r===migliore?' best':'')+(r===acc?' acc':'')+'" '+
-      'onclick="impostaForma('+r.taglio+','+r.schedine+')">'+
+    h += '<div class="timr'+(r===migliore?' best':'')+(r===acc?' acc':'')+'">'+
       '<span class="tnome">'+esc(r.nome)+'</span>'+
       '<span>'+Math.round(100*r.pAttivo)+'%</span>'+
       '<span class="tsoldi">'+nu(r.atteso,2)+'<em>−'+nu(perso,2)+'</em></span>'+
       '<span>'+nu(r.massimo,0)+'</span></div>';
   });
   h += '</div>'+
-    '<div class="note" style="margin-top:8px">Tocca una riga e te la scrivo per esteso in cima: '+
-    '<b>quali</b> partite, in quale schedina, a quanto. Finora questa tabella diceva "2 da 5" '+
-    'e poi ti lasciava il lavoro di capire quali cinque.</div>'+
     '<div class="note"><b>"Ti torna"</b> è quanto ti resta in media ogni volta che giochi '+
     nu(q,0)+' chf così, ripetuto tante volte. Non è il rischio: è il prezzo.<br><br>'+
     'La differenza fra <b>'+nu(acc.atteso,2)+'</b> e <b>'+nu(migliore.atteso,2)+'</b> non viene dal '+
@@ -3020,13 +3144,13 @@ function cercaStruttureMese(){
   if(_meseCache && _meseCache.firma === firma) return _meseCache.v;
 
   var fuori = [], L, m;
-  /* Il tetto era sei, e per sei anche le altre tabelle dell'app proponevano
-     "una da 10": toccarla non trovava niente e si ripiegava in silenzio su
-     un'altra struttura. Il costo non era il motivo — una schedina lunga e'
-     UNA gamba finta con la sua probabilita' composta — quindi il tetto sale
-     fino a tutte le partite della giornata. */
-  for(L = 1; L <= n; L++){
-    for(m = 1; m <= Math.floor(n / L); m++){
+  /* Il tetto. E' stato tolto una volta per far funzionare "una da 10", e con
+     quarantotto selezioni questa tabella e' arrivata a proporre "1 da 48":
+     una schedina che nessun banco accetta, e che comunque a quel punto non
+     esce mai. Otto e' gia' oltre il ragionevole — oltre, il ricarico si
+     moltiplica cosi' tante volte che la quota mostrata non vale piu' niente. */
+  for(L = 1; L <= Math.min(MAX_TABELLA, n); L++){
+    for(m = 1; m <= Math.min(8, Math.floor(n / L)); m++){
       var usate = tutte.slice(0, L * m);
       /* Il ricarico si applica UNA VOLTA per gamba: la composizione avviene
          da sola quando le quote delle gambe si moltiplicano fra loro.
@@ -3080,12 +3204,9 @@ function cardMeseInAttivo(){
       /* Ogni riga porta alle schedine scritte per esteso. Era la cosa che
          mancava: questa tabella dava la risposta giusta in una lingua che
          bisognava ancora tradurre a mano, ogni domenica. */
-      return '<tr class="scegli"'+eti+' onclick="impostaForma('+o.L+','+o.m+')">'+
-        '<td>'+o.m+' da '+o.L+'</td><td>'+pc(o.pAttivo,1)+'</td><td>'+
+      return '<tr'+eti+'><td>'+o.m+' da '+o.L+'</td><td>'+pc(o.pAttivo,1)+'</td><td>'+
         nu(o.atteso,1)+' su '+nu(o.speso,0)+'</td></tr>';
-    }).join('')+'</table></div>'+
-    '<div class="note" style="margin-top:8px">Tocca una riga e te la scrivo per esteso qui sopra: '+
-    'quale partita in quale schedina, a quanto, e cosa torna.</div>';
+    }).join('')+'</table></div>';
 
   /* Il testo lo scrivono i numeri, non io. Le due cose — massimizzare il
      ritorno medio e massimizzare la probabilità di chiudere in attivo — di

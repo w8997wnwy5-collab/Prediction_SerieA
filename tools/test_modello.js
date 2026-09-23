@@ -789,19 +789,62 @@ prova('e nessuna selezione finisce in due schedine',
         /function perOgniLega[\s\S]{0,900}\} finally \{[\s\S]{0,200}S\.doc = eraDoc/.test(html));
   prova('e quelle selezioni sono la scelta della copertina, manopola compresa',
         /function ancoreGiornata\(\)[\s\S]{0,400}sceltePartita\(p, 1\)[\s\S]{0,120}sc\.ancora/.test(html));
-  prova('dalla tabella del mese si arriva alle schedine scritte per esteso',
-        /tr class="scegli"[\s\S]{0,120}impostaForma\(/.test(html));
-  prova('e anche dalla tabella "come le impacchetti", che era quella guardata per prima',
-        /timr scegli[\s\S]{0,200}impostaForma\(/.test(html));
+  /* Il comando delle schedine e' UNO: la quota che vuoi. Le due tabelle
+     erano diventate un secondo comando che diceva un'altra cosa — la forma —
+     e due manopole che litigano sono peggio di una manopola sola. */
+  prova('il comando delle schedine e la quota, non la forma',
+        /function impostaRischio/.test(html) && !/impostaForma/.test(html));
+  prova('e le fasce di rischio sono quattro, dalla prudente alla molto alta',
+        /FASCE_RISCHIO = \[[\s\S]{0,900}molto/.test(html));
 
-  /* Il tetto a sei era la causa di un ripiego silenzioso: "una da 10" non
-     esisteva fra le strutture, toccarla mostrava altro e non lo diceva. */
-  prova('la ricerca non si ferma a sei gambe, o "una da 10" non troverebbe niente',
-        /for\(L = 1; L <= n; L\+\+\)/.test(html) &&
-        /for\(m = 1; m <= Math\.floor\(n \/ L\); m\+\+\)/.test(html));
-  prova('e quando una forma non ci sta davvero, il ripiego si dichiara',
-        /ripiego = vuole\.m/.test(html) &&
-        /non ce n\\'è abbastanza in questa giornata/.test(html));
+  /* Il tetto sulle gambe. Era stato tolto per far funzionare "una da 10", e
+     con quarantotto selezioni la tabella e' arrivata a proporre "1 da 48":
+     una schedina che nessun banco accetta e che comunque non esce mai. */
+  prova('la tabella del mese non propone schedine ingiocabili',
+        /L <= Math\.min\(MAX_TABELLA, n\)/.test(html));
+  prova('e c\'e un tetto anche sulle gambe della schedina proposta',
+        /MAX_GAMBE = [1-9]/.test(html) &&
+        parseInt((/MAX_GAMBE = (\d+)/.exec(html) || [0, 99])[1], 10) <= 8,
+        (/MAX_GAMBE = (\d+)/.exec(html) || [])[1]);
+
+  /* ─── due leggi che governano la scelta della schedina ───
+
+     La prima: a parita' di quota MOSTRATA, il banco applica il ricarico una
+     volta per gamba, quindi la probabilita' vera e' 1/(Q(1+r)^L) e CALA con le
+     gambe. Arrivare a quota 5 con otto gambe invece che con una porta il mese
+     in attivo dal 56.8% al 42.5%. Per questo si cerca il numero MINIMO di
+     gambe, non il massimo. */
+  var ric2 = 0.056, B2 = 20, G2 = 4;
+  function meseAllaQuota(Q, L, m) {
+    var pSlip = 1 / (Q * Math.pow(1 + ric2, L));
+    var sel = [], gruppi = [], i;
+    for (i = 0; i < m; i++) { sel.push({ p: pSlip, quota: Q }); gruppi.push([i]); }
+    var d = M.distribuzioneRitorni(sel, gruppi, B2);
+    return d ? M.probMeseInAttivo(d, G2) : null;
+  }
+  var scala = [1, 2, 4, 8].map(function (L) { return meseAllaQuota(5, L, 1).pAttivo; });
+  prova('a parita di quota, ogni gamba in piu toglie probabilita di chiudere sopra',
+        scala.every(function (v, i) { return i === 0 || v < scala[i - 1]; }),
+        scala.map(function (v) { return (100 * v).toFixed(1) + '%'; }).join(' > '));
+  prova('e otto gambe costano piu di dieci punti rispetto a una',
+        (scala[0] - scala[3]) > 0.10, (100 * (scala[0] - scala[3])).toFixed(1) + ' punti');
+  prova('quindi la ricerca preferisce la schedina corta a parita di risultato',
+        /a\.L - b\.L/.test(html));
+
+  /* La seconda, e rende molto di piu': per stare sopra serve un numero INTERO
+     di vincite, e questo fa dei GRADINI. Con m schedine a giornata e quattro
+     giornate, k vincite bastano quando Q > 4m/k. Cinque centesimi di quota
+     possono valere trenta punti, e l'app puntava al centro della fascia. */
+  var sotto = meseAllaQuota(1.98, 1, 1).pAttivo, sopra = meseAllaQuota(2.05, 1, 1).pAttivo;
+  prova('cinque centesimi di quota valgono decine di punti, per via del gradino',
+        (sopra - sotto) > 0.25,
+        (100 * sotto).toFixed(1) + '% a 1.98  ->  ' + (100 * sopra).toFixed(1) + '% a 2.05');
+  prova('e il salto sta dove dice la formula, a 4m/k',
+        meseAllaQuota(1.95, 1, 1).pAttivo < meseAllaQuota(2.05, 1, 1).pAttivo);
+  prova('l\'app calcola i bersagli invece di prendere il centro della fascia',
+        /function quoteBersaglio/.test(html) && /GIORNATE_MESE \* m \/ k/.test(html));
+  prova('e dice quante vincite servono, che e il numero che fa il gradino',
+        /vinciteServono/.test(html) && /basta <b>una vincita<\/b>/.test(html));
 })();
 
 /* ─── il libro: la parte che non si puo' chiedere ───

@@ -18,26 +18,21 @@ on:
     # 10:30, 13:00, 16:00 e 18:45 UTC d'estate. Questi giri stanno un'ora o poco
     # meno prima di ciascuno, piu' quello di notte che raccoglie i risultati.
     #
-    # DA QUATTRO A DUE, e il motivo e' il conto dei crediti. Con cinque
-    # campionati ogni giro costa 5 crediti di The Odds API invece di 1 — uno
-    # per campionato. Sei giri al giorno farebbero 900 crediti al mese contro
-    # i 500 del piano gratuito: la quota finirebbe a meta' mese e
-    # l'ancoraggio si spegnerebbe proprio nella seconda meta', in silenzio.
+    # QUATTRO, e ci stanno. Con cinque campionati ogni giro costava 5 crediti
+    # — uno per campionato, sempre, anche il 23 settembre con il turno
+    # successivo a diciassette giorni di distanza. Erano 450 crediti al mese
+    # su 500, quasi tutti spesi per chiedere le quote di partite che non
+    # c'erano.
     #
-    #   6 giri (com'era)  30 crediti/giorno   900 al mese   sfora
-    #   4 giri            20 crediti/giorno   600 al mese   sfora
-    #   3 giri            15 crediti/giorno   450 al mese   ci sta
+    # Adesso si chiede solo ai campionati che giocano davvero (vedi
+    # FINESTRA_QUOTE_* in build_data.py), e il conto cambia per intero:
     #
-    # Quindi due giri leggeri: uno prima delle partite della sera, uno di
-    # notte che raccoglie i risultati e la linea di chiusura. Si perde
-    # qualche istantanea del prezzo durante il giorno, e per come si gioca
-    # qui — prima delle formazioni, per prendere le quote alte — e' la cosa
-    # a cui si tiene di meno.
+    #   sempre tutte, 3 giri     15.0 crediti/giorno   450 al mese
+    #   solo chi gioca, 5 giri   10.7 crediti/giorno   321 al mese
     #
-    # Col piano da 20.000 crediti (30 dollari al mese) questo vincolo sparisce
-    # e si puo' tornare a quattro giri: basta rimettere '47 9,12,15,17 * * *'
-    # qui e nella condizione MODO piu' sotto.
-    - cron: '47 17 * * *'
+    # Quindi i quattro giri del giorno tornano, e si spende comunque un terzo
+    # in meno: 179 crediti al mese di margine per i giri lanciati a mano.
+    - cron: '47 9,12,15,17 * * *'
     - cron: '17 23 * * *'
   workflow_dispatch:          # bottone "Run workflow" nella scheda Actions
   push:
@@ -82,7 +77,7 @@ jobs:
           # Adesso la condizione nomina i giri LEGGERI invece del completo:
           # cosi' anche il bottone a mano e i push fanno il giro completo,
           # che e' quello che uno si aspetta quando lo lancia apposta.
-          MODO: ${{ (github.event.schedule == '47 17 * * *' || github.event.schedule == '17 23 * * *') && 'leggero' || 'completo' }}
+          MODO: ${{ (github.event.schedule == '47 9,12,15,17 * * *' || github.event.schedule == '17 23 * * *') && 'leggero' || 'completo' }}
         run: python scripts/build_data.py
 
       - name: Committa se qualcosa è cambiato
@@ -90,7 +85,7 @@ jobs:
           FOOTBALL_DATA_TOKEN: ${{ secrets.FOOTBALL_DATA_TOKEN }}
           APIFOOTBALL_KEY: ${{ secrets.APIFOOTBALL_KEY }}
           ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
-          MODO: ${{ (github.event.schedule == '47 17 * * *' || github.event.schedule == '17 23 * * *') && 'leggero' || 'completo' }}
+          MODO: ${{ (github.event.schedule == '47 9,12,15,17 * * *' || github.event.schedule == '17 23 * * *') && 'leggero' || 'completo' }}
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"

@@ -1082,6 +1082,45 @@ def test_giro_leggero_aggiorna_le_quote():
           'min(restano)' in testo)
 
 
+def test_crediti_solo_a_chi_gioca():
+    """Un credito speso per chiedere le quote di partite che non ci sono.
+
+    Il 23 settembre il turno successivo era a diciassette giorni, e i giri
+    chiedevano comunque le quote a tutti e cinque i campionati, tre volte al
+    giorno. Quattrocentocinquanta crediti al mese su cinquecento, quasi tutti
+    per niente.
+    """
+    oggi = datetime.datetime.now(datetime.timezone.utc).date()
+
+    def fra(n):
+        return {'d': (oggi + datetime.timedelta(days=n)).isoformat(), 'c': 'A', 'v': 'B'}
+    prova('una partita domani conta come "gioca presto"',
+          B.gioca_presto([fra(1)], 3))
+    prova('una fra dieci giorni no, se la finestra e di tre',
+          not B.gioca_presto([fra(10)], 3))
+    prova('ma si, se la finestra e di dieci', B.gioca_presto([fra(10)], 10))
+    prova('un calendario vuoto non fa spendere niente',
+          not B.gioca_presto([], 10) and not B.gioca_presto(None, 10))
+    prova('una partita di ieri non tiene in vita la chiamata',
+          not B.gioca_presto([fra(-2)], 3))
+
+    # e la cosa che conta: quando si salta, si DICE
+    esiti = {}
+    fuori = B.quote_se_gioca(esiti, {'id': 'E0', 'odds': 'x'}, [fra(20)], 3, 'E0 quote')
+    prova('saltare non chiama l\'API', fuori == [])
+    prova('e il risparmio finisce nel riepilogo invece di sparire',
+          'saltata' in esiti.get('E0 quote', '') and 'credito' in esiti.get('E0 quote', ''),
+          esiti.get('E0 quote'))
+
+    sorgente = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                            'scripts', 'build_data.py')
+    testo = io.open(sorgente, encoding='utf-8').read()
+    prova('il giro completo guarda largo e il leggero stretto',
+          'FINESTRA_QUOTE_COMPLETO = 10' in testo and 'FINESTRA_QUOTE_LEGGERO = 3' in testo)
+    prova('e nessuna chiamata alle quote resta senza il controllo',
+          testo.count('prendi_odds_api(') == 2, testo.count('prendi_odds_api('))
+
+
 def test_service_worker():
     """Il service worker e il traffico che fa fare a un telefono.
 
@@ -1140,6 +1179,7 @@ def main():
     test_giro_leggero_aggiorna_le_quote()
     test_orari_del_giro()
     test_service_worker()
+    test_crediti_solo_a_chi_gioca()
     test_validatori()
     test_quote()
     test_calendario_ha_le_stesse_quote()
