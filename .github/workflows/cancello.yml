@@ -1,0 +1,24 @@
+name: Prova il cancello
+
+# Chiede al Worker se e' vivo e se i depositi hanno dentro i calendari.
+# Non tocca niente e non costa crediti: e' una domanda, non un giro di dati.
+on:
+  workflow_dispatch:
+    inputs:
+      indirizzo:
+        description: "Indirizzo del Worker (vuoto = quello del segreto MONTHLINE_API)"
+        required: false
+        default: ""
+
+jobs:
+  prova:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Chiedi al cancello
+        env:
+          MONTHLINE_API: ${{ inputs.indirizzo || secrets.MONTHLINE_API }}
+        run: python3 scripts/_sonda_cancello.py

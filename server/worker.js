@@ -146,7 +146,7 @@ function normalizza(codice) {
 /* Un codice e' valido se esiste, non e' stato revocato e non e' scaduto. */
 function vale(voce) {
   if (!voce || voce.revocato) return false;
-  if (voce.tipo === 'vip') return true;
+  if (voce.tipo === 'vip' || voce.tipo === 'capo') return true;
   return !!voce.scade && new Date(voce.scade).getTime() > Date.now();
 }
 
@@ -172,7 +172,8 @@ async function dirittiDa(req, env) {
     tipo: dati.tipo,
     nome: dati.nome || '',
     scade: dati.scade || null,
-    tutto: dati.tipo === 'vip' ||
+    capo: !!dati.capo,
+    tutto: dati.tipo === 'vip' || dati.tipo === 'capo' ||
            (!!dati.scade && new Date(dati.scade).getTime() > Date.now()),
   };
 }
@@ -201,9 +202,11 @@ async function postCodice(req, env) {
 
   const gettone = await firmaGettone({
     tipo: voce.tipo, nome: voce.nome || '', scade: voce.scade || null,
+    capo: voce.tipo === 'capo',
     exp: Date.now() + GETTONE_GIORNI * 86400000,
   }, env.SEGRETO);
-  return json({ gettone, tipo: voce.tipo, nome: voce.nome || '', scade: voce.scade || null });
+  return json({ gettone, tipo: voce.tipo, nome: voce.nome || '',
+                scade: voce.scade || null, capo: voce.tipo === 'capo' });
 }
 
 async function getIo(req, env) {
@@ -261,16 +264,43 @@ function ammesso(req, env) {
   return diff === 0;
 }
 
-async function adminCrea(req, env) {
+/* Chi puo' fare e disfare i codici.
+
+   Due chiavi diverse per due mestieri diversi. Il SEGRETO_ADMIN e' la chiave
+   del padrone di casa: apre tutto, compreso il deposito dei dati, e vive
+   dentro la Action e dentro il pannello. Il gettone da CAPO e' la chiave che
+   il padrone tiene in tasca: fa i codici per gli amici e li revoca, e basta.
+
+   Perche' due. Per fare un codice a un amico al bar servirebbe altrimenti
+   incollare il segreto grosso dentro il telefono, e da li' non esce piu': un
+   telefono perso e' il deposito dei dati in mano a qualcun altro. Il gettone
+   invece scade da solo in trenta giorni, si revoca, e cambiando SEGRETO muoiono
+   tutti insieme. Il deposito dei dati non lo tocca comunque.
+
+   E un capo non puo' fare altri capi: quello lo decide solo il segreto grosso.
+   Cosi' il danno di un telefono perso resta "qualcuno regala abbonamenti",
+   che si spegne, e non "qualcuno si e' fatto padrone di casa". */
+async function comanda(req, env) {
+  if (ammesso(req, env)) return 'segreto';
+  const d = await dirittiDa(req, env);
+  return d.capo ? 'capo' : null;
+}
+
+async function adminCrea(req, env, chi) {
   let c;
   try { c = await req.json(); } catch (e) { c = {}; }
-  const tipo = c.tipo === 'vip' ? 'vip' : 'abbonato';
+  const vuole = c.tipo === 'vip' ? 'vip' : (c.tipo === 'capo' ? 'capo' : 'abbonato');
+  if (vuole === 'capo' && chi !== 'segreto') {
+    return json({ errore: 'solo il segreto puo fare un altro capo' }, 403);
+  }
+  const tipo = vuole;
   const mesi = Math.max(1, Math.min(24, parseInt(c.mesi, 10) || 1));
   const codice = nuovoCodice();
   const voce = {
     tipo, nome: String(c.nome || '').slice(0, 60),
     creato: new Date().toISOString(),
-    scade: tipo === 'vip' ? null : new Date(Date.now() + mesi * 30 * 86400000).toISOString(),
+    scade: (tipo === 'vip' || tipo === 'capo')
+      ? null : new Date(Date.now() + mesi * 30 * 86400000).toISOString(),
     usi: 0,
   };
   await env.CODICI.put('codice:' + normalizza(codice), JSON.stringify(voce));
@@ -340,12 +370,18 @@ export default {
         if (cal && req.method === 'GET') return await getCalendario(req, env, cal[1].toUpperCase());
 
         if (via.startsWith('/api/admin/')) {
-          if (!ammesso(req, env)) return json({ errore: 'non ammesso' }, 401);
-          if (via === '/api/admin/crea' && req.method === 'POST') return await adminCrea(req, env);
+          /* il deposito dei dati resta al segreto grosso: e' il mestiere della
+             Action, non una cosa che si fa da un telefono */
+          const car = /^\/api\/admin\/carica\/([A-Za-z0-9]{1,6})$/.exec(via);
+          if (car && req.method === 'POST') {
+            if (!ammesso(req, env)) return json({ errore: 'non ammesso' }, 401);
+            return await adminCarica(req, env, car[1].toUpperCase());
+          }
+          const chi = await comanda(req, env);
+          if (!chi) return json({ errore: 'non ammesso' }, 401);
+          if (via === '/api/admin/crea' && req.method === 'POST') return await adminCrea(req, env, chi);
           if (via === '/api/admin/elenco' && req.method === 'GET') return await adminElenco(env);
           if (via === '/api/admin/revoca' && req.method === 'POST') return await adminRevoca(req, env);
-          const car = /^\/api\/admin\/carica\/([A-Za-z0-9]{1,6})$/.exec(via);
-          if (car && req.method === 'POST') return await adminCarica(req, env, car[1].toUpperCase());
         }
         return json({ errore: 'non trovato' }, 404);
       } catch (e) {

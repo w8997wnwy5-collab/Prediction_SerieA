@@ -547,6 +547,50 @@ details.note summary:active{opacity:.6;}
 .match{transition:transform .2s var(--molla);}
 
 /* il muro */
+/* I GRADI
+
+   Tre, e si vedono a colpo d'occhio senza leggere: oro che si muove, verde
+   pieno, grigio vuoto. Il movimento sta SOLO sull'oro — se brillasse tutto
+   non brillerebbe niente, ed e' esattamente il motivo per cui ce n'e' uno
+   solo di capo.
+
+   L'oro e' un gradiente sul TESTO (background-clip) e non un colore piatto,
+   perche' un giallo pieno su fondo chiaro diventa illeggibile: il gradiente
+   passa da un ocra scuro a un oro chiaro e torna, cosi' c'e' sempre contrasto
+   a sufficienza in qualunque punto dell'animazione. E chi ha chiesto meno
+   movimento al sistema operativo se lo tiene fermo: resta bello, smette di
+   muoversi. */
+.gradi{display:inline-flex;align-items:center;gap:5px;font-family:var(--mono);
+  font-size:9.5px;font-weight:700;letter-spacing:1.1px;text-transform:uppercase;
+  padding:3px 8px;border-radius:999px;border:1px solid var(--line);vertical-align:middle;}
+.gradi.free{color:var(--mute);}
+.gradi.vip{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 35%,transparent);
+  background:color-mix(in srgb,var(--accent) 8%,transparent);}
+/* Il chip del capo sta su fondo SCURO, e non e' un vezzo estetico: l'oro e'
+   un giallo scuro, e un giallo scuro su bianco sta a 2.6:1 di contrasto —
+   sotto il minimo leggibile, per di piu' su un carattere da nove punti e
+   mezzo. Sul fondo scuro lo stesso oro sta sopra 6:1. La regola generale e'
+   quella: un colore "prezioso" si porta col suo fondo, o non si legge. */
+.gradi.goat{border-color:#C9A227;background:#16211D;box-shadow:0 1px 6px rgba(201,162,39,.28);}
+.gradi.goat b{font-weight:700;
+  background:linear-gradient(100deg,#B8901F 0%,#D9B33C 20%,#F7E08A 34%,#FFF6D0 44%,
+    #F7E08A 54%,#D9B33C 70%,#B8901F 100%);
+  background-size:280% 100%;-webkit-background-clip:text;background-clip:text;
+  -webkit-text-fill-color:transparent;color:transparent;
+  animation:lucido 4.5s linear infinite;}
+@keyframes lucido{from{background-position:180% 0;}to{background-position:-80% 0;}}
+@media (prefers-reduced-motion:reduce){.gradi.goat b{animation:none;background-position:38% 0;}}
+
+/* il pannello del capo */
+.capoq{font-family:var(--mono);font-size:25px;font-weight:700;letter-spacing:2px;
+  text-align:center;padding:14px 8px;border-radius:14px;background:var(--card2);
+  border:1px dashed var(--line);margin:11px 0 9px;word-break:break-all;}
+.codel{display:flex;align-items:center;gap:9px;padding:9px 0;border-bottom:.5px solid var(--line);}
+.codel:last-child{border-bottom:0;}
+.codel .cc{font-family:var(--mono);font-size:12.5px;font-weight:700;letter-spacing:.6px;}
+.codel .cn{font-size:11.5px;color:var(--mute);margin-top:1px;}
+.codel .cx{margin-left:auto;flex:none;}
+
 .muro{text-align:center;padding:22px 18px;}
 .murot{font-size:19px;font-weight:700;letter-spacing:-.4px;}
 .murop{font-size:13.5px;line-height:1.5;color:var(--mute);margin:8px 0 14px;}
@@ -729,6 +773,42 @@ function chiediApi(via, opz){
   });
 }
 
+/* Che diritti ha questo telefono, chiesto al server e non dedotto.
+
+   Il gettone sta nel telefono e sopravvive alla chiusura dell'app; i diritti
+   no, vivono in memoria. Senza questa chiamata uno che ha pagato riapriva
+   l'app e non vedeva piu' ne' il suo grado ne' il pulsante per uscire: le
+   partite c'erano tutte — quelle le decide il server, che il gettone lo legge
+   — ma l'app non sapeva di chi fossero. Un abbonamento che sembra sparito e'
+   una mail di lamentela anche quando funziona.
+
+   E se il gettone e' scaduto o e' stato revocato, si butta subito: tenerselo
+   vuol dire ripresentarlo a ogni richiesta per trenta giorni per sentirsi
+   dire di no. */
+function rileggiDiritti(){
+  if(!cancelloAcceso() || !gettone()) return Promise.resolve(null);
+  return chiediApi('/api/io').then(function(r){
+    if(!r || !r.tutto){ salvaGettone(null); S.diritti = null; return null; }
+    S.diritti = {tipo: r.tipo, nome: r.nome, scade: r.scade,
+                 tutto: true, capo: !!r.capo};
+    return S.diritti;
+  }).catch(function(){ /* server giu': si tiene il gettone e si riprova dopo */
+    return null;
+  });
+}
+
+/* Il grado, che e' la stessa cosa in tutti i posti dove compare. */
+function gradoDi(tipo){
+  if(tipo === 'capo') return '<span class="gradi goat"><b>GOAT</b></span>';
+  if(tipo === 'vip' || tipo === 'abbonato') return '<span class="gradi vip">VIP</span>';
+  return '<span class="gradi free">FREE</span>';
+}
+function ilMioGrado(){
+  if(!cancelloAcceso()) return '';
+  if(!S.diritti || !S.diritti.tutto) return gradoDi(null);
+  return gradoDi(S.diritti.capo ? 'capo' : S.diritti.tipo);
+}
+
 function entraColCodice(){
   var campo = document.getElementById('campoCodice');
   var avviso = document.getElementById('avvisoCodice');
@@ -737,7 +817,8 @@ function entraColCodice(){
   if(avviso) avviso.textContent = 'Controllo…';
   chiediApi('/api/codice', {metodo:'POST', corpo:{codice: codice}}).then(function(r){
     salvaGettone(r.gettone);
-    S.diritti = {tipo: r.tipo, nome: r.nome, scade: r.scade, tutto: true};
+    S.diritti = {tipo: r.tipo, nome: r.nome, scade: r.scade,
+                 tutto: true, capo: !!r.capo};
     S.mostraAccesso = false;
     cambiatoIlDiritto();
   }).catch(function(e){
@@ -1104,7 +1185,15 @@ function caricaAltreLeghe(forza){
 
 function carica(forza){
   S.stato = 'carico'; S.fase = 'Scarico i dati'; S.avanzamento = 0.03; render();
-  return prendi('data/serie-a.json', forza).then(function(doc){
+  /* Prima di tutto: chi e' questo telefono. Il gettone sopravvive alla
+     chiusura dell'app, i diritti no — e senza questa riga uno che ha pagato
+     riapriva l'app senza piu' il suo grado, senza il pulsante per uscire e,
+     se e' il capo, senza il pannello dei codici. Le partite c'erano (quelle
+     le decide il server leggendo il gettone), ma l'app non sapeva di chi
+     fossero: un abbonamento che sembra sparito, pur funzionando. */
+  return rileggiDiritti().then(function(){
+    return prendi('data/serie-a.json', forza);
+  }).then(function(doc){
     S.doc = doc;
     S.docs[LEGA_CASA] = doc;
     /* Il calendario non sta piu' nel file quando il cancello e' acceso: si
@@ -2408,15 +2497,142 @@ function cardAccesso(){
 function cardChiSei(){
   if(!cancelloAcceso() || !S.diritti || !S.diritti.tutto) return '';
   var d = S.diritti;
+  var titolo = d.capo ? 'Il capo' : (d.tipo === 'vip' ? 'Accesso VIP' : 'Abbonamento attivo');
   return '<div class="card">' +
-    '<div class="row"><div class="n">' +
-      (d.tipo === 'vip' ? 'Accesso VIP' : 'Abbonamento attivo') +
-      '<em>' + (d.tipo === 'vip' ? 'non scade'
-        : 'fino al ' + esc(String(d.scade || '').slice(0, 10))) +
+    '<div class="row"><div class="n">' + titolo + ' ' +
+      gradoDi(d.capo ? 'capo' : d.tipo) +
+      '<em>' + (d.scade ? 'fino al ' + esc(String(d.scade).slice(0, 10)) : 'non scade') +
       (d.nome ? ' · ' + esc(d.nome) : '') + '</em></div>' +
       '<div class="v"><button class="rev" onclick="esci()" ' +
         'style="border:0;background:none;color:var(--mute);font-size:12px;cursor:pointer">esci</button>' +
       '</div></div></div>';
+}
+
+/* ══════════════════════════════════════════════════════════════
+   IL PANNELLO DEL CAPO
+
+   Fare un codice per un amico deve costare tre tocchi, non "apri un'altra
+   pagina, ritrova il segreto, incollalo". Il pannello grosso (admin.html)
+   resta: serve quando il segreto grosso ce l'hai e vuoi fare pulizia. Questo
+   invece vive dentro l'app, funziona col gettone che hai gia' in tasca, e non
+   tocca il deposito dei dati nemmeno per sbaglio — il server non glielo
+   lascia fare.
+   ══════════════════════════════════════════════════════════════ */
+function cardCapo(){
+  if(!cancelloAcceso() || !S.diritti || !S.diritti.capo) return '';
+  var c = S.capo || (S.capo = {});
+  var h = '<div class="h2">I tuoi codici ' + gradoDi('capo') + '</div><div class="card">';
+
+  if(c.fatto){
+    h += '<p class="lede" style="margin-bottom:0">Ecco il codice per <b>' +
+      esc(c.fatto.nome || 'il tuo amico') + '</b>. ' +
+      (c.fatto.scade ? 'Dura fino al ' + esc(String(c.fatto.scade).slice(0,10)) + '.'
+                     : 'Non scade.') + '</p>';
+    h += '<div class="capoq">' + esc(c.fatto.codice) + '</div>';
+    h += '<button class="btn acc" onclick="copiaInvito()">Copia il messaggio d\'invito</button>';
+    h += '<button class="btn" style="margin-top:8px" onclick="S.capo.fatto=null;render()">Fatto</button>';
+    if(c.copiato) h += '<div class="note" style="margin-top:9px">Copiato. Incollalo dove vuoi.</div>';
+    return h + '</div>';
+  }
+
+  h += '<div class="riga-punta" style="gap:9px">' +
+    '<input id="capoNome" type="text" placeholder="Per chi? (es. Marco)" ' +
+      'autocomplete="off" style="flex:1;width:auto;font-size:16px" value="' + esc(c.nome || '') + '" ' +
+      'oninput="S.capo.nome=this.value">' +
+    '</div>';
+  h += '<div class="forme" style="padding-top:10px">' +
+    [['vip', 'VIP', 'non scade'],
+     ['1', '1 mese', 'prova'],
+     ['3', '3 mesi', 'stagione corta'],
+     ['12', '12 mesi', 'un anno']].map(function(o){
+      var scelto = (c.durata || 'vip') === o[0];
+      return '<button class="formab' + (scelto ? ' on' : '') + '" ' +
+        'onclick="S.capo.durata=\'' + o[0] + '\';render()">' +
+        '<b>' + o[1] + '</b><em>' + o[2] + '</em></button>';
+    }).join('') + '</div>';
+  h += '<button class="btn acc" onclick="creaCodice()"' + (c.inCorso ? ' disabled' : '') + '>' +
+    (c.inCorso ? 'Creo…' : 'Crea il codice') + '</button>';
+  if(c.errore) h += '<div class="note warn" style="margin-top:9px">' + esc(c.errore) + '</div>';
+  h += '</div>';
+
+  /* l'elenco di chi gira con un codice tuo */
+  if(c.elenco && c.elenco.length){
+    h += '<div class="card" style="margin-top:11px">';
+    h += c.elenco.slice(0, 30).map(function(v){
+      return '<div class="codel">' +
+        '<div><div class="cc">' + esc(v.codice) + ' ' + gradoDi(v.tipo) + '</div>' +
+        '<div class="cn">' + esc(v.nome || 'senza nome') +
+          (v.valido ? (v.usi ? ' · usato ' + v.usi + (v.usi === 1 ? ' volta' : ' volte')
+                             : ' · mai usato')
+                    : ' · non vale piu\'') + '</div></div>' +
+        (v.valido && v.tipo !== 'capo'
+          ? '<div class="cx"><button class="rev" onclick="revocaCodice(\'' + esc(v.codice) + '\')">revoca</button></div>'
+          : '') +
+      '</div>';
+    }).join('');
+    h += '</div>';
+  } else if(c.elenco) {
+    h += '<div class="note" style="margin-top:9px">Non hai ancora dato via nessun codice.</div>';
+  } else {
+    h += '<button class="btn" style="margin-top:9px" onclick="elencoCodici()">Vedi i codici che hai dato</button>';
+  }
+  return h;
+}
+
+function creaCodice(){
+  var c = S.capo || (S.capo = {});
+  var durata = c.durata || 'vip';
+  c.inCorso = true; c.errore = null; render();
+  chiediApi('/api/admin/crea', {metodo:'POST', corpo:{
+    tipo: durata === 'vip' ? 'vip' : 'abbonato',
+    mesi: durata === 'vip' ? 1 : parseInt(durata, 10),
+    nome: (c.nome || '').slice(0, 60)
+  }}).then(function(r){
+    c.inCorso = false; c.fatto = r; c.nome = ''; c.copiato = false;
+    if(c.elenco) c.elenco = null;      /* l'elenco si rilegge quando serve */
+    render();
+  }).catch(function(e){
+    c.inCorso = false;
+    c.errore = e.message === 'non ammesso'
+      ? 'Il tuo gettone non basta piu\': esci e rientra col tuo codice.'
+      : e.message;
+    render();
+  });
+}
+
+/* Il messaggio d'invito bello e pronto: il codice da solo non dice a un amico
+   ne' cosa sia ne' dove metterlo. */
+function copiaInvito(){
+  var f = (S.capo && S.capo.fatto) || null;
+  if(!f) return;
+  var testo = 'Ti ho messo dentro Monthline.\n\n' +
+    'È l\'app con cui scelgo le schedine: cinque campionati, e ti dice quanto vale ' +
+    'davvero quello che stai per giocare.\n\n' +
+    location.origin + location.pathname + '\n\n' +
+    'Il tuo codice: ' + f.codice + '\n' +
+    '(si mette dal pulsante "Ho un codice")';
+  var fine = function(){ S.capo.copiato = true; render(); };
+  if(navigator.share){
+    navigator.share({text: testo}).then(fine).catch(function(){});
+    return;
+  }
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(testo).then(fine).catch(function(){});
+  }
+}
+
+function elencoCodici(){
+  var c = S.capo || (S.capo = {});
+  chiediApi('/api/admin/elenco').then(function(r){
+    c.elenco = r.codici || [];
+    render();
+  }).catch(function(e){ c.errore = e.message; render(); });
+}
+function revocaCodice(codice){
+  if(!confirm('Tolgo l\'accesso a chi ha questo codice?')) return;
+  chiediApi('/api/admin/revoca', {metodo:'POST', corpo:{codice: codice}})
+    .then(elencoCodici)
+    .catch(function(e){ S.capo.errore = e.message; render(); });
 }
 
 function selettoreLeghe(){
@@ -4168,6 +4384,7 @@ function cardStatoDati(){
 }
 function tabDati(){
   var m = S.meta || {}, h = '';
+  h += cardCapo();
   h += cardStatoDati();
   if(m.errori && m.errori.length){
     h += '<div class="h2">Avvisi dell\'ultimo aggiornamento</div><div class="card"><div class="note amber">'+

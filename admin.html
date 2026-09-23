@@ -54,6 +54,7 @@ th{font-size:10px;letter-spacing:.6px;text-transform:uppercase;color:var(--mute)
 td.c{font-family:var(--mono);font-weight:600;white-space:nowrap}
 .tag{font-size:10px;padding:2px 7px;border-radius:6px;background:var(--line);color:var(--mute)}
 .tag.vip{background:var(--accent);color:#fff}
+.tag.capo{background:#C9A227;color:#2A2205;font-weight:700}
 .tag.morto{background:var(--warn);color:#fff}
 .rev{border:0;background:none;color:var(--warn);font-size:12px;cursor:pointer;padding:4px;width:auto;margin:0}
 .nota{font-size:12.5px;color:var(--mute);line-height:1.5;margin-top:10px}
@@ -86,6 +87,7 @@ td.c{font-family:var(--mono);font-weight:600;white-space:nowrap}
           <select id="tipo" onchange="cambiaTipo()">
             <option value="vip">VIP — non scade mai</option>
             <option value="abbonato">Abbonato — a scadenza</option>
+            <option value="capo">CAPO — VIP, e puo' fare codici dall'app</option>
           </select>
         </div>
         <div id="boxMesi" hidden>
@@ -149,7 +151,8 @@ function crea(){
   }}).then(function(v){
     $('nato').innerHTML = '<div class="nato">da dare a chi vuoi'+
       '<div class="c">'+esc(v.codice)+'</div><small>'+
-      (v.tipo==='vip' ? 'VIP, non scade' : 'fino al '+esc((v.scade||'').slice(0,10)))+
+      (v.tipo==='capo' ? 'CAPO, non scade, fa codici dall\'app'
+        : v.tipo==='vip' ? 'VIP, non scade' : 'fino al '+esc((v.scade||'').slice(0,10)))+
       '</small></div>';
     if(navigator.clipboard) navigator.clipboard.writeText(v.codice).catch(function(){});
     $('nome').value=''; carica();
@@ -162,6 +165,7 @@ function mostra(){
     $('conta').textContent = d.validi+' validi su '+d.quanti;
     $('elenco').innerHTML = d.codici.map(function(c){
       var stato = c.revocato ? '<span class="tag morto">revocato</span>'
+        : c.tipo==='capo' ? '<span class="tag capo">CAPO</span>'
         : c.tipo==='vip' ? '<span class="tag vip">VIP</span>'
         : !c.valido ? '<span class="tag morto">scaduto</span>'
         : esc((c.scade||'').slice(0,10));

@@ -231,6 +231,67 @@ async function entra(env, codice) {
   const nostro = await chiedi(env, '/api/calendario/I1');
   prova('il nostro si', nostro.headers.get('access-control-allow-origin') === ORIGINE);
 }
+/* ═══ 7-bis. il capo ═══
+
+   Il capo e' un VIP che puo' anche fare codici, cosi' invitare un amico costa
+   tre tocchi dentro l'app invece di "apri il pannello, ritrova il segreto
+   grosso, incollalo nel telefono". Il segreto grosso nel telefono e' proprio
+   la cosa da evitare: da li' non esce piu', e un telefono perso sarebbe il
+   deposito dei dati in mano a qualcun altro.
+
+   Quindi i due confini che questo blocco difende, e che sono il motivo per
+   cui il capo esiste invece di dare a tutti il segreto:
+     - un capo NON puo' fare altri capi
+     - un capo NON puo' toccare il deposito dei dati
+   Un telefono perso regala abbonamenti, e si spegne. Non diventa padrone. */
+{
+  const env = ambiente(); await preparaDati(env);
+  const codiceCapo = await creaCodice(env, { tipo: 'capo', nome: 'il boss' });
+  const r = await entra(env, codiceCapo);
+  prova('il codice da capo apre', r.stato === 200 && r.corpo.tutto !== false, r.stato);
+  prova('e si presenta come capo', r.corpo.capo === true && r.corpo.tipo === 'capo', r.corpo.tipo);
+  const g = r.corpo.gettone;
+
+  const io = await leggi(await chiedi(env, '/api/io', { gettone: g }));
+  prova('i diritti dicono capo e tutto aperto', io.corpo.capo === true && io.corpo.tutto === true);
+
+  const cal = await leggi(await chiedi(env, '/api/calendario/I1', { gettone: g }));
+  prova('e vede tutte le partite come un VIP', cal.corpo.calendario.length === 10);
+
+  /* col suo gettone fa codici, senza mai vedere il segreto grosso */
+  const fatto = await leggi(await chiedi(env, '/api/admin/crea',
+    { metodo: 'POST', gettone: g, corpo: { tipo: 'vip', nome: 'un amico del boss' } }));
+  prova('col gettone da capo si fa un codice per un amico',
+        fatto.stato === 200 && !!fatto.corpo.codice, fatto.stato);
+  const amico = await entra(env, fatto.corpo.codice);
+  prova('e quel codice apre davvero', amico.stato === 200 && amico.corpo.capo === false);
+
+  const visti = await leggi(await chiedi(env, '/api/admin/elenco', { gettone: g }));
+  prova('il capo vede i codici che ha dato', visti.stato === 200 && visti.corpo.quanti >= 2);
+
+  const tolto = await leggi(await chiedi(env, '/api/admin/revoca',
+    { metodo: 'POST', gettone: g, corpo: { codice: fatto.corpo.codice } }));
+  prova('e li puo revocare', tolto.stato === 200);
+  const dopo = await entra(env, fatto.corpo.codice);
+  prova('dopo la revoca quel codice non apre piu', dopo.stato === 403);
+
+  /* i due confini */
+  const altroCapo = await leggi(await chiedi(env, '/api/admin/crea',
+    { metodo: 'POST', gettone: g, corpo: { tipo: 'capo', nome: 'un secondo boss' } }));
+  prova('UN CAPO NON PUO FARE UN ALTRO CAPO', altroCapo.stato === 403, altroCapo.stato);
+
+  const carico = await leggi(await chiedi(env, '/api/admin/carica/I1',
+    { metodo: 'POST', gettone: g, corpo: { calendario: [] } }));
+  prova('E NON PUO TOCCARE IL DEPOSITO DEI DATI', carico.stato === 401, carico.stato);
+
+  /* e un VIP qualunque non comanda niente */
+  const vip = await creaCodice(env, { tipo: 'vip', nome: 'uno normale' });
+  const gv = (await entra(env, vip)).corpo.gettone;
+  const prova1 = await leggi(await chiedi(env, '/api/admin/crea',
+    { metodo: 'POST', gettone: gv, corpo: { tipo: 'vip', nome: 'furbo' } }));
+  prova('un VIP normale non puo fare codici', prova1.stato === 401, prova1.stato);
+}
+
 /* ═══ 8-bis. l'origine dimenticata ═══
 
    Montando il Worker dal pannello di Cloudflare invece che da riga di comando,
