@@ -2992,7 +2992,7 @@ function colonne(voci, opz){
   var soglia = '';
   if(opz.soglia != null && opz.soglia >= 0 && opz.soglia <= n){
     var xs = opz.soglia * passo - stacco / 2 + larghezza / 2;
-    soglia = '<line x1="' + nu(xs,1) + '" y1="2" x2="' + nu(xs,1) + '" y2="' + nu(base,1) +
+    soglia = '<line x1="' + nu(xs,1) + '" y1="14" x2="' + nu(xs,1) + '" y2="' + nu(base,1) +
       '" class="gsoglia"/>' +
       (opz.etichettaSoglia
         ? (function(){
@@ -3010,10 +3010,13 @@ function colonne(voci, opz){
           })()
         : '');
   }
+  /* L'ordine conta: in SVG si dipinge dal primo all'ultimo, e la soglia stava
+     PRIMA delle barre — quindi il rettangolo che doveva farle da maschera
+     finiva sotto, e l'etichetta usciva scritta sopra la barra. Va in fondo. */
   return '<svg class="graf" viewBox="0 0 ' + L + ' ' + A + '" role="img" aria-label="' +
     esc(opz.descrizione || '') + '">' +
     '<line x1="0" y1="' + nu(base,1) + '" x2="' + L + '" y2="' + nu(base,1) + '" class="gasse"/>' +
-    soglia + d + '</svg>';
+    d + soglia + '</svg>';
 }
 
 /* Come finisce il mese: l'unica immagine che mostra perche' la probabilita'

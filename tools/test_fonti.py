@@ -1082,6 +1082,62 @@ def test_giro_leggero_aggiorna_le_quote():
           'min(restano)' in testo)
 
 
+def test_notizie_degli_altri_campionati():
+    """Le notizie erano solo Serie A: tre feed italiani, e zero negli altri
+    quattro archivi.
+
+    Il pezzo delicato non e' scaricare i feed, e' capire DI CHI parlano. Per
+    la Serie A c'e' voluta una tabella di soprannomi scritta a mano — senza,
+    la Gazzetta dava zero titoli riconosciuti su novantanove, perche' scrive
+    "Juve" e "Nerazzurri". Per ottanta squadre in quattro lingue quella
+    tabella non si scrive: si riusa il risolutore dei nomi, e la prova qui
+    sotto e' che funzioni davvero sui modi in cui i giornali scrivono i club.
+    """
+    prova('c\'e un feed per ognuno degli altri quattro campionati',
+          sorted(B.FONTI_NOTIZIE_LEGA.keys()) == ['D1', 'E0', 'F1', 'SP1'])
+    prova('e piu di uno per campionato, cosi uno che cade non lascia a secco',
+          all(len(v) >= 2 for v in B.FONTI_NOTIZIE_LEGA.values()))
+
+    inglesi = ['Tottenham', 'Arsenal', 'Man City', 'Liverpool', 'Wolves', 'Newcastle']
+    r = B.RisolutoreNomi(inglesi)
+    casi = [('Spurs', 'Tottenham'), ('Wolverhampton', 'Wolves'),
+            ('Manchester', 'Man City'), ('Arsenal', 'Arsenal')]
+    ok = all(r._cerca(a) == b for a, b in casi)
+    prova('il risolutore riconosce i club come li scrivono i giornali', ok,
+          [(a, r._cerca(a)) for a, b in casi])
+
+    spagnoli = B.RisolutoreNomi(['Ath Madrid', 'Real Madrid', 'Barcelona', 'Espanol', 'Betis'])
+    prova('e vale anche in spagnolo: "Atleti" non diventa il Real',
+          spagnoli._cerca('Atletico') == 'Ath Madrid', spagnoli._cerca('Atletico'))
+
+    # e il feed finto: l'aggancio deve passare dal risolutore, non dai soprannomi
+    rss = ('<rss><channel>'
+           '<item><title>Spurs beat Arsenal in the derby</title>'
+           '<pubDate>%s</pubDate><link>https://x/1</link></item>'
+           '<item><title>Nessuna squadra qui dentro</title>'
+           '<pubDate>%s</pubDate><link>https://x/2</link></item>'
+           '</channel></rss>') % (_rfc822(1), _rfc822(1))
+    vero, vera_pausa = B.scarica, B.time.sleep
+    B.scarica = lambda *a, **k: rss.encode('utf-8')
+    B.time.sleep = lambda *a, **k: None
+    try:
+        esiti = {}
+        fuori = B.prendi_notizie(inglesi, esiti, (('Prova', 'http://x'),), r)
+    finally:
+        B.scarica, B.time.sleep = vero, vera_pausa
+    prova('un titolo inglese si aggancia alle squadre che nomina',
+          len(fuori) == 1 and set(fuori[0]['sq']) == {'Tottenham', 'Arsenal'},
+          [x['sq'] for x in fuori])
+    prova('e quello che non nomina nessuno resta fuori',
+          all('Nessuna squadra' not in x['t'] for x in fuori))
+
+    sorgente = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                            'scripts', 'build_data.py')
+    testo = io.open(sorgente, encoding='utf-8').read()
+    prova('e ogni campionato le prende davvero, non solo la Serie A',
+          'prendi_notizie(sorted(risolutore.noti)' in testo)
+
+
 def test_crediti_solo_a_chi_gioca():
     """Un credito speso per chiedere le quote di partite che non ci sono.
 
@@ -1180,6 +1236,7 @@ def main():
     test_orari_del_giro()
     test_service_worker()
     test_crediti_solo_a_chi_gioca()
+    test_notizie_degli_altri_campionati()
     test_validatori()
     test_quote()
     test_calendario_ha_le_stesse_quote()

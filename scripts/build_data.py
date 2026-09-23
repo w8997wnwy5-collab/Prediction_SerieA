@@ -764,8 +764,43 @@ def _quando(voce):
     return m.group(1) if m else None
 
 
-def prendi_notizie(squadre, esiti):
-    """Titoli recenti, attaccati alle squadre che nominano."""
+# I feed degli altri quattro campionati.
+#
+# Scelti misurando la cosa che conta, non se rispondono: quanti titoli si
+# agganciano a una squadra vera. Un titolo che non si attacca a nessuno e' un
+# titolo in mezzo al nulla — non si puo' mettere accanto a una partita, e tanto
+# vale non prenderlo. Sondato (scripts/_sonda_notizie.py), titoli agganciati:
+#
+#   Premier      Guardian 80%   Sky 80%    BBC 17% (parla di tutto il calcio)
+#   Bundesliga   Guardian 50%   kicker 35%
+#   Liga         Guardian 55%   Marca 33% (ma 49 titoli, quindi 16 agganciati)
+#   Ligue 1      RMC 47%        Guardian 40%
+#
+# Morti: Sport1 (404) e L'Equipe (403, blocca i robot).
+#
+# Due per campionato, e non a caso: uno inglese che aggancia tanto e uno nella
+# lingua del posto che porta le notizie che l'inglese non da'.
+FONTI_NOTIZIE_LEGA = {
+    'E0': (('Guardian', 'https://www.theguardian.com/football/premierleague/rss'),
+           ('Sky Sports', 'https://www.skysports.com/rss/11661')),
+    'D1': (('Guardian', 'https://www.theguardian.com/football/bundesligafootball/rss'),
+           ('kicker', 'https://newsfeed.kicker.de/news/bundesliga')),
+    'SP1': (('Guardian', 'https://www.theguardian.com/football/laligafootball/rss'),
+            ('Marca', 'https://e00-marca.uecdn.es/rss/futbol/primera-division.xml')),
+    'F1': (('RMC', 'https://rmcsport.bfmtv.com/rss/football/ligue-1/'),
+           ('Guardian', 'https://www.theguardian.com/football/ligue1football/rss')),
+}
+
+
+def prendi_notizie(squadre, esiti, fonti=None, risolutore=None):
+    """Titoli recenti, attaccati alle squadre che nominano.
+
+    Con un `risolutore` si lavora fuori dall'Italia: la tabella dei soprannomi
+    e' italiana — "Juve", "Nerazzurri" — e per ottanta squadre in quattro
+    lingue non si scrive a mano. Il risolutore dei nomi, costruito per
+    agganciare i calendari, funziona anche qui: misurato, riconosce "Spurs"
+    come Tottenham, "Atleti" come Atletico e "Gladbach" come Monchengladbach
+    dentro i titoli, senza che nessuno glielo abbia insegnato apposta."""
     if not squadre:
         return []
     # Per riconoscere una squadra in un titolo servono anche i suoi altri nomi:
@@ -783,7 +818,7 @@ def prendi_notizie(squadre, esiti):
     oggi = datetime.now(timezone.utc).date()
     limite = (oggi - timedelta(days=10)).isoformat()
     viste, fuori = set(), []
-    for etichetta, url in FONTI_NOTIZIE:
+    for etichetta, url in (fonti or FONTI_NOTIZIE):
         try:
             grezzo = scarica(url, tentativi=2, attesa=3)
             testo = grezzo.decode('utf-8', 'replace')
@@ -798,8 +833,20 @@ def prendi_notizie(squadre, esiti):
                 scarti['doppio'] += 1
                 continue
             basso = titolo.lower()
-            citate = sorted(sq for sq, nomi in per_squadra.items()
-                            if any(re.search(r'\b%s\b' % re.escape(n), basso) for n in nomi))
+            if risolutore:
+                # Fuori dall'Italia non c'e' una tabella di soprannomi: si
+                # prova ogni parola lunga del titolo contro il risolutore, che
+                # sa gia' che "Spurs" e' il Tottenham. Le parole corte si
+                # saltano perche' "Won" o "Cup" pescherebbero qualunque cosa.
+                trovate = set()
+                for pezzo in re.findall(r"[A-Za-z\u00C0-\u00FF'\-]{4,}", titolo):
+                    q = risolutore._cerca(pezzo)
+                    if q:
+                        trovate.add(q)
+                citate = sorted(trovate)
+            else:
+                citate = sorted(sq for sq, nomi in per_squadra.items()
+                                if any(re.search(r'\b%s\b' % re.escape(n), basso) for n in nomi))
             if not citate:
                 scarti['nessuna squadra'] += 1
                 continue
@@ -2135,13 +2182,25 @@ def costruisci_lega(lega, stagioni, esiti):
 
     calendario = sorted([x for x in calendario if x.get('c') and x.get('v')],
                         key=lambda x: (x['d'], x.get('c', '')))
+
+    # Le notizie: non entrano nel modello, stanno accanto alla partita. Qui
+    # l'aggancio lo fa il risolutore dei nomi invece della tabella italiana
+    # dei soprannomi, che per ottanta squadre in quattro lingue non si scrive.
+    notizie = []
+    try:
+        notizie = prendi_notizie(sorted(risolutore.noti), mie,
+                                 FONTI_NOTIZIE_LEGA.get(lega['id']), risolutore)
+    except Exception as e:                        # noqa: BLE001
+        mie['%s notizie' % lega['id']] = 'fallite: %s' % str(e)[:90]
+
     esiti.update(mie)
-    return {'lega': lega['nome'], 'legaId': lega['id'], 'paese': lega['paese'],
+    doc_extra = {'notizie': notizie} if notizie else {}
+    return dict(doc_extra, **{'lega': lega['nome'], 'legaId': lega['id'], 'paese': lega['paese'],
             'aggiornato': datetime.now(timezone.utc).isoformat(timespec='seconds'),
             'versione_orari': VERSIONE_ORARI,
             'fonte': 'football-data.co.uk + openfootball + The Odds API',
             'stagioni': sorted({x['s'] for x in partite_ord if x.get('s')}),
-            'partite': partite_ord, 'calendario': calendario}
+            'partite': partite_ord, 'calendario': calendario})
 
 
 def scrivi_lega(lega, doc):
