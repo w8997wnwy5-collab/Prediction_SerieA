@@ -4,6 +4,11 @@ name: Sonda fonti
 # Non tocca l'archivio: chiede, guarda, e scrive nel riepilogo.
 on:
   workflow_dispatch:
+    inputs:
+      cancello:
+        description: "Indirizzo del Worker da provare (vuoto = salta)"
+        required: false
+        default: ""
 
 jobs:
   sonda:
@@ -18,7 +23,9 @@ jobs:
           APIFOOTBALL_KEY: ${{ secrets.APIFOOTBALL_KEY }}
           FOOTBALL_DATA_TOKEN: ${{ secrets.FOOTBALL_DATA_TOKEN }}
           ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+          MONTHLINE_API: ${{ inputs.cancello || secrets.MONTHLINE_API }}
         run: |
+          python3 scripts/_sonda_cancello.py
           python3 scripts/sonda_fonti.py
           python3 scripts/_sonda_colonne.py
           python3 scripts/_sonda_calendario.py
