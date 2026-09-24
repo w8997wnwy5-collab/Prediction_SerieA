@@ -17,3 +17,5 @@ jobs:
         env:
           ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
         run: python3 scripts/_sonda_nations.py
+      - name: E un archivio delle nazionali esiste?
+        run: python3 scripts/_sonda_nazionali.py
