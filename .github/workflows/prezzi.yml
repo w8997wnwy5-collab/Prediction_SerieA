@@ -1,0 +1,15 @@
+name: Sonda prezzi
+
+# Quanto costa salire di piano. Non tocca niente, non costa crediti.
+on:
+  workflow_dispatch:
+
+jobs:
+  prezzi:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python3 scripts/_sonda_prezzi.py
