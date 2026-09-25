@@ -44,6 +44,27 @@ morbida senza filtro, il CLV deve uscire negativo di circa il margine della
 casa. Se esce zero o positivo, la macchina e' rotta e i numeri sotto non
 valgono niente.
 
+IL RISULTATO, 25 SETTEMBRE 2026
+───────────────────────────────
+Serie A, 209 partite con il risultato (febbraio-maggio 2026 e agosto-
+settembre 2026): lo storico di OddsPapi non arriva prima di fine gennaio
+2026, e quello di bet365.it solo da agosto (48 partite).
+
+  sanita', tutto giocato a 3 ore:  eurobet.it  n=606  CLV -6.53%
+                                   bet365.it   n=144  CLV -6.04%
+  primario, 3 ore, soglia 3%:      migliore    n=4    CLV +3.82%  z=0.54
+                                   eurobet.it  n=2 su 606 esiti possibili
+
+Verdetto della regola: il segno e' giusto ma non basta. E il numero che
+conta di piu' non e' lo z, e' la frequenza: Eurobet paga il 3% sopra
+l'equo di Pinnacle su UNA partita ogni cento, cioe' quattro giocate a
+stagione. Anche se il valore fosse vero, non sarebbe un guadagno: sono
+spiccioli. Sull'1X2 di Serie A, con queste due case, la strada e' chiusa.
+
+Quello che resta, e che vale da solo il backtest: ogni gamba 1X2 su queste
+case costa in media il 6-6.5% contro il prezzo equo. In una multipla il
+costo si moltiplica: tre gambe, circa -17%.
+
 I DATI
 ──────
 Lo storico di OddsPapi non si ripubblica: questo repository e' pubblico. I
