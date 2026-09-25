@@ -217,8 +217,16 @@ def test_odds_api():
           '438' in str(esiti.get('The Odds API crediti')), str(esiti.get('The Odds API crediti')))
     prova('e finiscono in un numero, pronti per il meta',
           B._crediti_rimasti(esiti) == 438, B._crediti_rimasti(esiti))
-    prova('senza intestazioni non si inventa un numero',
-          B._crediti_rimasti({}) is None)
+    # Senza intestazioni la funzione ripiega sull'ultimo numero scritto nel
+    # meta — apposta. Qui il meta si fa mancare: la prova leggeva quello VERO
+    # del repository, e passava solo finche' li' dentro non c'era un numero.
+    vero_meta = B.FILE_META
+    B.FILE_META = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'non-esiste.json')
+    try:
+        prova('senza intestazioni e senza meta non si inventa un numero',
+              B._crediti_rimasti({}) is None)
+    finally:
+        B.FILE_META = vero_meta
 
     # senza chiave non si inventa niente e non si sbatte
     os.environ.pop('ODDS_API_KEY', None)

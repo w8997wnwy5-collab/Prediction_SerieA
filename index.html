@@ -612,6 +612,37 @@ details.note summary:active{opacity:.6;}
 .segnaq:active{transform:scale(.9);}
 .segnaq:hover{color:var(--accent);border-color:var(--accent);}
 
+/* Consigliata: tre schedine, una carta l'una */
+.csg{padding-top:14px;}
+.csgh{display:flex;align-items:center;gap:9px;margin-bottom:10px;}
+.csgl{font-size:12px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;
+  padding:4px 10px;border-radius:99px;}
+.csgl.facile{color:var(--ok);background:var(--ok-soft);}
+.csgl.media{color:var(--amber);background:var(--amber-soft);}
+.csgl.difficile{color:var(--warn);background:var(--warn-soft);}
+.csgg{font-size:12px;color:var(--mute);}
+.csgq{margin-left:auto;font-family:var(--mono);font-size:22px;font-weight:700;text-align:right;line-height:1;}
+.csgq span{display:block;font-family:var(--sys);font-size:9px;font-weight:400;color:var(--mute);
+  letter-spacing:.5px;text-transform:uppercase;margin-top:3px;}
+.csgp{display:flex;align-items:baseline;gap:10px;}
+.csgv{font-family:var(--mono);font-size:40px;font-weight:700;letter-spacing:-1.5px;line-height:1;}
+.csgv small{font-size:20px;letter-spacing:0;margin-left:1px;}
+.csgs{font-size:13px;color:var(--mute);}
+.csgs b{color:var(--ink);font-weight:600;}
+.csgb{height:6px;border-radius:3px;background:var(--line2);overflow:hidden;margin:10px 0 6px;}
+.csgb i{display:block;height:100%;border-radius:3px;}
+.csgb i.facile{background:var(--ok);} .csgb i.media{background:var(--amber);}
+.csgb i.difficile{background:var(--warn);}
+.csgr{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line2);}
+.csgn{flex:1;min-width:0;}
+.csgn b{display:block;font-size:14.5px;font-weight:600;}
+.csgn em{display:block;font-style:normal;font-size:12.5px;color:var(--ink);margin-top:2px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.csgn em.csgm{font-size:11px;color:var(--mute);margin-top:1px;}
+.csgx{font-family:var(--mono);font-size:14px;font-weight:600;text-align:right;white-space:nowrap;}
+.csgx span{display:block;font-size:11px;color:var(--mute);font-weight:400;}
+.csgf{display:flex;margin-top:10px;}
+
 /* la schermata del nome, al primo avvio */
 .benv{min-height:100dvh;display:flex;flex-direction:column;align-items:center;
   justify-content:center;padding:28px 24px 40px;text-align:center;gap:0;}
@@ -2686,16 +2717,14 @@ function cardMuroSchedine(){
    perche' il valore di questa app non sono i risultati di football-data: e'
    quello che ci si fa sopra.
 
-   Precisione resta aperta apposta, ed e' l'unica eccezione: e' la sezione che
-   dice quanto il modello ci prende davvero, misurato su giornate che non
-   aveva mai visto. Chiuderla vorrebbe dire chiedere 4,99 a uno che non ha
-   nessun motivo per crederti. E' la vetrina, non la merce. Se cambi idea
-   basta togliere 'precisione' dalla riga qui sotto. */
+   Precisione era aperta a tutti, come vetrina. Adesso sta dentro Dati, che
+   vede solo il capo: la vetrina e' diventata la Classifica, che mostra chi
+   ci prende davvero senza bisogno di spiegare un backtest. */
 /* Libro sta qui dentro, ma non del tutto: la vista "classifica" e' aperta a
    chiunque, la vista "il mio libro" no. Il muro sta dentro la linguetta e non
    davanti, perche' la classifica e' il pezzo che fa venire voglia di pagare —
    chiuderla vorrebbe dire nascondere proprio la vetrina. */
-var SEZIONI_LIBERE = ['giornata', 'precisione', 'dati', 'classifica'];
+var SEZIONI_LIBERE = ['giornata', 'classifica'];
 
 function sezioneChiusa(tab){
   if(!cancelloAcceso() || haTutto()) return false;
@@ -2711,6 +2740,8 @@ function libroChiuso(){ return cancelloAcceso() && !haTutto(); }
 function lucchettoSu(k){ return k === 'classifica' ? libroChiuso() : sezioneChiusa(k); }
 
 var PERCHE_CHIUSA = {
+  consigliata: ['La schedina consigliata', 'Facile, media e difficile: per ogni quota, ' +
+    'la combinazione che esce più spesso fra tutte le partite dei cinque campionati.'],
   schedine: ['Le schedine', 'Quante gambe, a che quota, e quanto spesso un mese ' +
     'del genere chiude in attivo. È il mestiere dell\'app: scegliere poche giocate ' +
     'solide fra millecinquecento partite.'],
@@ -2741,7 +2772,7 @@ function cardSezioneChiusa(tab){
       '<div class="muroq"><b>' + PREZZO + '</b> al mese</div>' +
       '<button class="btn acc" onclick="apriAccesso()">Ho un codice</button>' +
       '<div class="murom">Nella <b>Giornata</b> resti libero di vedere le prime tre ' +
-        'partite di ogni campionato, e in <b>Precisione</b> quanto ci prende davvero.</div>' +
+        'partite di ogni campionato, e la <b>Classifica</b> è aperta a tutti.</div>' +
     '</div>';
 }
 
@@ -4542,6 +4573,235 @@ function tabSchedine(){
 }
 
 /* ══════════════════════════════════════════════════════════════
+   CONSIGLIATA
+
+   Tre schedine e basta: facile, media, difficile. Niente puntata, niente
+   mese, niente tabelle: la risposta a "cosa gioco questa giornata?".
+
+   Il livello lo decide la QUOTA, e dentro ogni fascia si prende la
+   combinazione che esce piu' spesso. A quota fissa "piu' spesso" ha una
+   risposta precisa:
+
+     P(esce) = (1 - ricarico)^gambe / quota
+
+   perche' ogni gamba il banco la paga equa meno il suo ricarico. Quindi a
+   parita' di quota vince la schedina con MENO gambe — il ricarico si paga
+   una volta per gamba — e fra quelle con le stesse gambe la quota piu' bassa
+   della fascia. A parita' di tutto, quella su cui il modello e' piu' sicuro:
+   il pavimento piu' alto, non la media.
+
+   Probabilita' e quota sono lo stesso numero letto dai due lati. Una
+   Difficile al 90% non esiste, e mostrarla sarebbe una bugia: qui ogni
+   livello ha la probabilita' piu' alta che la sua quota permette, e niente
+   di piu'.
+   ══════════════════════════════════════════════════════════════ */
+/* Il livello e' una quota E un minimo di gambe. Solo la quota non bastava:
+   la combinazione piu' probabile a quota fissa ha sempre meno gambe
+   possibile, e la Difficile usciva una doppia a 2.80 — cioe' non una
+   multipla. La Difficile e' una multipla vera, da cinque in su, e la sua
+   probabilita' e' la piu' alta che una multipla cosi' puo' avere. */
+var LIVELLI = [
+  {id:'facile',    nome:'Facile',    min:1.50, max:2.00,  gambe:2},
+  {id:'media',     nome:'Media',     min:2.80, max:4.50,  gambe:3},
+  {id:'difficile', nome:'Difficile', min:6.00, max:10.00, gambe:5}
+];
+var CONS_GAMBE_MIN = 2, CONS_GAMBE_MAX = 6;
+/* Sotto 1.15 una gamba non e' una giocata, e' una constatazione: in schedina
+   serve solo ad allungare la lista, e il banco su quelle quote e' avaro. */
+var CONS_QUOTA_GAMBA_MIN = 1.15;
+/* Le partite di una schedina stanno nella stessa finestra di giorni: una
+   gamba sabato e una fra due settimane vuol dire soldi fermi per due
+   settimane. Col calendario dei cinque campionati sfasato (la Premier che
+   riparte prima della Serie A) succederebbe davvero. */
+var CONS_FINESTRA_GIORNI = 6;
+var CONS_PASSO = 0.005;          // caselle di mezzo punto percentuale di quota
+
+/* Pari e dispari fuori. Su Sporttip c'e', e in Giornata resta, ma come
+   consiglio e' rumore: vale 50% in ogni partita, il modello non ne sa niente
+   di piu' del lancio di una moneta, e finiva in schedina proprio per quello —
+   la sua fascia d'incertezza e' stretta perche' non c'e' niente da stimare,
+   e il criterio del pavimento piu' alto la scambiava per sicurezza. */
+var CONS_ESCLUSI = ['DISP', 'PARI'];
+function candidatiConsigliata(){
+  var cand = candidatiTutteLeLeghe().filter(function(c){
+    return c.p > 0 && quotaGamba(c) >= CONS_QUOTA_GAMBA_MIN && CONS_ESCLUSI.indexOf(c.id) < 0;
+  });
+  cand.forEach(function(c){ c.alMercato = ancorataAlMercato(c); });
+  if(!cand.length) return cand;
+  var prima = cand.reduce(function(m, c){ return c.partita.d < m ? c.partita.d : m; }, '9999');
+  var limite = new Date(Date.parse(prima + 'T12:00:00Z') + CONS_FINESTRA_GIORNI * 86400000)
+                 .toISOString().slice(0, 10);
+  var vicine = cand.filter(function(c){ return c.partita.d <= limite; });
+  var partite = {};
+  vicine.forEach(function(c){ partite[c.iPartita] = 1; });
+  return Object.keys(partite).length >= CONS_GAMBE_MIN ? vicine : cand;
+}
+
+/* Una gamba e' "al mercato" quando la sua probabilita' e' legata a quote
+   vere di quella partita: l'1X2 alle quote dell'1X2, i gol alle quote
+   dell'Over/Under 2.5. E' il criterio per rompere i pareggi, e il motivo per
+   cui non e' piu' il pavimento della fascia: le fasce NON si confrontano fra
+   campionati. La Serie A ha il modello intero, col bootstrap, e fasce
+   larghe e oneste; gli altri quattro hanno il modello leggero, senza
+   bootstrap, e fasce quasi nulle. Col pavimento come criterio vinceva
+   sempre la Premier — non perche' fosse piu' sicura, ma perche' non sapeva
+   quanto poco sapeva. */
+var CONS_FAMIGLIA_1X2 = ['1', 'X', '2', '1X', 'X2', '12'];
+function ancorataAlMercato(c){
+  var p = c.partita || {};
+  if(CONS_FAMIGLIA_1X2.indexOf(c.id) >= 0) return !!(p.qex || p.q);
+  return !!p.qou;
+}
+
+/* La ricerca. Una tabella per numero di gambe e per casella di quota, che si
+   riempie una partita alla volta — cosi' due gambe della stessa partita non
+   possono finire nella stessa schedina. In ogni casella resta la
+   combinazione piu' probabile; a pari probabilita' (dentro una casella lo
+   sono quasi tutte: la quota viene dalla probabilita') quella con piu'
+   gambe ancorate al mercato. */
+function cercaConsigliate(cand){
+  var MAXB = Math.ceil(Math.log(LIVELLI[LIVELLI.length-1].max * 1.02) / CONS_PASSO);
+  var tab = [];
+  for(var n = 0; n <= CONS_GAMBE_MAX; n++) tab.push({});
+  tab[0][0] = {v: 0, scelte: []};
+  var perPartita = {};
+  cand.forEach(function(c){ (perPartita[c.iPartita] = perPartita[c.iPartita] || []).push(c); });
+  Object.keys(perPartita).forEach(function(k){
+    var prima = tab.map(function(t){ var x = {}; for(var b in t) x[b] = t[b]; return x; });
+    perPartita[k].forEach(function(c){
+      var passi = Math.max(1, Math.round(Math.log(quotaGamba(c)) / CONS_PASSO));
+      var val = Math.log(Math.max(1e-6, c.p)) + (c.alMercato ? 0.01 : 0);
+      for(var n = 0; n < CONS_GAMBE_MAX; n++){
+        for(var b in prima[n]){
+          var st = prima[n][b], nb = +b + passi;
+          if(nb > MAXB) continue;
+          var ora = tab[n+1][nb], v = st.v + val;
+          if(!ora || v > ora.v) tab[n+1][nb] = {v: v, scelte: st.scelte.concat([c])};
+        }
+      }
+    });
+  });
+  return tab;
+}
+
+var _consCache = null;
+function consigliate(){
+  var cand = candidatiConsigliata();
+  var firma = ricarico().v + '|' + cand.map(function(c){
+    return c.iPartita + c.id + Math.round(c.p * 1000);
+  }).join(',');
+  if(_consCache && _consCache.firma === firma) return _consCache.v;
+  var tab = cand.length ? cercaConsigliate(cand) : null;
+  var v = LIVELLI.map(function(liv){
+    var meglio = null;
+    if(tab){
+      for(var n = Math.max(CONS_GAMBE_MIN, liv.gambe || 0); n <= CONS_GAMBE_MAX; n++){
+        for(var b in tab[n]){
+          var sc = tab[n][b].scelte;
+          var q = quotaDaRegistrare(sc);
+          if(q < liv.min || q > liv.max) continue;
+          var pr = prodP(sc);
+          var ancorate = sc.filter(function(x){ return x.alMercato; }).length / sc.length;
+          /* Prima la probabilita' (a mezzo punto: sotto e' rumore di
+             arrotondamento della quota), poi quante gambe stanno sul mercato,
+             poi la probabilita' esatta. */
+          var punti = Math.round(pr * 200) + 0.5 * ancorate + 0.01 * pr;
+          if(!meglio || punti > meglio.punti){
+            meglio = {punti: punti, scelte: sc, quota: q, p: pr};
+          }
+        }
+      }
+    }
+    return {livello: liv, scelta: meglio};
+  });
+  _consCache = {firma: firma, v: v};
+  return v;
+}
+
+function quanteVolte(p){
+  if(p >= 0.45) return Math.round(p * 10) + ' volte su 10';
+  return '1 volta su ' + Math.max(2, Math.round(1 / p));
+}
+
+function testoConsigliata(liv, o){
+  var righe = ['MONTHLINE · ' + liv.nome.toUpperCase() + ' — quota ' + nu(o.quota, 2) +
+               ' — esce il ' + pc(o.p)];
+  o.scelte.forEach(function(c, i){
+    righe.push((i + 1) + '. ' + c.nome + ' — ' + c.partita.c + ' - ' + c.partita.v +
+               ' (' + dataBreve(c.partita.d) + (c.partita.o ? ' ' + c.partita.o : '') +
+               (c.lega ? ', ' + c.lega.nome : '') + ') @' + nu(quotaGamba(c), 2));
+  });
+  return righe.join('\n');
+}
+
+function cardConsigliata(x){
+  var liv = x.livello, o = x.scelta;
+  if(!o){
+    return '<div class="card csg"><div class="csgh"><span class="csgl ' + liv.id + '">' +
+      esc(liv.nome) + '</span></div><div class="empty" style="padding:8px 0 4px">Con le partite ' +
+      'in arrivo non c\'è una combinazione a quota ' + nu(liv.min, 2) + '–' + nu(liv.max, 2) +
+      ' che valga la pena.</div></div>';
+  }
+  var chiave = 'cons-' + liv.id;
+  if(!S._schedineMostrate) S._schedineMostrate = {};
+  S._schedineMostrate[chiave] = o.scelte;
+  var piuLeghe = S.leghe && S.leghe.length > 1;
+  return '<div class="card csg">' +
+    '<div class="csgh"><span class="csgl ' + liv.id + '">' + esc(liv.nome) + '</span>' +
+      '<span class="csgg">' + o.scelte.length + ' partite</span>' +
+      '<div class="csgq">' + nu(o.quota, 2) + '<span>quota</span></div></div>' +
+    '<div class="csgp"><div class="csgv">' + Math.round(o.p * 100) + '<small>%</small></div>' +
+      '<div class="csgs">esce circa <b>' + quanteVolte(o.p) + '</b></div></div>' +
+    '<div class="csgb"><i class="' + liv.id + '" style="width:' + Math.round(o.p * 100) + '%"></i></div>' +
+    o.scelte.map(function(c, i){
+      return '<div class="csgr"><div class="csgn"><b>' + esc(c.nome) + '</b>' +
+        '<em>' + esc(c.partita.c) + ' – ' + esc(c.partita.v) + '</em>' +
+        '<em class="csgm">' + (piuLeghe && c.lega ? esc(c.lega.nome) + ' · ' : '') +
+          esc(dataBreve(c.partita.d)) + (c.partita.o ? ' · ' + esc(c.partita.o) : '') + '</em></div>' +
+        '<div class="csgx">' + pc(c.p) + '<span>' + nu(quotaGamba(c), 2) + '</span></div>' +
+        segnaQui(chiave, i) + '</div>';
+    }).join('') +
+    '<div class="csgf"><button class="copia" data-t="' + esc(testoConsigliata(liv, o)) +
+      '" onclick="copiaSchedina(this)">copia</button></div>' +
+    bottoneGioca({id: chiave, nome: liv.nome}, o.scelte, null) +
+  '</div>';
+}
+
+function tabConsigliata(){
+  if(!(S._prossime||[]).length) S._prossime = prossimePartite();
+  var tutte = consigliate();
+  var trovate = tutte.filter(function(x){ return x.scelta; });
+  if(!trovate.length){
+    return cardAccesso() +
+      '<div class="card"><div class="empty"><b>Nessuna schedina per ora</b>' +
+      'Le schedine si costruiscono sulle partite in arrivo: appena il calendario ' +
+      'della prossima giornata ha le partite, compaiono qui.</div></div>';
+  }
+  var giorni = [];
+  trovate.forEach(function(x){ x.scelta.scelte.forEach(function(c){ giorni.push(c.partita.d); }); });
+  giorni.sort();
+  var h = '<div class="h2">Prossima giornata<span class="r">' + esc(dataBreve(giorni[0])) +
+    (giorni[giorni.length-1] !== giorni[0] ? ' – ' + esc(dataBreve(giorni[giorni.length-1])) : '') +
+    '</span></div>';
+  /* Gli altri campionati arrivano in sottofondo, e ognuno che arriva puo'
+     cambiare la risposta: meglio dirlo che far cambiare la schedina sotto il
+     dito senza spiegazione. */
+  if(S.legheInCorso){
+    h += '<div class="note amber" style="margin-bottom:12px">Sto ancora caricando gli altri ' +
+      'campionati' + (S.legheFatte ? ' (' + esc(S.legheFatte) + ')' : '') + ': le schedine ' +
+      'possono cambiare quando arrivano.</div>';
+  }
+  h += tutte.map(cardConsigliata).join('');
+  h += cardAccesso();
+  h += '<div class="note" style="margin-bottom:14px">In ogni livello, fra tutte le combinazioni di ' +
+    'quella quota nei cinque campionati, c\'è quella che esce più spesso. Più sale la quota, più ' +
+    'scende la probabilità: è lo stesso numero visto dai due lati. La quota è stimata col ricarico ' +
+    'medio del banco (' + (100 * ricarico().v).toFixed(1) + '% a gamba): se su bet365 la trovi più ' +
+    'bassa, la schedina vale un po\' meno di così.</div>';
+  return h;
+}
+
+/* ══════════════════════════════════════════════════════════════
    VISTA: SQUADRE
    ══════════════════════════════════════════════════════════════ */
 function formaSquadra(nome, n){
@@ -4858,8 +5118,19 @@ function cardStatoDati(){
     '<p>Fra una giornata e l\'altra è normale che non cambi niente: i dati nuovi arrivano quando si gioca.</p>'+
     '</div></div>';
 }
+/* Dati ha due viste, come la Classifica: la sala macchine, e la Precisione
+   che prima era una linguetta sua. */
+function vaiVistaDati(v){ S.vistaDati = v; render(); window.scrollTo(0,0); }
 function tabDati(){
-  var m = S.meta || {}, h = '';
+  var vista = S.vistaDati || 'dati';
+  var sw = '<div class="forme">' +
+    [['dati', 'Dati', 'fonti e codici'],
+     ['precisione', 'Precisione', 'quanto ci prende']].map(function(o){
+      return '<button class="formab' + (vista === o[0] ? ' on' : '') + '" ' +
+        'onclick="vaiVistaDati(\'' + o[0] + '\')"><b>' + o[1] + '</b><em>' + o[2] + '</em></button>';
+    }).join('') + '</div>';
+  if(vista === 'precisione') return sw + tabPrecisione();
+  var m = S.meta || {}, h = sw;
   h += cardCapo();
   h += cardStatoDati();
   if(m.errori && m.errori.length){
@@ -5196,8 +5467,8 @@ function renderPartita(){
         'text-transform:uppercase;color:var(--mute);margin-bottom:4px">'+esc(g)+'</div>'+
         gruppi[g].sort(function(a,b){ return b.p - a.p; }).map(rigaMercato).join('')+'</div>';
     });
-    h += '<div class="note">Vedi solo i mercati che hai segnato come disponibili. '+
-      'Per cambiarli: <b>Dati → Mercati</b>.</div>'+
+    h += '<div class="note">Vedi solo i mercati disponibili'+
+      (vedeDati() ? '. Per cambiarli: <b>Dati → Mercati</b>' : '')+'.</div>'+
       '<div class="note">La barra chiara è la fascia, il trattino è la stima centrale. '+
       '<b>Quota equa</b> = quella che renderebbe la giocata un pareggio nel lungo periodo; '+
       '<b>prudente</b> = quella che servirebbe partendo dal pavimento della fascia. '+
@@ -5432,7 +5703,7 @@ function ricalcola(){
 }
 function vai(t){
   if(!(S._prossime||[]).length) S._prossime = prossimePartite();
-  S.tab = t; render(); window.scrollTo(0,0);
+  S.tab = linguettaVisibile(t) ? t : 'giornata'; render(); window.scrollTo(0,0);
 }
 
 
@@ -5614,7 +5885,7 @@ function anteprimaSegna(){
     (100*ric).toFixed(1)+'%</b>. ';
   t += atteso >= 0
     ? 'Col mio numero il valore atteso sarebbe positivo (+'+(100*atteso).toFixed(1)+'%) — ma prima di '+
-      'crederci leggi la <b>maledizione del vincitore</b> in Precisione: dove il modello è più in '+
+      'crederci ricorda la <b>maledizione del vincitore</b>: dove il modello è più in '+
       'disaccordo col mercato è dove sbaglia di più.'
     : 'Col mio numero il valore atteso è '+(100*atteso).toFixed(1)+'%. È normale: è quello che il banco '+
       'si prende, ed è la ragione per cui la domanda giusta non è "vinco?" ma "quanto mi costa?".';
@@ -6088,18 +6359,32 @@ function cardPerchePersonale(){
 /* ══════════════════════════════════════════════════════════════
    GUSCIO
    ══════════════════════════════════════════════════════════════ */
+/* Quattro linguette, e la quarta la vede solo il capo.
+
+   Squadre, Precisione e le vecchie Schedine non ci sono piu' come sezioni.
+   I conti restano tutti — le forze delle squadre sono il modello, la
+   precisione e' il backtest — ma chi apre l'app vuole sapere cosa giocare,
+   non come e' fatto il motore. Precisione vive dentro Dati, dove guarda chi
+   il motore lo tiene acceso. */
 var TABS = [
   {k:'giornata',  n:'Giornata',  p:'M4 6h16M4 12h16M4 18h10'},
-  {k:'schedine',  n:'Schedine',  p:'M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6'},
-  {k:'squadre',   n:'Squadre',   p:'M12 3l7 4v6c0 4-3 6.5-7 8-4-1.5-7-4-7-8V7z'},
+  {k:'consigliata',n:'Consigliata',p:'M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6'},
   /* podio: tre gradini, il piu' alto al centro. Un trofeo sarebbe stato piu'
      ovvio e meno onesto — qui non si vince niente, ci si misura. */
   {k:'classifica',n:'Classifica',p:'M4 20h16M9 20v-6H5v6M15 20V8h-4v12M19 20v-9h-4'},
-  {k:'precisione',n:'Precisione',p:'M4 18L9 12l4 3 7-9M4 20h16'},
   {k:'dati',      n:'Dati',      p:'M4 7c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3zM4 7v10c0 1.7 3.6 3 8 3s8-1.3 8-3V7'}
 ];
-var TITOLI = {giornata:'Giornata', schedine:'Schedine', classifica:'Classifica',
-              squadre:'Squadre', precisione:'Precisione', dati:'Dati'};
+var TITOLI = {giornata:'Giornata', consigliata:'Consigliata', classifica:'Classifica', dati:'Dati'};
+
+/* Dati la vede solo il GOAT. Non e' un segreto da nascondere a chi paga: e'
+   la sala macchine — fonti, mercati, codici degli amici, precisione — e per
+   tutti gli altri e' rumore. Senza cancello (l'app in prova, senza server)
+   non c'e' nessun capo da riconoscere, e allora la si vede. */
+function vedeDati(){ return !cancelloAcceso() || !!(S.diritti && S.diritti.capo); }
+function linguettaVisibile(k){
+  if(k === 'dati') return vedeDati();
+  return TABS.some(function(t){ return t.k === k; });
+}
 /* I sottotitoli erano in maiuscoletto da terminale, e in maiuscolo una frase
    smette di essere una frase: diventa un'insegna. Qui sotto il titolo ci va
    una riga normale, come la scrive chiunque. */
@@ -6186,6 +6471,7 @@ function schermataCarico(){
 
 var SOTTO = {
   giornata:   'Cosa ha di diverso ogni partita',
+  consigliata:'La più probabile per ogni quota',
   schedine:   'Quanto rischi, e quanto chiudi il mese sopra',
   libro:      'Le mie giocate, e cosa dicono di me',
   squadre:    'Chi segna, chi concede, chi tira corner',
@@ -6268,12 +6554,14 @@ function disegna(app){
     return;
   }
   if(serveIlNome()) { app.innerHTML = schermataNome(); return; }
+  /* Una linguetta che non c'e' piu' (o Dati per chi non e' il capo) riporta
+     alla Giornata: vale anche per il capo che esce dal suo codice mentre e'
+     dentro Dati. */
+  if(!linguettaVisibile(S.tab)) S.tab = 'giornata';
   var corpo = sezioneChiusa(S.tab) ? cardSezioneChiusa(S.tab) :
-    S.tab==='schedine'   ? tabSchedine() :
-    S.tab==='classifica' ? tabClassifica() :
-    S.tab==='squadre'    ? tabSquadre() :
-    S.tab==='precisione' ? tabPrecisione() :
-    S.tab==='dati'       ? tabDati() : tabGiornata();
+    S.tab==='consigliata' ? tabConsigliata() :
+    S.tab==='classifica'  ? tabClassifica() :
+    S.tab==='dati'        ? tabDati() : tabGiornata();
   /* Il grado sta in TESTA, accanto al titolo, e si vede in ogni schermata.
      Prima stava dentro la carta "chi sei", in fondo alla Giornata sotto tutte
      le partite: cioe' nel posto dove non guarda nessuno. Uno che ha appena
@@ -6288,7 +6576,7 @@ function disegna(app){
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+
     '<path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg></button></div>';
   h += '<div class="wrap">'+corpo+'</div>';
-  h += '<div class="tabs">'+TABS.map(function(t){
+  h += '<div class="tabs">'+TABS.filter(function(t){ return linguettaVisibile(t.k); }).map(function(t){
     /* La linguetta chiusa resta VISIBILE e si puo' premere. Nasconderla
        sarebbe l'errore: chi non paga non saprebbe nemmeno cosa si perde, e
        nessuno paga per una cosa di cui ignora l'esistenza. Premendola si

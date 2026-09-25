@@ -970,6 +970,67 @@ prova('e nessuna selezione finisce in due schedine',
         !/fetch\([^)]*libro|libro[^\n]*fetch\(/.test(html));
 })();
 
+/* ─── la Consigliata: tre livelli, e la Difficile e' una multipla vera ─── */
+(function () {
+  var html;
+  try { html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8'); } catch (e) { return; }
+  function estrai(n) {
+    var i = html.indexOf('function ' + n + '(');
+    if (i < 0) return null;
+    var d = 0;
+    for (var k = html.indexOf('{', i); k < html.length; k++) {
+      if (html[k] === '{') d++;
+      else if (html[k] === '}') { d--; if (!d) return html.slice(i, k + 1); }
+    }
+    return null;
+  }
+  function blocco(nome) {
+    var m = new RegExp('var ' + nome + ' = (\\[[\\s\\S]*?\\]);').exec(html);
+    return m ? eval('(' + m[1] + ')') : null;                // eslint-disable-line no-eval
+  }
+  var LIVELLI = blocco('LIVELLI');
+  prova('la Consigliata ha tre livelli: facile, media, difficile',
+        LIVELLI && LIVELLI.map(function (l) { return l.id; }).join() === 'facile,media,difficile');
+  if (!LIVELLI) return;
+  prova('le fasce di quota salgono e non si toccano',
+        LIVELLI[0].max < LIVELLI[1].min && LIVELLI[1].max < LIVELLI[2].min);
+  prova('la Difficile e\' una multipla vera: almeno cinque gambe, quota da sei in su',
+        LIVELLI[2].gambe >= 5 && LIVELLI[2].min >= 6, JSON.stringify(LIVELLI[2]));
+  prova('pari e dispari non entrano: e\' una moneta, non un consiglio',
+        /CONS_ESCLUSI = \['DISP', 'PARI'\]/.test(html));
+  prova('niente puntata nella Consigliata',
+        !/puntata\(\)/.test(estrai('tabConsigliata') + estrai('cardConsigliata')));
+
+  /* La ricerca, su partite finte: mai due gambe della stessa partita, e a
+     parita' di quota vince chi sta sul mercato. */
+  var src = estrai('cercaConsigliate');
+  prova('la ricerca delle consigliate esiste', !!src);
+  if (!src) return;
+  var cerca = new Function('LIVELLI', 'CONS_GAMBE_MAX', 'CONS_PASSO', 'quotaGamba',
+                           'return ' + src + ';')(
+    LIVELLI, 6, 0.005, function (c) { return Math.round((1 / c.p) * 0.944 * 100) / 100; });
+  var cand = [];
+  /* In ogni partita due mercati alla stessa probabilita' (quindi alla stessa
+     quota): uno sta sul mercato, l'altro no. Devono vincere sempre i primi. */
+  for (var i = 0; i < 8; i++) {
+    cand.push({ iPartita: 'L:' + i, id: 'O15', p: 0.72, alMercato: false });
+    cand.push({ iPartita: 'L:' + i, id: 'U35', p: 0.72, alMercato: true });
+  }
+  var tab = cerca(cand);
+  var doppie = 0, ancorate = 0, totale = 0;
+  for (var n = 1; n <= 6; n++) {
+    Object.keys(tab[n]).forEach(function (b) {
+      var sc = tab[n][b].scelte, viste = {};
+      sc.forEach(function (c) { if (viste[c.iPartita]) doppie++; viste[c.iPartita] = 1; });
+      totale += sc.length; ancorate += sc.filter(function (c) { return c.alMercato; }).length;
+    });
+  }
+  prova('mai due gambe della stessa partita nella stessa schedina', doppie === 0, doppie);
+  prova('a parita\' di quota vince la gamba ancorata al mercato',
+        totale > 0 && ancorate === totale, ancorate + ' su ' + totale);
+  prova('le cinque gambe ci sono, per la Difficile', Object.keys(tab[5]).length > 0);
+})();
+
 var largh = esiti.reduce(function (a, e) { return Math.max(a, e[0].length); }, 0);
 var falliti = 0;
 esiti.forEach(function (e) {
