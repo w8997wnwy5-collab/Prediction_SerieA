@@ -16,4 +16,4 @@ jobs:
       - name: Chiedi a OddsPapi
         env:
           ODDSPAPI_KEY: ${{ secrets.ODDSPAPI_KEY }}
-        run: python3 scripts/_sonda_oddspapi.py
+        run: python3 scripts/_sonda_oddspapi_mercati.py
