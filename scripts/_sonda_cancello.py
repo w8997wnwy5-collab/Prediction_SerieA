@@ -142,6 +142,27 @@ def main():
     else:
         print('VERDETTO CLASSIFICA: risponde, ma non come dovrebbe. Guardare sopra.')
 
+    # ── il Worker nuovo: il registro esiste solo li' ──
+    # Il contenuto NON si stampa: questi registri sono pubblici, e il registro
+    # ha dentro nomi e l'inizio dei codici. Si contano le righe e basta.
+    segreto = os.environ.get('MONTHLINE_ADMIN', '').strip()
+    if segreto:
+        print('--- server nuovo ---')
+        stato, corpo = chiedi(base + '/api/admin/registro', segreto)
+        if stato == 200:
+            try:
+                righe = json.loads(corpo).get('righe') or []
+                tipi = {}
+                for r in righe:
+                    tipi[r.get('cosa', '?')] = tipi.get(r.get('cosa', '?'), 0) + 1
+                print('/api/admin/registro -> 200,', len(righe), 'righe', tipi)
+                print('VERDETTO SERVER: e\' la versione nuova (quote dal server, punti, orari, registro).')
+            except Exception:                   # noqa: BLE001
+                print('/api/admin/registro -> 200 ma corpo illeggibile')
+        else:
+            print('/api/admin/registro ->', stato, breve(corpo, 60).replace(segreto, '***'))
+            print('VERDETTO SERVER: e\' ancora la versione di prima. Va ripubblicato il Worker.')
+
     if len(vuoti) == 5:
         print('VERDETTO: cancello in piedi, depositi VUOTI. Manca il primo giro dei dati.')
     elif vuoti:

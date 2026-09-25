@@ -21,4 +21,6 @@ jobs:
       - name: Chiedi al cancello
         env:
           MONTHLINE_API: ${{ inputs.indirizzo || secrets.MONTHLINE_API }}
+          # solo per chiedere se il registro esiste: la sonda non lo stampa
+          MONTHLINE_ADMIN: ${{ secrets.MONTHLINE_ADMIN }}
         run: python3 scripts/_sonda_cancello.py
