@@ -1,0 +1,19 @@
+name: Sonda OddsPapi
+
+# A mano, e con parsimonia: il piano gratuito da' 250 richieste al mese e
+# questa sonda ne spende meno di dieci.
+on:
+  workflow_dispatch:
+
+jobs:
+  sonda:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Chiedi a OddsPapi
+        env:
+          ODDSPAPI_KEY: ${{ secrets.ODDSPAPI_KEY }}
+        run: python3 scripts/_sonda_oddspapi.py
