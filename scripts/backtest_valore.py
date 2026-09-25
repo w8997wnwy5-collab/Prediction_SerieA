@@ -179,8 +179,15 @@ def partite_giocate():
                 c = elenco(chiedi('/fixtures', {'tournamentId': TORNEO, 'from': a.isoformat(),
                                                 'to': b.isoformat()}))
             except RuntimeError as e:
-                print('  elenco %s: %s' % (a, e))
-                break
+                # Un mese senza partite (luglio: niente campionato) risponde
+                # 404 FIXTURE_NOT_FOUND. Il primo giro si fermava li', e la
+                # stagione 2025-26 intera non e' mai stata chiesta: un mese
+                # vuoto e' un mese vuoto, non la fine dello storico.
+                if 'FIXTURE_NOT_FOUND' not in str(e):
+                    print('  elenco %s: %s' % (a, e))
+                    break
+                print('  elenco %s: nessuna partita in quel mese' % a)
+                c = []
             if chiuso:
                 metti_in_cache(nome, c)
         tutte.extend(p for p in c if p.get('statusId') == 2)
@@ -324,12 +331,25 @@ def main():
 
     trova = abbinatore()
     righe, mancano_nomi, mancano_ris, fermato = [], 0, 0, None
+    vuote_di_fila, per_mese = 0, {}
     for p in sorted(partite, key=lambda x: x.get('startTime', ''), reverse=True):
         try:
             s = storico_di(p)
         except RuntimeError as e:
             fermato = str(e)
             break
+        # Si va all'indietro nel tempo. Se lo storico a un certo punto non
+        # c'e' piu', ogni partita piu' vecchia costerebbe una richiesta per
+        # niente: dopo otto vuote di fila ci si ferma.
+        if DURA not in s['case'] or 't3' not in s['case'][DURA]:
+            vuote_di_fila += 1
+            if vuote_di_fila >= 8:
+                fermato = ('lo storico non arriva prima del %s: otto partite di fila senza '
+                           'la quota di Pinnacle' % s['inizio'][:10])
+                break
+        else:
+            vuote_di_fila = 0
+            per_mese[s['inizio'][:7]] = per_mese.get(s['inizio'][:7], 0) + 1
         n1, n2 = nomi.get(str(s['p1'])), nomi.get(str(s['p2']))
         if not (n1 and n2):
             mancano_nomi += 1
@@ -348,6 +368,8 @@ def main():
     for b in [DURA] + MORBIDE:
         n = sum(1 for r in righe if b in r['case'] and 't3' in r['case'][b])
         print('  %-11s con la quota a 3 ore: %d partite' % (b, n))
+    print('  con Pinnacle, mese per mese: %s' % ', '.join(
+        '%s %d' % (m, per_mese[m]) for m in sorted(per_mese)))
     if len(righe) < 30:
         print('\nTROPPO POCHE PARTITE per dire qualunque cosa. Rilanciare quando la cache cresce.')
         return 0
