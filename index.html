@@ -1021,6 +1021,8 @@ function giocaSchedina(chiave){
   var gambe = sc.map(function(x){
     return {lega: (x.lega && x.lega.id) || LEGA_CASA,
             d: x.partita.d, c: x.partita.c, v: x.partita.v,
+            /* la quota si manda ancora, ma il server nuovo non la legge:
+               serve solo al Worker di prima, finche' non viene ripubblicato */
             mercato: x.id, quota: quotaGamba(x)};
   });
   chiediApi('/api/schedina', {metodo:'POST', corpo:{gambe: gambe}}).then(function(r){
@@ -2896,7 +2898,40 @@ function cardCapo(){
   } else {
     h += '<button class="btn" style="margin-top:9px" onclick="elencoCodici()">Vedi i codici che hai dato</button>';
   }
+  h += cardRegistro();
   return h;
+}
+
+/* Il registro del server: i saldi della classifica, i codici fatti e
+   revocati, i calendari rifiutati. Serve il giorno in cui qualcosa non
+   torna — "dove sono finiti i miei punti?" — e quel giorno la risposta deve
+   essere una riga con l'ora, non un'ipotesi. Si carica solo a richiesta. */
+function cardRegistro(){
+  var c = S.capo || (S.capo = {});
+  var h = '<div class="h2" style="margin-top:18px">Registro del server</div>';
+  if(!c.registro){
+    return h + '<button class="btn" onclick="caricaRegistro()"' + (c.registroInCorso ? ' disabled' : '') + '>' +
+      (c.registroInCorso ? 'Leggo…' : 'Cosa è successo di recente') + '</button>' +
+      (c.registroErrore ? '<div class="note warn" style="margin-top:9px">' + esc(c.registroErrore) + '</div>' : '');
+  }
+  if(!c.registro.length) return h + '<div class="note">Niente ancora: il registro parte da adesso.</div>';
+  return h + '<div class="card">' + c.registro.slice(0, 40).map(function(r){
+    return '<div class="row"><div class="n">' + esc(r.r || '') + '<em>' + esc(r.cosa || '') + ' · ' +
+      esc(daOra(r.quando)) + '</em></div></div>';
+  }).join('') + '</div>';
+}
+function caricaRegistro(){
+  var c = S.capo || (S.capo = {});
+  c.registroInCorso = true; c.registroErrore = null; render();
+  chiediApi('/api/admin/registro').then(function(r){
+    c.registroInCorso = false; c.registro = r.righe || []; render();
+  }).catch(function(e){
+    c.registroInCorso = false;
+    c.registroErrore = e.message === 'non trovato'
+      ? 'Il server non ha ancora il registro: va ripubblicato il Worker.'
+      : e.message;
+    render();
+  });
 }
 
 function creaCodice(){
@@ -3592,14 +3627,19 @@ function bottoneGioca(profilo, scelte, c){
   var fatta = S.schedinaFatta && S.schedinaFatta.chiave === chiave;
   if(fatta){
     return '<div class="note ok" style="margin-top:10px">Registrata: ' +
-      S.schedinaFatta.gambe + ' gambe a quota ' + nu(S.schedinaFatta.quota, 2) + '. ' +
+      S.schedinaFatta.gambe + ' gambe a quota ' + nu(S.schedinaFatta.quota, 2) +
+      ' (quote di mercato, calcolate dal server). ' +
       'Se esce, i punti arrivano quando le partite sono finite.</div>';
   }
+  /* Niente numero sul bottone: la quota di classifica la fa il server con le
+     quote del mercato, e puo' differire di qualche centesimo dalla stima
+     dell'app. Un bottone che promette 2.82 e registra 2.79 fa sembrare
+     truccato proprio il pezzo che adesso non lo e' piu'. Il numero vero si
+     vede subito dopo, nella riga "Registrata". */
   var inCorso = S.schedinaInCorso === chiave;
-  var q = quotaDaRegistrare(scelte);
   return '<button class="btn" style="margin-top:10px"' + (inCorso ? ' disabled' : '') +
       ' onclick="giocaSchedina(\'' + esc(chiave) + '\')">' +
-      (inCorso ? 'Registro…' : (ilMioNick() ? 'La gioco — ' + nu(q, 2) + ' in classifica'
+      (inCorso ? 'Registro…' : (ilMioNick() ? 'La gioco in classifica'
                                             : 'La gioco (serve un nome)')) + '</button>' +
     (S.schedinaErrore && S.schedinaInCorso === null && S._ultimaSchedina === chiave
       ? '<div class="note warn" style="margin-top:8px">' + esc(S.schedinaErrore) + '</div>' : '');

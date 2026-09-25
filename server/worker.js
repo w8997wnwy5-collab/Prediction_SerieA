@@ -249,10 +249,11 @@ async function postCodice(req, env) {
      l'e' appena portato dietro traslocando. Il server lo sapeva: bastava
      dirlo, invece di farlo chiedere un'altra volta. */
   const mio = await leggiGiocatore(env, gid);
+  const pt = await leggiPunti(env, gid, mio);
   return json({ gettone, tipo: voce.tipo, nome: voce.nome || '',
                 scade: voce.scade || null, capo: voce.tipo === 'capo',
                 nick: (mio && mio.nick) || null,
-                punti: (mio && mio.punti) || 0, vinte: (mio && mio.vinte) || 0 });
+                punti: pt.punti || 0, vinte: pt.vinte || 0 });
 }
 
 /* IL TRASLOCO
@@ -281,6 +282,12 @@ async function traslocaOspite(req, env, nuovo) {
   await env.CODICI.put('gioc:' + nuovo, JSON.stringify(g));
   await env.CODICI.put('nick:' + g.nick.toLowerCase(), nuovo);
   await env.CODICI.delete('gioc:' + vecchioIo.id);
+  const pt = await env.CODICI.get('punti:' + vecchioIo.id);
+  if (pt) {
+    await env.CODICI.put('punti:' + nuovo, pt);
+    await env.CODICI.delete('punti:' + vecchioIo.id);
+  }
+  await registra(env, 'trasloco', g.nick + ': da ospite a codice');
 
   /* e le schedine gia' registrate: senza, quelle in attesa pagherebbero
      punti a un giocatore che non c'e' piu' */
@@ -307,9 +314,10 @@ async function getIo(req, env) {
   d.valido = !!io;
   if (io) {
     const g = await leggiGiocatore(env, io.id);
+    const pt = await leggiPunti(env, io.id, g);
     d.nick = (g && g.nick) || null;
-    d.punti = (g && g.punti) || 0;
-    d.vinte = (g && g.vinte) || 0;
+    d.punti = pt.punti || 0;
+    d.vinte = pt.vinte || 0;
   }
   return json(d);
 }
@@ -405,6 +413,9 @@ async function adminCrea(req, env, chi) {
     usi: 0,
   };
   await env.CODICI.put('codice:' + normalizza(codice), JSON.stringify(voce));
+  /* il codice intero non va nel registro: e' una chiave, chi lo legge entra */
+  await registra(env, 'codice', tipo + ' per ' + (voce.nome || 'senza nome') +
+                 ' (' + codice.slice(0, 4) + '…), fatto da ' + (chi === 'segreto' ? 'pannello' : 'capo'));
   return json({ codice, ...voce });
 }
 
@@ -433,6 +444,8 @@ async function adminRevoca(req, env) {
   const voce = JSON.parse(grezzo);
   voce.revocato = new Date().toISOString();
   await env.CODICI.put('codice:' + codice, JSON.stringify(voce));
+  await registra(env, 'revoca', (voce.tipo || '?') + ' di ' + (voce.nome || 'senza nome') +
+                 ' (' + codice.slice(0, 4) + '…)');
   return json({ ok: true, codice, revocato: voce.revocato });
 }
 
@@ -471,8 +484,12 @@ async function adminCarica(req, env, lega) {
     const prima = daGiocare(vecchio, oggi);
     const dopo = daGiocare(corpo.calendario, oggi);
     if ((prima > 0 && dopo === 0) || (prima >= ACCORCIA_DA && dopo * 2 < prima)) {
+      await registra(env, 'calendario', lega + ' rifiutato: ' + dopo + ' partite da giocare invece di ' + prima);
       return json({ errore: 'calendario troppo corto, tengo quello di prima', prima, dopo }, 409);
     }
+  } else {
+    await registra(env, 'calendario', lega + ' depositato con forza=1: ' +
+                   corpo.calendario.length + ' partite');
   }
   await env.DATI.put('cal:' + lega, JSON.stringify({
     aggiornato: new Date().toISOString(), calendario: corpo.calendario,
@@ -508,9 +525,10 @@ async function adminCalendario(env, lega) {
 
      1. la schedina si registra PRIMA del fischio d'inizio. L'ora la decide il
         server guardando il suo orologio, non quello del telefono.
-     2. ogni gamba deve esistere nel calendario del server, con la stessa
-        partita e una quota che non si discosta da quella vera. Non si
-        registrano partite inventate ne' quote gonfiate.
+     2. ogni gamba deve esistere nel calendario del server, e la sua quota
+        la calcola il server dalle quote vere del mercato: quella che manda
+        il telefono non si legge nemmeno. Non si registrano partite
+        inventate ne' quote gonfiate.
      3. l'esito NON lo dice chi ha giocato. Lo calcola il giro dei dati, che
         vede i risultati, usando la stessa funzione con cui l'app decide se
         una giocata e' presa — M.haVinto. Una sola verita', non due.
@@ -545,6 +563,63 @@ async function chiaveGiocatore(codice, segreto) {
 async function leggiGiocatore(env, id) {
   const g = await env.CODICI.get('gioc:' + id);
   return g ? JSON.parse(g) : null;
+}
+
+/* I PUNTI HANNO UN PROPRIETARIO SOLO
+
+   Prima stavano dentro il record del giocatore, e quel record lo scrivevano
+   in due: il giro dei dati quando saldava, il telefono quando registrava
+   una schedina. Due scritture che si incrociano su KV — dove una lettura
+   puo' essere vecchia fino a un minuto — e una delle due sparisce: se
+   sparisce quella del giro, spariscono dei punti, e nessuno lo vede.
+
+   Adesso i punti stanno in una chiave loro, "punti:", che scrive SOLO il
+   giro dei dati. Dentro c'e' anche l'elenco delle schedine gia' contate:
+   se il giro cade fra "conto i punti" e "segno la schedina come saldata",
+   al giro dopo la schedina risulta ancora aperta ma i suoi punti non si
+   contano una seconda volta. Si puo' ripetere quante volte si vuole, e il
+   risultato e' lo stesso.
+
+   Il record del giocatore resta del giocatore: nome, e quante ne ha giocate.
+   I giocatori di prima avevano i punti li' dentro: finche' il giro non gli
+   salda una schedina nuova, si leggono da li'. */
+async function leggiPunti(env, id, g) {
+  const r = await env.CODICI.get('punti:' + id);
+  if (r) return JSON.parse(r);
+  if (g === undefined) g = await leggiGiocatore(env, id);
+  return { punti: (g && g.punti) || 0, vinte: (g && g.vinte) || 0, annullate: 0, contate: [] };
+}
+function giocateDi(g, pt) {
+  return Math.max(0, ((g && g.giocate) || 0) - ((pt && pt.annullate) || 0));
+}
+
+/* IL REGISTRO
+
+   Quando qualcosa non torna — dei punti che mancano, un codice che non
+   apre, un calendario rimasto vecchio — la domanda e' sempre "cosa e'
+   successo, e quando". Qui si scrive una riga per ogni cosa che conta:
+   i saldi, i codici fatti e revocati, i calendari rifiutati. Novanta
+   giorni e poi si cancellano da soli.
+
+   La chiave va all'indietro nel tempo (un numero che scende), cosi'
+   l'elenco di KV, che e' in ordine alfabetico, da' per prime le piu'
+   recenti. E il riassunto sta nei metadati: per leggere il registro basta
+   l'elenco, senza aprire una chiave per volta. */
+const REGISTRO_GIORNI = 90;
+async function registra(env, cosa, riassunto, dettaglio) {
+  try {
+    const ora = Date.now();
+    const k = 'log:' + String(9999999999999 - ora).padStart(13, '0') + ':' + nuovoId().slice(0, 4);
+    await env.CODICI.put(k, JSON.stringify(Object.assign({ cosa, quando: new Date(ora).toISOString() },
+                                                         dettaglio || {})), {
+      expirationTtl: REGISTRO_GIORNI * 86400,
+      metadata: { cosa, quando: new Date(ora).toISOString(), r: String(riassunto || '').slice(0, 300) },
+    });
+  } catch (e) { /* un registro che si rompe non deve rompere quello che registra */ }
+}
+async function adminRegistro(env) {
+  const p = await env.CODICI.list({ prefix: 'log:', limit: 150 });
+  return json({ righe: p.keys.map((k) => k.metadata || { cosa: '?', r: k.name }) });
 }
 
 /* Chi sta chiedendo, in termini di classifica: l'impronta, e che grado ha. */
@@ -622,16 +697,19 @@ async function postNick(req, env) {
      ricominciare ogni volta. */
   if (vecchio && vecchio.nick) {
     if (vecchio.nick.toLowerCase() === nick.toLowerCase()) {
-      return json({ nick: vecchio.nick, punti: vecchio.punti || 0, vinte: vecchio.vinte || 0,
-                    giocate: vecchio.giocate || 0, tipo: vecchio.tipo || io.tipo });
+      const pt = await leggiPunti(env, io.id, vecchio);
+      return json({ nick: vecchio.nick, punti: pt.punti || 0, vinte: pt.vinte || 0,
+                    giocate: giocateDi(vecchio, pt), tipo: vecchio.tipo || io.tipo });
     }
     return json({ errore: 'il nome si sceglie una volta sola', nick: vecchio.nick }, 409);
   }
-  const g = Object.assign({ punti: 0, vinte: 0, giocate: 0 }, vecchio || {},
+  const g = Object.assign({ giocate: 0 }, vecchio || {},
                           { nick, tipo: io.tipo, aggiornato: new Date().toISOString() });
   await env.CODICI.put('gioc:' + io.id, JSON.stringify(g));
   await env.CODICI.put(chiave2, io.id);
-  return json({ nick: g.nick, punti: g.punti, vinte: g.vinte, giocate: g.giocate, tipo: g.tipo });
+  const pt = await leggiPunti(env, io.id, g);
+  return json({ nick: g.nick, punti: pt.punti || 0, vinte: pt.vinte || 0,
+                giocate: giocateDi(g, pt), tipo: g.tipo });
 }
 
 async function getClassifica(req, env) {
@@ -643,8 +721,9 @@ async function getClassifica(req, env) {
     for (const k of p.keys) {
       const v = JSON.parse(await env.CODICI.get(k.name) || '{}');
       if (!v.nick) continue;
+      const pt = await leggiPunti(env, k.name.slice(5), v);
       fuori.push({ id: k.name.slice(5), nick: v.nick, tipo: v.tipo || 'libero',
-                   punti: v.punti || 0, vinte: v.vinte || 0, giocate: v.giocate || 0 });
+                   punti: pt.punti || 0, vinte: pt.vinte || 0, giocate: giocateDi(v, pt) });
     }
     cursore = p.list_complete ? null : p.cursor;
   } while (cursore);
@@ -657,6 +736,129 @@ async function getClassifica(req, env) {
   return json({ classifica: senzaId, quanti: fuori.length,
                 io: mio ? { posto: mio.posto, nick: mio.nick, punti: mio.punti,
                             vinte: mio.vinte, giocate: mio.giocate, tipo: mio.tipo } : null });
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   LE QUOTE DELLA CLASSIFICA LE FA IL SERVER
+
+   Prima la quota di ogni gamba la dichiarava il telefono, e qui c'era solo
+   un tetto: due volte e mezzo l'esito piu' lungo della partita. Il commento
+   diceva che cosi' chi bara guadagnava "meno del doppio" di chi gioca
+   onesto. Era falso: un Over 1.5 che vale 1.20 si poteva dichiarare a 10, e
+   una doppia cosi' valeva 66 punti invece di 5 — tredici volte tanto, su
+   gambe che escono quasi sempre.
+
+   Adesso il telefono dice COSA gioca, e il prezzo lo fa il server, con le
+   quote vere dei bookmaker che ha gia' in calendario:
+
+     1X2 e doppia chance   dalle quote dell'1X2, tolto il margine
+     tutti i mercati gol   da due Poisson tarate sulle quote dell'1X2 e
+                           dell'Over/Under 2.5: il totale dei gol si tara
+                           sull'Over 2.5, la divisione fra le due squadre
+                           sulla differenza fra vittoria in casa e fuori
+
+   e poi il ricarico medio del banco, lo stesso che mostra l'app. I punti
+   diventano quote di MERCATO, non del modello di Monthline: per una
+   classifica fra amici e' anche piu' giusto — nessuno viene premiato perche'
+   il nostro modello sbaglia a suo favore.
+
+   Quello che non si sa prezzare (il primo tempo, le combinazioni, gli
+   handicap) in classifica non entra. Meglio un "no" chiaro che un prezzo
+   inventato: il prezzo inventato era proprio il buco.
+   ══════════════════════════════════════════════════════════════════════════ */
+const RICARICO_CLASSIFICA = 0.056;   /* bet365 misurato su 1930 partite: e' il default dell'app */
+
+function probEque(q) {
+  if (!Array.isArray(q) || !q.every((x) => x > 1)) return null;
+  const inv = q.map((x) => 1 / x), s = inv.reduce((a, b) => a + b, 0);
+  return inv.map((x) => x / s);
+}
+function poisson(k, l) {
+  let p = Math.exp(-l);
+  for (let i = 1; i <= k; i++) p *= l / i;
+  return p;
+}
+function fraGol(a, b, l) {             /* P(a <= gol <= b) con gol ~ Poisson(l) */
+  let s = 0;
+  for (let k = a; k <= b; k++) s += poisson(k, l);
+  return s;
+}
+/* Il totale dei gol che rende l'Over 2.5 esattamente quello del mercato. */
+function totaleDaOver(po) {
+  let a = 0.05, b = 9;
+  for (let i = 0; i < 60; i++) {
+    const m = (a + b) / 2;
+    if (1 - fraGol(0, 2, m) < po) a = m; else b = m;
+  }
+  return (a + b) / 2;
+}
+/* Come si divide il totale fra le due squadre: la quota di casa che rende
+   "vince la casa meno vince l'ospite" uguale a quella del mercato. */
+function divisione(T, diff) {
+  const scarto = (s) => {
+    const lc = T * s, lv = T * (1 - s);
+    let d = 0;
+    for (let i = 0; i <= 12; i++) {
+      for (let j = 0; j <= 12; j++) {
+        if (i !== j) d += (i > j ? 1 : -1) * poisson(i, lc) * poisson(j, lv);
+      }
+    }
+    return d;
+  };
+  let a = 0.02, b = 0.98;
+  for (let i = 0; i < 40; i++) {
+    const m = (a + b) / 2;
+    if (scarto(m) < diff) a = m; else b = m;
+  }
+  const s = (a + b) / 2;
+  return [T * s, T * (1 - s)];
+}
+
+/* La probabilita' di un mercato, o null se il server non la sa. */
+function probMercato(p, id) {
+  const x1x2 = probEque(p.qex) || probEque(p.q);
+  const pou = probEque(p.qou);
+  const quale = { '1': 0, 'X': 1, '2': 2 };
+  if (id in quale) return x1x2 ? x1x2[quale[id]] : null;
+  const dc = { '1X': [0, 1], 'X2': [1, 2], '12': [0, 2] };
+  if (id in dc) return x1x2 ? x1x2[dc[id][0]] + x1x2[dc[id][1]] : null;
+
+  if (!pou) return null;
+  const T = totaleDaOver(pou[0]);
+  let m;
+  if ((m = /^([OU])([0-9])5$/.exec(id))) {                 /* Over/Under k.5 */
+    const sotto = fraGol(0, +m[2], T);
+    return m[1] === 'U' ? sotto : 1 - sotto;
+  }
+  if ((m = /^MG([0-9])([0-9])$/.exec(id))) return fraGol(+m[1], +m[2], T);   /* multigol */
+  if ((m = /^G([0-9])$/.exec(id))) return poisson(+m[1], T);                  /* gol esatti */
+  if (id === 'G4P') return 1 - fraGol(0, 3, T);
+  if (id === 'PARI' || id === 'DISP') {
+    let pari = 0;
+    for (let k = 0; k <= 20; k += 2) pari += poisson(k, T);
+    return id === 'PARI' ? pari : 1 - pari;
+  }
+
+  if (!x1x2) return null;
+  const [lc, lv] = divisione(T, x1x2[0] - x1x2[2]);
+  const segna = { SC: 1 - poisson(0, lc), SV: 1 - poisson(0, lv) };
+  if (id in segna) return segna[id];
+  if (id === 'GG') return segna.SC * segna.SV;
+  if (id === 'NG') return 1 - segna.SC * segna.SV;
+  if (id === 'CNP') return poisson(0, lv);                  /* casa non subisce */
+  if (id === 'VNP') return poisson(0, lc);                  /* ospite non subisce */
+  if ((m = /^T([CV])([0-9])5$/.exec(id))) {                 /* gol di una squadra */
+    return 1 - fraGol(0, +m[2], m[1] === 'C' ? lc : lv);
+  }
+  return null;
+}
+
+/* La quota di classifica di una gamba: equa meno il ricarico, a due
+   decimali, come la scrive un bookmaker. */
+function quotaServer(p, id) {
+  const pr = probMercato(p, String(id || '').toUpperCase());
+  if (!(pr > 0.001 && pr < 0.995)) return null;
+  return Math.round((1 / pr) * (1 - RICARICO_CLASSIFICA) * 100) / 100;
 }
 
 /* Una schedina registrata prima del fischio d'inizio. */
@@ -683,32 +885,16 @@ async function postSchedina(req, env) {
     const p = cal.filter(x => x.d === gamba.d && x.c === gamba.c && x.v === gamba.v)[0];
     if (!p) return json({ errore: 'questa partita non e in calendario' }, 400);
     if (inizioDi(p) <= adesso) return json({ errore: 'questa partita e gia cominciata' }, 409);
-    const quota = Number(gamba.quota);
-    if (!(quota > 1.01)) return json({ errore: 'quota fuori scala' }, 400);
-
-    /* La quota la dichiara il telefono, e sui punti pesa: un tetto ci vuole.
-
-       Il server non puo' VERIFICARLA — l'app offre sessantacinque mercati e
-       il calendario ne porta le quote di due — quindi qui non si pretende di
-       sapere quella giusta. Si sa pero' quanto puo' essere alta: nessun
-       mercato di una partita e' molto piu' lungo del suo esito piu' lungo.
-       Il tetto e' due volte e mezzo quello, con un minimo per le partite
-       equilibrate e un massimo assoluto.
-
-       Non e' una prova, e' un argine, e va detto per quello che e': chi vuole
-       barare puo' ancora gonfiare un po'. Quello che non puo' fare e' gonfiare
-       DI MOLTO — senza tetto una schedina inventata da mille varrebbe cento
-       punti e la classifica finirebbe li'. Con il tetto il guadagno di chi
-       imbroglia sta sotto il doppio di chi gioca onesto, e gli altri tre
-       chiodi (prima del fischio, partite vere, esito deciso dal giro dei
-       dati) restano inchiodati. */
-    const qs = (Array.isArray(p.q) ? p.q : []).filter((x) => x > 1);
-    const tetto = Math.min(25, Math.max(6, 2.5 * (qs.length ? Math.max(...qs) : 4)));
-    if (quota > tetto) {
-      return json({ errore: 'quota troppo alta per questa partita' }, 400);
+    /* La quota che manda il telefono non si legge nemmeno: il prezzo lo fa
+       il server (vedi sopra). */
+    const mercato = String(gamba.mercato || '').toUpperCase().slice(0, 24);
+    const quota = quotaServer(p, mercato);
+    if (quota == null) {
+      return json({ errore: 'in classifica non si puo prezzare ' + (mercato || 'questo mercato') +
+                            ' su ' + p.c + ' - ' + p.v + ': mancano le quote o il mercato' }, 400);
     }
-    pulite.push({ lega, d: p.d, o: p.o || null, c: p.c, v: p.v,
-                  mercato: String(gamba.mercato || '').slice(0, 24), quota });
+    if (!(quota > 1.01)) return json({ errore: 'una gamba a ' + quota + ' non paga niente' }, 400);
+    pulite.push({ lega, d: p.d, o: p.o || null, c: p.c, v: p.v, mercato, quota });
   }
   const quota = pulite.reduce((t, x) => t * x.quota, 1);
   if (quota > 500) return json({ errore: 'schedina troppo lunga per la classifica' }, 400);
@@ -723,10 +909,36 @@ async function postSchedina(req, env) {
 
 /* L'orario del fischio d'inizio, in millisecondi. Senza ora si prende
    mezzogiorno: sbagliare di qualche ora sul giorno giusto e' molto meglio
-   che accettare una schedina il giorno dopo la partita. */
+   che accettare una schedina il giorno dopo la partita.
+
+   Gli orari del calendario sono italiani, per tutti e cinque i campionati.
+   Qui c'era scritto "meno due ore", cioe' l'ora legale fissata a mano: dal
+   25 ottobre, con l'ora solare, il server avrebbe chiuso le schedine un'ora
+   prima del fischio — proprio l'ora in cui si gioca, prima delle
+   formazioni. Adesso lo scarto di Roma si chiede al calendario vero, giorno
+   per giorno. */
+function scartoRoma(ms) {
+  try {
+    const parti = {};
+    new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Europe/Rome', hourCycle: 'h23', year: 'numeric', month: '2-digit',
+      day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit',
+    }).formatToParts(new Date(ms)).forEach((x) => { parti[x.type] = x.value; });
+    return Date.UTC(+parti.year, +parti.month - 1, +parti.day,
+                    +parti.hour, +parti.minute, +parti.second) - ms;
+  } catch (e) {
+    return 2 * 3600000;       /* senza fusi orari si torna a com'era: meglio che niente */
+  }
+}
 function inizioDi(p) {
   const o = /^\d{2}:\d{2}$/.test(p.o || '') ? p.o : '12:00';
-  return new Date(p.d + 'T' + o + ':00Z').getTime() - 2 * 3600000;
+  const comeSeUtc = new Date(p.d + 'T' + o + ':00Z').getTime();
+  /* Lo scarto si misura all'istante giusto: una prima stima, poi si
+     ricontrolla li'. Serve solo nella notte del cambio d'ora, ma costa niente. */
+  let t = comeSeUtc - scartoRoma(comeSeUtc);
+  const s = scartoRoma(t);
+  if (comeSeUtc - s !== t) t = comeSeUtc - s;
+  return t;
 }
 
 function nuovoId() {
@@ -757,6 +969,7 @@ async function postSalda(req, env) {
   let c; try { c = await req.json(); } catch (e) { c = {}; }
   const esiti = Array.isArray(c.esiti) ? c.esiti : [];
   let saldate = 0, punti = 0;
+  const conti = {}, righe = [];
   for (const e of esiti) {
     const k = String(e.chiave || '');
     if (!k.startsWith('sch:')) continue;
@@ -764,41 +977,41 @@ async function postSalda(req, env) {
     if (!grezzo) continue;
     const sch = JSON.parse(grezzo);
     if (sch.stato !== 'aperta') continue;
+    const gid = k.split(':')[1];
+    const pt = conti[gid] || (conti[gid] = await leggiPunti(env, gid));
+    if (!Array.isArray(pt.contate)) pt.contate = [];
 
     /* Annullata: una gamba il cui esito non si riesce a decidere nemmeno
        dopo giorni — di solito un mercato sul primo tempo quando l'archivio
        il primo tempo non ce l'ha. Non e' ne' vinta ne' persa, e contarla
        persa sarebbe una bugia a spese di chi ha giocato: si toglie di mezzo
        e si scala dalle giocate, come se non fosse mai stata fatta. */
-    if (e.annulla === true) {
-      sch.stato = 'annullata';
-      sch.saldata = new Date().toISOString();
-      sch.punti = 0;
-      await env.CODICI.put(k, JSON.stringify(sch));
-      const gid = k.split(':')[1];
-      const gg = await leggiGiocatore(env, gid);
-      if (gg) {
-        gg.giocate = Math.max(0, (gg.giocate || 1) - 1);
-        await env.CODICI.put('gioc:' + gid, JSON.stringify(gg));
-      }
-      saldate++;
-      continue;
-    }
-    const vinta = e.vinta === true;
-    sch.stato = vinta ? 'vinta' : 'persa';
-    sch.saldata = new Date().toISOString();
-    sch.punti = vinta ? puntiDi(sch.quota) : 0;
-    await env.CODICI.put(k, JSON.stringify(sch));
+    const annulla = e.annulla === true;
+    const vinta = !annulla && e.vinta === true;
+    const suoi = vinta ? puntiDi(sch.quota) : 0;
 
-    const id = k.split(':')[1];
-    const g = await leggiGiocatore(env, id);
-    if (g) {
-      g.punti = (g.punti || 0) + sch.punti;
-      if (vinta) g.vinte = (g.vinte || 0) + 1;
-      g.aggiornato = new Date().toISOString();
-      await env.CODICI.put('gioc:' + id, JSON.stringify(g));
+    /* Prima i punti, poi la schedina. Nell'ordine inverso un giro che cade
+       in mezzo lascerebbe una schedina saldata senza i suoi punti, e nessun
+       giro dopo li rimetterebbe. Cosi' invece il giro dopo la trova ancora
+       aperta, vede che e' gia' contata, e la chiude soltanto. */
+    if (pt.contate.indexOf(sch.id) < 0) {
+      if (annulla) pt.annullate = (pt.annullate || 0) + 1;
+      else { pt.punti = (pt.punti || 0) + suoi; if (vinta) pt.vinte = (pt.vinte || 0) + 1; }
+      pt.contate.push(sch.id);
+      if (pt.contate.length > 5000) pt.contate = pt.contate.slice(-5000);
+      pt.aggiornato = new Date().toISOString();
+      await env.CODICI.put('punti:' + gid, JSON.stringify(pt));
     }
-    saldate++; punti += sch.punti;
+    sch.stato = annulla ? 'annullata' : (vinta ? 'vinta' : 'persa');
+    sch.saldata = new Date().toISOString();
+    sch.punti = suoi;
+    await env.CODICI.put(k, JSON.stringify(sch));
+    saldate++; punti += suoi;
+    righe.push(sch.stato + ' ' + sch.quota + (suoi ? ' +' + suoi : ''));
+  }
+  if (saldate) {
+    await registra(env, 'saldo', saldate + ' schedine, ' + punti + ' punti: ' + righe.join(', '),
+                   { righe });
   }
   return json({ saldate, punti });
 }
@@ -852,6 +1065,7 @@ export default {
           if (via === '/api/admin/crea' && req.method === 'POST') return await adminCrea(req, env, chi);
           if (via === '/api/admin/elenco' && req.method === 'GET') return await adminElenco(env);
           if (via === '/api/admin/revoca' && req.method === 'POST') return await adminRevoca(req, env);
+          if (via === '/api/admin/registro' && req.method === 'GET') return await adminRegistro(env);
         }
         return json({ errore: 'non trovato' }, 404);
       } catch (e) {

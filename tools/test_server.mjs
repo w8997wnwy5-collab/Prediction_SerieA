@@ -33,7 +33,8 @@ function kvFinta() {
       return v.val;
     },
     async put(k, val, opz) {
-      m.set(k, { val, scadeA: opz && opz.expirationTtl ? Date.now() + opz.expirationTtl * 1000 : 0 });
+      m.set(k, { val, scadeA: opz && opz.expirationTtl ? Date.now() + opz.expirationTtl * 1000 : 0,
+                 metadata: (opz && opz.metadata) || null });
     },
     /* C'era il buco: questa finta KV non sapeva cancellare, e la KV vera si'.
        Il primo codice che ha provato a cancellare una chiave ha preso un 500
@@ -41,8 +42,10 @@ function kvFinta() {
        doppione di prova che offre MENO dell'originale non prova il codice:
        prova il doppione. */
     async delete(k) { m.delete(k); },
-    async list({ prefix, cursor }) {
-      const keys = [...m.keys()].filter(k => k.startsWith(prefix || '')).map(name => ({ name }));
+    /* come la vera: in ordine alfabetico, coi metadati, e col limite */
+    async list({ prefix, cursor, limit }) {
+      const keys = [...m.keys()].filter(k => k.startsWith(prefix || '')).sort()
+        .slice(0, limit || 1000).map(name => ({ name, metadata: m.get(name).metadata }));
       return { keys, list_complete: true, cursor: null };
     },
   };
@@ -323,10 +326,18 @@ async function entra(env, codice) {
   const env = ambiente();
   const giorno = (n) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
   await env.DATI.put('cal:I1', JSON.stringify({ aggiornato: 'ora', calendario: [
-    { d: giorno(3), o: '20:45', c: 'Inter', v: 'Milan', q: [2, 3.3, 3.8] },
-    { d: giorno(4), o: '15:00', c: 'Roma', v: 'Lazio', q: [2.2, 3.2, 3.4] },
+    { d: giorno(3), o: '20:45', c: 'Inter', v: 'Milan', q: [2, 3.3, 3.8], qou: [1.9, 1.95] },
+    { d: giorno(4), o: '15:00', c: 'Roma', v: 'Lazio', q: [2.2, 3.2, 3.4], qou: [2.05, 1.8] },
     { d: giorno(-2), o: '20:45', c: 'Napoli', v: 'Juve', q: [2.1, 3.3, 3.5] },
+    { d: giorno(5), o: '18:00', c: 'Genoa', v: 'Lecce', q: [2.3, 3.1, 3.2] },
+    { d: giorno(6), o: '18:00', c: 'Como', v: 'Pisa' },
   ] }));
+  /* il prezzo onesto, calcolato qui a parte: quota equa senza margine, meno
+     il ricarico della classifica, a due decimali */
+  const equa = (q, i) => { const inv = q.map(x => 1 / x); return inv[i] / inv.reduce((a, b) => a + b, 0); };
+  const prezzo = (pr) => Math.round((1 / pr) * (1 - 0.056) * 100) / 100;
+  const q1Roma = prezzo(equa([2.2, 3.2, 3.4], 0));
+  const qOver = prezzo(equa([1.9, 1.95], 0));
 
   const cod = await creaCodice(env, { tipo: 'vip', nome: 'uno' });
   const g = (await entra(env, cod)).corpo.gettone;
@@ -362,23 +373,47 @@ async function entra(env, codice) {
 
   /* la schedina vera */
   const ok = await leggi(await chiedi(env, '/api/schedina', { metodo: 'POST', gettone: g, corpo: {
-    gambe: [{ lega: 'I1', d: giorno(3), c: 'Inter', v: 'Milan', mercato: 'o15', quota: 1.30 },
-            { lega: 'I1', d: giorno(4), c: 'Roma', v: 'Lazio', mercato: 'casa', quota: 2.20 }] } }));
-  prova('una schedina su partite vere si registra',
-        ok.stato === 200 && Math.abs(ok.corpo.quota - 2.86) < 0.001, ok.corpo && ok.corpo.quota);
+    gambe: [{ lega: 'I1', d: giorno(3), c: 'Inter', v: 'Milan', mercato: 'o25', quota: 1.95 },
+            { lega: 'I1', d: giorno(4), c: 'Roma', v: 'Lazio', mercato: '1', quota: 2.20 }] } }));
+  prova('una schedina su partite vere si registra, AL PREZZO DEL SERVER',
+        ok.stato === 200 && Math.abs(ok.corpo.quota - qOver * q1Roma) < 0.002,
+        ok.corpo && ok.corpo.quota + ' invece di ' + (qOver * q1Roma));
+  prova('la gamba 1X2 costa quanto il mercato senza margine, meno il ricarico',
+        ok.corpo.gambe[1].quota === q1Roma, ok.corpo.gambe && ok.corpo.gambe[1].quota + ' / ' + q1Roma);
+  prova('e l\'Over 2.5 esattamente quanto il suo mercato: la Poisson si tara li\'',
+        ok.corpo.gambe[0].quota === qOver, ok.corpo.gambe && ok.corpo.gambe[0].quota + ' / ' + qOver);
 
   /* I TRE CHIODI */
   const tardi = await leggi(await chiedi(env, '/api/schedina', { metodo: 'POST', gettone: g, corpo: {
-    gambe: [{ lega: 'I1', d: giorno(-2), c: 'Napoli', v: 'Juve', mercato: 'casa', quota: 2.1 }] } }));
+    gambe: [{ lega: 'I1', d: giorno(-2), c: 'Napoli', v: 'Juve', mercato: '1', quota: 2.1 }] } }));
   prova('UNA PARTITA GIA COMINCIATA NON SI REGISTRA', tardi.stato === 409, tardi.stato);
 
   const finta = await leggi(await chiedi(env, '/api/schedina', { metodo: 'POST', gettone: g, corpo: {
-    gambe: [{ lega: 'I1', d: giorno(3), c: 'Atalanta', v: 'Torino', mercato: 'casa', quota: 2.1 }] } }));
+    gambe: [{ lega: 'I1', d: giorno(3), c: 'Atalanta', v: 'Torino', mercato: '1', quota: 2.1 }] } }));
   prova('UNA PARTITA INVENTATA NON SI REGISTRA', finta.stato === 400, finta.stato);
 
+  /* Il buco vero: la quota la dichiarava il telefono, e il tetto lasciava
+     passare un Over 1.5 a 10. Adesso quella che manda non si legge nemmeno. */
+  const onesta = await leggi(await chiedi(env, '/api/schedina', { metodo: 'POST', gettone: g, corpo: {
+    gambe: [{ lega: 'I1', d: giorno(3), c: 'Inter', v: 'Milan', mercato: 'O15', quota: 1.2 }] } }));
   const gonfia = await leggi(await chiedi(env, '/api/schedina', { metodo: 'POST', gettone: g, corpo: {
     gambe: [{ lega: 'I1', d: giorno(3), c: 'Inter', v: 'Milan', mercato: 'O15', quota: 90 }] } }));
-  prova('UNA QUOTA GONFIATA NON PASSA', gonfia.stato === 400, gonfia.stato);
+  prova('UNA QUOTA GONFIATA NON CONTA: il prezzo lo fa il server',
+        gonfia.corpo.quota === onesta.corpo.quota && gonfia.corpo.quota < 1.5,
+        gonfia.corpo.quota + ' / ' + onesta.corpo.quota);
+  const o15 = onesta.corpo.quota;
+  prova('e l\'Over 1.5 costa meno dell\'Over 2.5, come deve', o15 < qOver, o15 + ' / ' + qOver);
+
+  const ignoto = await leggi(await chiedi(env, '/api/schedina', { metodo: 'POST', gettone: g, corpo: {
+    gambe: [{ lega: 'I1', d: giorno(3), c: 'Inter', v: 'Milan', mercato: 'PT1', quota: 3 }] } }));
+  prova('UN MERCATO CHE IL SERVER NON SA PREZZARE NON ENTRA IN CLASSIFICA',
+        ignoto.stato === 400 && /prezzare/.test(ignoto.corpo.errore), ignoto.corpo && ignoto.corpo.errore);
+  const senzaGol = await leggi(await chiedi(env, '/api/schedina', { metodo: 'POST', gettone: g, corpo: {
+    gambe: [{ lega: 'I1', d: giorno(5), c: 'Genoa', v: 'Lecce', mercato: 'O25', quota: 2 }] } }));
+  prova('senza le quote dei gol i mercati sui gol non passano', senzaGol.stato === 400, senzaGol.stato);
+  const senzaNiente = await leggi(await chiedi(env, '/api/schedina', { metodo: 'POST', gettone: g, corpo: {
+    gambe: [{ lega: 'I1', d: giorno(6), c: 'Como', v: 'Pisa', mercato: '1', quota: 2 }] } }));
+  prova('e una partita senza quote non passa per niente', senzaNiente.stato === 400, senzaNiente.stato);
 
   const suoi = await leggi(await chiedi(env, '/api/admin/salda', { metodo: 'POST', gettone: g,
     corpo: { esiti: [{ chiave: 'sch:x:y', vinta: true }] } }));
@@ -387,25 +422,79 @@ async function entra(env, codice) {
   /* il giro dei dati invece si', ed e' l'unico */
   const pend = await leggi(await chiedi(env, '/api/admin/pendenti', { admin: env.SEGRETO_ADMIN }));
   prova('il giro dei dati vede le schedine da saldare',
-        pend.stato === 200 && pend.corpo.quante === 1, pend.corpo && pend.corpo.quante);
+        pend.stato === 200 && pend.corpo.quante === 3, pend.corpo && pend.corpo.quante);
+  const miaPend = pend.corpo.schedine.filter(x => Math.abs(x.quota - ok.corpo.quota) < 0.001)[0];
 
+  const attesi = Math.max(1, Math.round(10 * Math.log2(ok.corpo.quota)));
   const saldo = await leggi(await chiedi(env, '/api/admin/salda', { metodo: 'POST', admin: env.SEGRETO_ADMIN,
-    corpo: { esiti: [{ chiave: pend.corpo.schedine[0].chiave, vinta: true }] } }));
-  /* 10 x log2(2.86) = 15 */
+    corpo: { esiti: [{ chiave: miaPend.chiave, vinta: true }] } }));
   prova('e i punti li mette lui: 10 per il logaritmo della quota',
-        saldo.corpo.saldate === 1 && saldo.corpo.punti === 15, JSON.stringify(saldo.corpo));
+        saldo.corpo.saldate === 1 && saldo.corpo.punti === attesi, JSON.stringify(saldo.corpo) + ' / ' + attesi);
 
   const cl = await leggi(await chiedi(env, '/api/classifica', { gettone: g }));
   prova('la classifica mostra il nome, non il codice',
-        cl.corpo.classifica[0].nick === 'Cristian' && cl.corpo.classifica[0].punti === 15,
+        cl.corpo.classifica[0].nick === 'Cristian' && cl.corpo.classifica[0].punti === attesi,
         JSON.stringify(cl.corpo.classifica[0]));
   prova('e dice a ognuno il suo posto', cl.corpo.io && cl.corpo.io.posto === 1);
   prova('nessuna impronta esce insieme al nome',
         cl.corpo.classifica.every(x => x.id === undefined));
 
   const dinuovo = await leggi(await chiedi(env, '/api/admin/salda', { metodo: 'POST', admin: env.SEGRETO_ADMIN,
-    corpo: { esiti: [{ chiave: pend.corpo.schedine[0].chiave, vinta: true }] } }));
+    corpo: { esiti: [{ chiave: miaPend.chiave, vinta: true }] } }));
   prova('una schedina saldata due volte non paga due volte', dinuovo.corpo.saldate === 0);
+
+  /* IL GIRO CHE CADE A META': i punti sono gia' scritti, la schedina no.
+     Si rimette la schedina "aperta" a mano, come l'avrebbe lasciata il crollo. */
+  {
+    const grezzo = JSON.parse(await env.CODICI.get(miaPend.chiave));
+    grezzo.stato = 'aperta';
+    await env.CODICI.put(miaPend.chiave, JSON.stringify(grezzo));
+    const rifatto = await leggi(await chiedi(env, '/api/admin/salda', { metodo: 'POST',
+      admin: env.SEGRETO_ADMIN, corpo: { esiti: [{ chiave: miaPend.chiave, vinta: true }] } }));
+    const dopoCrollo = await leggi(await chiedi(env, '/api/io', { gettone: g }));
+    prova('UN GIRO CADUTO A META\' NON PAGA DUE VOLTE: si chiude la schedina e basta',
+          dopoCrollo.corpo.punti === attesi &&
+          JSON.parse(await env.CODICI.get(miaPend.chiave)).stato === 'vinta',
+          dopoCrollo.corpo.punti + ' / ' + attesi + ' ' + JSON.stringify(rifatto.corpo));
+  }
+
+  /* I PUNTI HANNO UN PROPRIETARIO SOLO: registrare una schedina dopo il
+     saldo non tocca i punti, anche se il record del giocatore si riscrive */
+  await chiedi(env, '/api/schedina', { metodo: 'POST', gettone: g, corpo: {
+    gambe: [{ lega: 'I1', d: giorno(4), c: 'Roma', v: 'Lazio', mercato: 'X', quota: 3 }] } });
+  const dopoGiocata = await leggi(await chiedi(env, '/api/io', { gettone: g }));
+  prova('UNA SCHEDINA NUOVA NON PUO\' CANCELLARE I PUNTI DI UN SALDO',
+        dopoGiocata.corpo.punti === attesi, dopoGiocata.corpo.punti);
+
+  /* i giocatori di prima avevano i punti dentro il loro record */
+  {
+    await env.CODICI.put('gioc:vecchio1', JSON.stringify({ nick: 'Veterano', tipo: 'vip',
+      punti: 30, vinte: 2, giocate: 5 }));
+    const clv = await leggi(await chiedi(env, '/api/classifica', { gettone: g }));
+    const vet = clv.corpo.classifica.filter(x => x.nick === 'Veterano')[0];
+    prova('i punti di prima si leggono ancora da dove stavano',
+          vet && vet.punti === 30 && vet.vinte === 2 && vet.giocate === 5, JSON.stringify(vet));
+    await env.CODICI.put('sch:vecchio1:zz1', JSON.stringify({ id: 'zz1', quota: 4, stato: 'aperta',
+      gambe: [] }));
+    await chiedi(env, '/api/admin/salda', { metodo: 'POST', admin: env.SEGRETO_ADMIN,
+      corpo: { esiti: [{ chiave: 'sch:vecchio1:zz1', vinta: true }] } });
+    const clv2 = await leggi(await chiedi(env, '/api/classifica', { gettone: g }));
+    const vet2 = clv2.corpo.classifica.filter(x => x.nick === 'Veterano')[0];
+    prova('e il primo saldo nuovo ci somma sopra invece di ripartire da zero',
+          vet2 && vet2.punti === 50 && vet2.vinte === 3, JSON.stringify(vet2));
+  }
+
+  /* IL REGISTRO: cosa e' successo, e quando */
+  {
+    const reg = await leggi(await chiedi(env, '/api/admin/registro', { admin: env.SEGRETO_ADMIN }));
+    prova('il registro racconta i saldi, i piu\' recenti per primi',
+          reg.stato === 200 && reg.corpo.righe[0].cosa === 'saldo' &&
+          reg.corpo.righe.some(r => r.cosa === 'codice'), JSON.stringify(reg.corpo.righe.slice(0, 3)));
+    prova('e nel registro il codice intero non c\'e\' mai',
+          !JSON.stringify(reg.corpo).includes(cod), 'codice trovato nel registro');
+    const vipReg = await chiedi(env, '/api/admin/registro', { gettone: g });
+    prova('un VIP il registro non lo legge', vipReg.status === 401, vipReg.status);
+  }
 
   /* IL TRASLOCO: l'ospite che paga non ricomincia da capo */
   {
@@ -551,6 +640,40 @@ async function entra(env, codice) {
   prova('NEMMENO DAL CAPO: e\' il mestiere della Action', capo.status === 401, capo.status);
   const manca = await chiedi(env, '/api/admin/calendario/D1', { admin: env.SEGRETO_ADMIN });
   prova('e un campionato mai depositato dice 404, non un calendario vuoto finto', manca.status === 404);
+}
+
+/* ═══ 10. il fischio d'inizio, con l'ora legale e con quella solare ═══
+   Gli orari del calendario sono italiani. Il server faceva "meno due ore"
+   fisso: dal 25 ottobre avrebbe chiuso le schedine un'ora prima del fischio.
+   Qui si sposta l'orologio del server sui due lati del cambio d'ora. */
+{
+  const env = ambiente();
+  await env.DATI.put('cal:I1', JSON.stringify({ aggiornato: 'ora', calendario: [
+    { d: '2026-10-24', o: '15:00', c: 'Estate', v: 'Legale', q: [2, 3.3, 3.8], qou: [1.9, 1.95] },
+    { d: '2026-10-26', o: '15:00', c: 'Inverno', v: 'Solare', q: [2, 3.3, 3.8], qou: [1.9, 1.95] },
+  ] }));
+  const vero = Date.now;
+  const alle = (iso) => { Date.now = () => Date.parse(iso); };
+  const gioca = async (g, c, v, d) => (await chiedi(env, '/api/schedina', { metodo: 'POST', gettone: g,
+    corpo: { gambe: [{ lega: 'I1', d, c, v, mercato: '1' }] } })).status;
+  try {
+    alle('2026-10-20T10:00:00Z');
+    const g = (await entra(env, await creaCodice(env, { tipo: 'vip', nome: 'orologio' }))).corpo.gettone;
+    await chiedi(env, '/api/nick', { metodo: 'POST', gettone: g, corpo: { nick: 'Orologio' } });
+
+    alle('2026-10-26T13:30:00Z');            /* 14:30 in Italia, si gioca alle 15:00 */
+    prova('COL\'ORA SOLARE MEZZ\'ORA PRIMA DEL FISCHIO SI GIOCA ANCORA',
+          await gioca(g, 'Inverno', 'Solare', '2026-10-26') === 200);
+    alle('2026-10-26T14:01:00Z');            /* 15:01 in Italia */
+    prova('e un minuto dopo il fischio no', await gioca(g, 'Inverno', 'Solare', '2026-10-26') === 409);
+    alle('2026-10-24T12:59:00Z');            /* 14:59 in Italia, ora legale */
+    prova('con l\'ora legale, un minuto prima si gioca',
+          await gioca(g, 'Estate', 'Legale', '2026-10-24') === 200);
+    alle('2026-10-24T13:01:00Z');            /* 15:01 in Italia */
+    prova('e un minuto dopo no', await gioca(g, 'Estate', 'Legale', '2026-10-24') === 409);
+  } finally {
+    Date.now = vero;
+  }
 }
 
 /* ── resoconto ── */
