@@ -499,6 +499,60 @@ async function entra(env, codice) {
   prova('e un corpo senza calendario viene rifiutato invece di svuotare tutto', vuoto.status === 400);
 }
 
+/* ═══ 9. il freno sul deposito, e la memoria del giro ═══
+   Il buco vero: un calendario VUOTO passava, perche' il freno guardava solo
+   se il campo c'era. Un giro con la fonte giu' cancellava la stagione. */
+{
+  const env = ambiente(); await preparaDati(env, 'I1', 12);
+  const vuoto = await leggi(await chiedi(env, '/api/admin/carica/I1', {
+    metodo: 'POST', admin: env.SEGRETO_ADMIN, corpo: { calendario: [] } }));
+  prova('UN CALENDARIO VUOTO NON CANCELLA QUELLO DI PRIMA', vuoto.stato === 409, vuoto.stato);
+  const resta = await leggi(await chiedi(env, '/api/admin/calendario/I1', { admin: env.SEGRETO_ADMIN }));
+  prova('e quello di prima e\' ancora li\', intero', resta.stato === 200 &&
+        resta.corpo.calendario.length === 12, resta.corpo && resta.corpo.calendario &&
+        resta.corpo.calendario.length);
+
+  const corto = [{ d: '2026-10-10', c: 'Casa0', v: 'Via0' }, { d: '2026-10-11', c: 'Casa1', v: 'Via1' }];
+  const dimezzato = await leggi(await chiedi(env, '/api/admin/carica/I1', {
+    metodo: 'POST', admin: env.SEGRETO_ADMIN, corpo: { calendario: corto } }));
+  prova('uno che perde piu\' di meta\' delle partite nemmeno',
+        dimezzato.stato === 409 && dimezzato.corpo.prima === 12 && dimezzato.corpo.dopo === 2,
+        JSON.stringify(dimezzato.corpo));
+
+  const quasi = [];
+  for (let i = 0; i < 7; i++) quasi.push({ d: '2026-10-1' + i, c: 'Casa' + i, v: 'Via' + i });
+  const normale = await leggi(await chiedi(env, '/api/admin/carica/I1', {
+    metodo: 'POST', admin: env.SEGRETO_ADMIN, corpo: { calendario: quasi } }));
+  prova('uno che ne perde meno di meta\' si', normale.stato === 200 && normale.corpo.partite === 7,
+        normale.stato);
+
+  const forzato = await leggi(await chiedi(env, '/api/admin/carica/I1?forza=1', {
+    metodo: 'POST', admin: env.SEGRETO_ADMIN, corpo: { calendario: [] } }));
+  prova('e con ?forza=1 passa anche il vuoto, apposta', forzato.stato === 200, forzato.stato);
+
+  /* le partite gia' giocate non contano: a fine stagione il calendario si
+     svuota da solo, e il freno non deve scambiarlo per un guasto */
+  const env2 = ambiente();
+  const passate = [];
+  for (let i = 0; i < 20; i++) passate.push({ d: '2020-05-' + String(10 + i), c: 'C' + i, v: 'V' + i });
+  await env2.DATI.put('cal:E0', JSON.stringify({ aggiornato: 'ieri', calendario: passate }));
+  const fine = await leggi(await chiedi(env2, '/api/admin/carica/E0', {
+    metodo: 'POST', admin: env2.SEGRETO_ADMIN, corpo: { calendario: [] } }));
+  prova('ma a stagione finita il vuoto e\' la verita\', e passa', fine.stato === 200, fine.stato);
+
+  const primo = await leggi(await chiedi(env2, '/api/admin/carica/SP1', {
+    metodo: 'POST', admin: env2.SEGRETO_ADMIN, corpo: { calendario: [{ d: '2026-10-10', c: 'A', v: 'B' }] } }));
+  prova('e il primo deposito di un campionato nuovo passa', primo.stato === 200, primo.stato);
+
+  const senza = await chiedi(env, '/api/admin/calendario/I1');
+  prova('la memoria del giro senza segreto non si legge', senza.status === 401, senza.status);
+  const g = (await entra(env, await creaCodice(env, { tipo: 'capo', nome: 'boss' }))).corpo.gettone;
+  const capo = await chiedi(env, '/api/admin/calendario/I1', { gettone: g });
+  prova('NEMMENO DAL CAPO: e\' il mestiere della Action', capo.status === 401, capo.status);
+  const manca = await chiedi(env, '/api/admin/calendario/D1', { admin: env.SEGRETO_ADMIN });
+  prova('e un campionato mai depositato dice 404, non un calendario vuoto finto', manca.status === 404);
+}
+
 /* ── resoconto ── */
 const larghezza = Math.max(...ESITI.map(([n]) => n.length));
 let falliti = 0;

@@ -436,7 +436,25 @@ async function adminRevoca(req, env) {
   return json({ ok: true, codice, revocato: voce.revocato });
 }
 
-/* Il giro dei dati deposita qui i calendari. Stessa porta del pannello. */
+/* Le partite di un calendario ancora da giocare. */
+function daGiocare(calendario, oggi) {
+  return (calendario || []).filter((p) => p && p.d && p.d >= oggi && p.c && p.v).length;
+}
+
+/* Sotto questa soglia un calendario che si accorcia non insospettisce: a fine
+   stagione restano poche partite, e sparire e' il loro mestiere. */
+const ACCORCIA_DA = 10;
+
+/* Il giro dei dati deposita qui i calendari. Stessa porta del pannello.
+
+   E qui c'era il buco che si e' visto dopo aver acceso il cancello: il freno
+   scattava solo se il campo mancava, non se era VUOTO. Un giro con la fonte
+   giu' mandava [] e il deposito lo prendeva per buono, cancellando trecento
+   partite con le loro quote. Adesso un calendario che perde piu' di meta'
+   delle partite ancora da giocare viene rifiutato, e resta quello di prima.
+   Se l'accorciamento e' vero (una stagione cancellata, un campionato
+   rifatto) si deposita lo stesso con ?forza=1: la porta c'e', ma va aperta
+   apposta. */
 async function adminCarica(req, env, lega) {
   if (!/^[A-Z0-9]{1,6}$/.test(lega)) return json({ errore: 'campionato sconosciuto' }, 400);
   let corpo;
@@ -444,10 +462,36 @@ async function adminCarica(req, env, lega) {
   if (!Array.isArray(corpo && corpo.calendario)) {
     return json({ errore: 'manca il calendario' }, 400);
   }
+  const forza = new URL(req.url).searchParams.get('forza') === '1';
+  if (!forza) {
+    let vecchio = [];
+    try { vecchio = (JSON.parse(await env.DATI.get('cal:' + lega) || '{}').calendario) || []; }
+    catch (e) { vecchio = []; }
+    const oggi = oggiARoma();
+    const prima = daGiocare(vecchio, oggi);
+    const dopo = daGiocare(corpo.calendario, oggi);
+    if ((prima > 0 && dopo === 0) || (prima >= ACCORCIA_DA && dopo * 2 < prima)) {
+      return json({ errore: 'calendario troppo corto, tengo quello di prima', prima, dopo }, 409);
+    }
+  }
   await env.DATI.put('cal:' + lega, JSON.stringify({
     aggiornato: new Date().toISOString(), calendario: corpo.calendario,
   }));
   return json({ ok: true, lega, partite: corpo.calendario.length });
+}
+
+/* Il calendario com'e' nel deposito, intero, per il giro dei dati.
+
+   Da quando il calendario non sta piu' nel repository, il giro non aveva piu'
+   modo di sapere cosa aveva scritto il giro prima: ripartiva da zero, e le
+   quote della mattina sparivano col primo giro leggero del pomeriggio che non
+   ne scaricava di nuove. Questa e' la sua memoria. */
+async function adminCalendario(env, lega) {
+  if (!/^[A-Z0-9]{1,6}$/.test(lega)) return json({ errore: 'campionato sconosciuto' }, 400);
+  const grezzo = await env.DATI.get('cal:' + lega);
+  if (!grezzo) return json({ errore: 'campionato non disponibile' }, 404);
+  const doc = JSON.parse(grezzo);
+  return json({ lega, aggiornato: doc.aggiornato, calendario: doc.calendario || [] });
 }
 
 /* ─────────────────────────── l'ingresso ─────────────────────────── */
@@ -788,6 +832,11 @@ export default {
           if (car && req.method === 'POST') {
             if (!ammesso(req, env)) return json({ errore: 'non ammesso' }, 401);
             return await adminCarica(req, env, car[1].toUpperCase());
+          }
+          const mem = /^\/api\/admin\/calendario\/([A-Za-z0-9]{1,6})$/.exec(via);
+          if (mem && req.method === 'GET') {
+            if (!ammesso(req, env)) return json({ errore: 'non ammesso' }, 401);
+            return await adminCalendario(env, mem[1].toUpperCase());
           }
           /* saldare i punti e' mestiere del giro dei dati, non di chi gioca */
           if (via === '/api/admin/pendenti' && req.method === 'GET') {

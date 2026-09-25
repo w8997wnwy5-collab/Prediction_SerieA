@@ -2172,6 +2172,14 @@ def costruisci_lega(lega, stagioni, esiti):
         except Exception as e:                    # noqa: BLE001
             mie['%s openfootball %s' % (lega['id'], etichetta)] = 'fallita: %s' % str(e)[:90]
 
+    # quello che si sapeva ieri: le quote gia' scaricate restano finche' non
+    # ne arrivano di nuove, e la prima quota vista non si riscrive. E' lo
+    # stesso strato che la Serie A ha da sempre; qui mancava.
+    base = len(calendario)
+    memoria = calendario_di_ieri(lega['id'], mie) if cancello_acceso() else None
+    oggi_iso = datetime.now(timezone.utc).date().isoformat()
+    calendario = unisci_calendario(calendario, da_tenere(memoria, oggi_iso))
+
     # il calendario ravvicinato di football-data, con le sue quote
     vicine = prendi_calendario(stagioni, mie, lega['id'])
     if vicine:
@@ -2183,7 +2191,9 @@ def costruisci_lega(lega, stagioni, esiti):
         quote_se_gioca(mie, lega, calendario, FINESTRA_QUOTE_COMPLETO, '%s quote' % lega['id']))
     if quote:
         calendario = unisci_calendario(calendario, quote)
+    calendario = ricorda_prima_quota(memoria, calendario)
     mie['%s nomi' % lega['id']] = risolutore.resoconto()
+    deposita = vale_il_deposito(lega['id'], memoria, quote, base, mie)
 
     partite_ord = sorted(indice.values(), key=lambda x: (x['d'], x.get('c', '')))
     problemi = controlla(partite_ord)
@@ -2212,7 +2222,7 @@ def costruisci_lega(lega, stagioni, esiti):
             'versione_orari': VERSIONE_ORARI,
             'fonte': 'football-data.co.uk + openfootball + The Odds API',
             'stagioni': sorted({x['s'] for x in partite_ord if x.get('s')}),
-            'partite': partite_ord, 'calendario': calendario})
+            'partite': partite_ord, 'calendario': calendario, '_deposita': deposita})
 
 
 # ────────────────────────────── il deposito ──────────────────────────────
@@ -2240,12 +2250,98 @@ def costruisci_lega(lega, stagioni, esiti):
 # calendario nel repository: si limita a dirlo. Un guasto di rete non deve
 # poter spalancare il cancello.
 
+def calendario_di_ieri(lega_id, esiti):
+    """Il calendario che c'e' adesso nel deposito, cioe' quello scritto dal
+    giro prima di questo.
+
+    Prima del cancello la memoria era il file nel repository: si rileggeva e
+    si ripartiva da li'. Col cancello acceso il file non ha piu' il calendario,
+    e il giro ripartiva da zero senza dirlo a nessuno — le quote della mattina
+    sparivano col primo giro leggero che non ne scaricava di nuove, e la prima
+    quota vista (quella del CLV) si riscriveva ogni giorno.
+
+    Torna None se non si riesce a leggere: e None vuol dire "non so", che non
+    e' la stessa cosa di "era vuoto". Chi lo riceve deve comportarsi di
+    conseguenza, cioe' non depositare niente che potrebbe cancellare quello
+    che non ha visto."""
+    api = os.environ.get('MONTHLINE_API', '').strip().rstrip('/')
+    segreto = os.environ.get('MONTHLINE_ADMIN', '').strip()
+    if not api or not segreto:
+        return None
+    req = urllib.request.Request('%s/api/admin/calendario/%s' % (api, lega_id), headers={
+        'authorization': 'Bearer %s' % segreto,
+        'User-Agent': 'Monthline/memoria',
+    })
+    for tentativo in range(2):
+        try:
+            with urllib.request.urlopen(req, timeout=30) as r:
+                cal = json.loads(r.read().decode('utf-8')).get('calendario')
+            if not isinstance(cal, list):
+                esiti['memoria %s' % lega_id] = 'risposta senza calendario'
+                return None
+            esiti['memoria %s' % lega_id] = 'ok: %d partite dal deposito' % len(cal)
+            return cal
+        except urllib.error.HTTPError as e:
+            # 404 e' sia "campionato mai depositato" sia "Worker vecchio, senza
+            # questa porta": nei due casi non si sa niente, quindi None.
+            esiti['memoria %s' % lega_id] = 'non letta: HTTP %d' % e.code
+            return None
+        except Exception as e:                    # noqa: BLE001
+            if tentativo == 1:
+                esiti['memoria %s' % lega_id] = 'non letta: %s' % (
+                    str(e).replace(segreto, '***')[:90])
+                return None
+            time.sleep(2)
+    return None
+
+
+def stagione_openfootball(lega, stagioni, risolutore, esiti):
+    """Le partite in arrivo della stagione in corso, da openfootball: il
+    ripiego quando il deposito non ricorda niente. Gratis, e senza di lui un
+    giro leggero depositerebbe solo i tre giorni di football-data al posto
+    della stagione intera."""
+    try:
+        _, future = prendi_openfootball(stagioni[0][1], lega['of'])
+        future = risolutore.applica(future)
+        esiti['%s stagione (ripiego)' % lega['id']] = 'ok da openfootball: %d in arrivo' % len(future)
+        return future
+    except Exception as e:                        # noqa: BLE001
+        esiti['%s stagione (ripiego)' % lega['id']] = 'fallita: %s' % str(e)[:90]
+        return []
+
+
+def vale_il_deposito(lega_id, memoria, fresche, base, esiti):
+    """Si deposita solo quello che non puo' cancellare niente di buono.
+
+    Con la memoria di ieri (memoria non None) il calendario nuovo contiene gia'
+    tutto quello di prima, e si deposita sempre. Senza, il calendario e' stato
+    rifatto da capo, e le quote scaricate dai giri precedenti non ci sono:
+    depositarlo le cancellerebbe. Lo si fa solo se questo giro ha quote nuove
+    DA The Odds API (che le da' per tutte le partite in lista, non solo per le
+    vicine) e se la stagione di base c'e'. Altrimenti nel deposito resta
+    quello del giro prima, che e' vecchio di qualche ora e non sbagliato."""
+    if not cancello_acceso() or memoria is not None:
+        return True
+    if fresche and base:
+        return True
+    esiti['deposito %s' % lega_id] = ('saltato: senza la memoria del deposito e %s, '
+                                      'resta quello del giro prima' % (
+                                          'senza quote nuove' if base else 'senza la stagione'))
+    return False
+
+
 def deposita_calendario(lega_id, calendario, esiti):
     """Manda un calendario al Worker. Torna True se e' arrivato."""
     api = os.environ.get('MONTHLINE_API', '').strip().rstrip('/')
     segreto = os.environ.get('MONTHLINE_ADMIN', '').strip()
     if not api or not segreto:
         esiti['deposito %s' % lega_id] = 'saltato: manca MONTHLINE_API o MONTHLINE_ADMIN'
+        return False
+    # Un calendario vuoto non e' mai una notizia da dare al deposito: vuol dire
+    # che le fonti non hanno risposto. Il Worker adesso lo rifiuta da se', ma
+    # uno vecchio no — e il freno deve stare anche da questa parte.
+    if not calendario:
+        esiti['deposito %s' % lega_id] = 'saltato: calendario vuoto, resta quello di prima'
         return False
     corpo = json.dumps({'calendario': calendario}).encode('utf-8')
     url = '%s/api/admin/carica/%s' % (api, lega_id)
@@ -2261,6 +2357,23 @@ def deposita_calendario(lega_id, calendario, esiti):
             esiti['deposito %s' % lega_id] = 'ok: %d partite depositate' % (
                 risposta.get('partite', len(calendario)))
             return True
+        except urllib.error.HTTPError as e:
+            # un no del Worker (409: troppo corto, 401: segreto sbagliato) non
+            # cambia riprovando: si dice e si passa oltre
+            if 400 <= e.code < 500:
+                try:
+                    perche = json.loads(e.read().decode('utf-8'))
+                except Exception:                 # noqa: BLE001
+                    perche = {}
+                esiti['deposito %s' % lega_id] = 'RIFIUTATO (HTTP %d): %s' % (
+                    e.code, str(perche.get('errore', ''))[:60] +
+                    (' — prima %s, adesso %s' % (perche['prima'], perche['dopo'])
+                     if 'prima' in perche else ''))
+                return False
+            if tentativo == 2:
+                esiti['deposito %s' % lega_id] = 'FALLITO: HTTP %d' % e.code
+                return False
+            time.sleep(2 * (tentativo + 1))
         except Exception as e:                    # noqa: BLE001
             # il segreto puo' finire in un messaggio di errore: mai stamparlo
             motivo = str(e).replace(segreto, '***')[:90]
@@ -2279,7 +2392,7 @@ def cancello_acceso():
                 os.environ.get('MONTHLINE_ADMIN', '').strip())
 
 
-def scrivi_lega(lega, doc, esiti=None):
+def scrivi_lega(lega, doc, esiti=None, deposita=True):
     """Un file per campionato. Tutti insieme farebbero 3.9 MB — misurati — e un
     telefono li scaricherebbe a ogni apertura.
 
@@ -2291,8 +2404,9 @@ def scrivi_lega(lega, doc, esiti=None):
     os.makedirs(os.path.dirname(percorso), exist_ok=True)
     da_scrivere = doc
     if cancello_acceso():
-        deposita_calendario(lega['id'], doc.get('calendario') or [],
-                            esiti if esiti is not None else {})
+        if deposita:
+            deposita_calendario(lega['id'], doc.get('calendario') or [],
+                                esiti if esiti is not None else {})
         da_scrivere = {k: v for k, v in doc.items() if k != 'calendario'}
         da_scrivere['calendarioAltrove'] = True
     with open(percorso, 'w', encoding='utf-8') as f:
@@ -2331,9 +2445,19 @@ def aggiorna_lega_leggero(lega, stagioni, esiti):
         esiti['%s (leggero)' % lega['nome']] = 'file illeggibile: %s' % str(e)[:80]
         return None
 
-    calendario = doc.get('calendario') or []
     risolutore = RisolutoreNomi({p['c'] for p in (doc.get('partite') or [])} |
                                 {p['v'] for p in (doc.get('partite') or [])})
+    # Il punto di partenza e' il calendario di ieri. Col cancello acceso nel
+    # file non c'e' piu', e si chiede al deposito; se il deposito non risponde
+    # si rifa' la stagione da openfootball, che almeno non accorcia niente.
+    memoria = None
+    if cancello_acceso():
+        memoria = calendario_di_ieri(lega['id'], esiti)
+        calendario = memoria if memoria is not None else stagione_openfootball(
+            lega, stagioni, risolutore, esiti)
+    else:
+        calendario = doc.get('calendario') or []
+    base = len(calendario)
     vicine = prendi_calendario(stagioni, esiti, lega['id'])
     if vicine:
         calendario = unisci_calendario(calendario, vicine)
@@ -2351,7 +2475,8 @@ def aggiorna_lega_leggero(lega, stagioni, esiti):
                         key=lambda x: (x['d'], x.get('c', '')))
     doc['calendario'] = calendario
     doc['aggiornato'] = datetime.now(timezone.utc).isoformat(timespec='seconds')
-    scrivi_lega(lega, doc, esiti)
+    scrivi_lega(lega, doc, esiti,
+                deposita=vale_il_deposito(lega['id'], memoria, quote, base, esiti))
     con_quote = len([x for x in calendario if x.get('q') or x.get('qex')])
     log('  %s: %d in arrivo, %d con quote' % (lega['nome'], len(calendario), con_quote))
     return {'id': lega['id'], 'nome': lega['nome'], 'paese': lega['paese'],
@@ -2372,7 +2497,7 @@ def costruisci_altre_leghe(stagioni, esiti, voci):
             continue
         if not doc:
             continue
-        peso = scrivi_lega(lega, doc, esiti)
+        peso = scrivi_lega(lega, doc, esiti, deposita=doc.pop('_deposita', True))
         in_arrivo = len(doc['calendario'])
         con_quote = len([x for x in doc['calendario'] if x.get('q') or x.get('qex')])
         log('  %d partite, %d in arrivo (%d con quote), %.0f KB'
@@ -2470,7 +2595,17 @@ def main():
     # e' vecchia di sempre. In testa al file c'e' scritto che quello che e' stato
     # scaricato non si perde: valeva per le partite giocate e non per il
     # calendario, che e' esattamente dove serviva di piu'.
-    vecchio_cal = (vecchio or {}).get('calendario') or []
+    #
+    # E col cancello acceso "quello che si sapeva ieri" non e' piu' nel file:
+    # per giorni il giro e' ripartito da zero senza accorgersene, perche' qui
+    # sotto si leggeva un campo che il file non aveva piu'. Adesso si chiede
+    # al deposito, che e' dove il giro prima l'ha scritto.
+    memoria_casa = None
+    if cancello_acceso():
+        memoria_casa = calendario_di_ieri(LEGA_CASA['id'], esiti)
+        vecchio_cal = memoria_casa or []
+    else:
+        vecchio_cal = (vecchio or {}).get('calendario') or []
     oggi_iso = datetime.now(timezone.utc).date().isoformat()
     tenuto = da_tenere(vecchio_cal, oggi_iso)
     calendario = unisci_calendario(stagionale, tenuto)
@@ -2484,11 +2619,10 @@ def main():
     # diciassette giorni di pausa nazionali in cui non c'e' niente da quotare.
     # La finestra qui e' quella larga anche nei giri leggeri: la Serie A e'
     # quella che si guarda tutti i giorni, e un credito e' un credito.
-    calendario = unisci_calendario(
-        calendario,
-        quote_se_gioca(esiti, LEGA_CASA, calendario,
-                       FINESTRA_QUOTE_LEGGERO if leggero else FINESTRA_QUOTE_COMPLETO,
-                       'The Odds API'))
+    quote_casa = quote_se_gioca(esiti, LEGA_CASA, calendario,
+                                FINESTRA_QUOTE_LEGGERO if leggero else FINESTRA_QUOTE_COMPLETO,
+                                'The Odds API')
+    calendario = unisci_calendario(calendario, quote_casa)
     calendario = ricorda_prima_quota(vecchio_cal, calendario)
     if tsdb_future:
         calendario = unisci_calendario(calendario, tsdb_future)
@@ -2610,7 +2744,8 @@ def main():
     # apre per primo.
     da_scrivere = doc
     if cancello_acceso():
-        deposita_calendario(LEGA_CASA['id'], calendario, esiti)
+        if vale_il_deposito(LEGA_CASA['id'], memoria_casa, quote_casa, len(stagionale), esiti):
+            deposita_calendario(LEGA_CASA['id'], calendario, esiti)
         da_scrivere = {k: v for k, v in doc.items() if k != 'calendario'}
         da_scrivere['calendarioAltrove'] = True
     with open(FILE_DATI, 'w', encoding='utf-8') as f:

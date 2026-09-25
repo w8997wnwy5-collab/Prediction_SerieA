@@ -1161,6 +1161,179 @@ def test_cancello_e_deposito():
               'MONTHLINE_API' in wf and 'MONTHLINE_ADMIN' in wf)
 
 
+def test_memoria_del_deposito():
+    """Col cancello acceso il giro aveva perso la memoria, e non lo diceva.
+
+    Il calendario di ieri stava nel file; col cancello il file non ce l'ha
+    piu', e il giro ripartiva da zero. Il danno si vedeva solo in produzione:
+    il primo giro leggero del pomeriggio senza partite entro tre giorni
+    depositava un calendario SENZA le quote della mattina, e il modello
+    perdeva l'ancoraggio al mercato fino all'alba dopo. Negli altri quattro
+    campionati peggio: il giro leggero partiva da una lista vuota e depositava
+    tre giorni di football-data al posto della stagione intera.
+
+    Qui un finto Worker, vero sul filo: il giro deve chiedergli il calendario,
+    ripartire da quello, e non depositare niente quando non sa cosa c'era.
+    """
+    import threading
+    import tempfile
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+
+    oggi = datetime.date.today()
+    fra = lambda n: (oggi + datetime.timedelta(days=n)).isoformat()   # noqa: E731
+    stato = {'cal': {}, 'post': [], 'rifiuta': False, 'vecchio': False}
+
+    class Finto(BaseHTTPRequestHandler):
+        def log_message(self, *a):
+            pass
+
+        def _rispondi(self, codice, corpo):
+            dati = json.dumps(corpo).encode('utf-8')
+            self.send_response(codice)
+            self.send_header('content-type', 'application/json')
+            self.send_header('content-length', str(len(dati)))
+            self.end_headers()
+            self.wfile.write(dati)
+
+        def do_GET(self):
+            if self.headers.get('authorization') != 'Bearer segreto-di-prova':
+                return self._rispondi(401, {'errore': 'non ammesso'})
+            m = re.match(r'^/api/admin/calendario/(\w+)$', self.path)
+            if not m or stato['vecchio']:
+                return self._rispondi(404, {'errore': 'non trovato'})
+            if m.group(1) not in stato['cal']:
+                return self._rispondi(404, {'errore': 'campionato non disponibile'})
+            return self._rispondi(200, {'calendario': stato['cal'][m.group(1)]})
+
+        def do_POST(self):
+            lung = int(self.headers.get('content-length') or 0)
+            corpo = json.loads(self.rfile.read(lung).decode('utf-8'))
+            lega = self.path.rsplit('/', 1)[-1]
+            stato['post'].append((lega, corpo['calendario']))
+            if stato['rifiuta']:
+                return self._rispondi(409, {'errore': 'calendario troppo corto', 'prima': 30, 'dopo': 3})
+            stato['cal'][lega] = corpo['calendario']
+            return self._rispondi(200, {'ok': True, 'partite': len(corpo['calendario'])})
+
+    server = HTTPServer(('127.0.0.1', 0), Finto)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    vecchio_env = dict(os.environ)
+    veri = {k: getattr(B, k) for k in ('prendi_calendario', 'prendi_odds_api',
+                                      'prendi_openfootball', 'DATA')}
+    vera_pausa = B.time.sleep
+    cartella = tempfile.mkdtemp()
+    try:
+        os.environ['MONTHLINE_API'] = 'http://127.0.0.1:%d' % server.server_port
+        os.environ['MONTHLINE_ADMIN'] = 'segreto-di-prova'
+        os.environ['no_proxy'] = os.environ['NO_PROXY'] = '127.0.0.1,localhost'
+        B.time.sleep = lambda *a, **k: None
+        B.DATA = cartella
+
+        # ── la memoria ──
+        stato['cal']['ZZ'] = [{'d': fra(5), 'c': 'Alfa', 'v': 'Beta', 'q': [2.0, 3.4, 3.9],
+                               'qprimo': [2.1, 3.3, 3.7]}]
+        esiti = {}
+        ieri = B.calendario_di_ieri('ZZ', esiti)
+        prova('il giro rilegge dal deposito il calendario di ieri',
+              isinstance(ieri, list) and len(ieri) == 1 and ieri[0]['q'] == [2.0, 3.4, 3.9], ieri)
+        prova('un campionato mai depositato e\' "non so", non "vuoto"',
+              B.calendario_di_ieri('QQ', {}) is None)
+        stato['vecchio'] = True
+        prova('e un Worker vecchio, senza la porta, pure',
+              B.calendario_di_ieri('ZZ', {}) is None)
+        stato['vecchio'] = False
+
+        # ── il freno dalla parte del giro ──
+        stato['post'].clear()
+        esiti = {}
+        B.deposita_calendario('ZZ', [], esiti)
+        prova('UN CALENDARIO VUOTO NON PARTE NEMMENO', not stato['post'] and
+              'vuoto' in esiti.get('deposito ZZ', ''), esiti)
+        stato['rifiuta'] = True
+        esiti = {}
+        B.deposita_calendario('ZZ', [{'d': fra(1), 'c': 'A', 'v': 'B'}], esiti)
+        prova('un no del Worker si dichiara, col perche\'',
+              'RIFIUTATO' in esiti.get('deposito ZZ', '') and 'prima 30' in esiti['deposito ZZ'],
+              esiti)
+        prova('e non si riprova tre volte: la risposta non cambierebbe', len(stato['post']) == 1,
+              len(stato['post']))
+        stato['rifiuta'] = False
+
+        # ── il giro leggero, il caso che si e' visto ──
+        # nessuna partita entro tre giorni: niente quote nuove, nessun credito
+        # speso. Prima del riparo il deposito perdeva le quote della mattina.
+        lega = {'id': 'ZZ', 'nome': 'Prova', 'paese': 'x', 'file': 'leghe/ZZ.json',
+                'odds': 'soccer_prova', 'of': 'zz.1'}
+        os.makedirs(os.path.join(cartella, 'leghe'), exist_ok=True)
+        with open(os.path.join(cartella, 'leghe', 'ZZ.json'), 'w', encoding='utf-8') as f:
+            json.dump({'lega': 'Prova', 'calendarioAltrove': True,
+                       'partite': [{'d': '2025-01-01', 'c': 'Alfa', 'v': 'Beta', 'gc': 1, 'gv': 0}]}, f)
+        chiamate = {'odds': 0, 'of': 0}
+
+        def odds(*a, **k):
+            chiamate['odds'] += 1
+            return []
+
+        def of(*a, **k):
+            chiamate['of'] += 1
+            return [], [{'d': fra(5), 'c': 'Alfa', 'v': 'Beta'}, {'d': fra(12), 'c': 'Beta', 'v': 'Alfa'}]
+        B.prendi_calendario = lambda *a, **k: []
+        B.prendi_odds_api = odds
+        B.prendi_openfootball = of
+
+        stato['post'].clear()
+        esiti = {}
+        B.aggiorna_lega_leggero(lega, [('2526', '2025-26')], esiti)
+        depositato = stato['post'][-1][1] if stato['post'] else []
+        prova('CON LA MEMORIA LE QUOTE DELLA MATTINA SOPRAVVIVONO AL GIRO LEGGERO',
+              len(depositato) == 1 and depositato[0].get('q') == [2.0, 3.4, 3.9], depositato)
+        prova('e la prima quota vista resta la prima',
+              depositato and depositato[0].get('qprimo') == [2.1, 3.3, 3.7], depositato)
+        prova('senza spendere crediti per partite lontane', chiamate['odds'] == 0, chiamate)
+
+        # senza memoria (Worker vecchio) e senza quote nuove: niente deposito
+        stato['vecchio'] = True
+        stato['post'].clear()
+        esiti = {}
+        B.aggiorna_lega_leggero(lega, [('2526', '2025-26')], esiti)
+        prova('SENZA MEMORIA E SENZA QUOTE NUOVE NON SI DEPOSITA NIENTE',
+              not stato['post'] and 'saltato' in esiti.get('deposito ZZ', ''), esiti)
+        prova('e la stagione si rifa\' da openfootball invece di partire dal vuoto',
+              chiamate['of'] >= 1 and 'ok da openfootball: 2' in esiti.get('ZZ stagione (ripiego)', ''),
+              esiti.get('ZZ stagione (ripiego)'))
+
+        # senza memoria ma con quote nuove: si deposita, sopra la stagione intera
+        B.prendi_odds_api = lambda *a, **k: [{'d': fra(1), 'c': 'Alfa', 'v': 'Beta', 'q': [1.9, 3.5, 4.2]}]
+
+        def of_vicina(*a, **k):
+            return [], [{'d': fra(1), 'c': 'Alfa', 'v': 'Beta'}, {'d': fra(12), 'c': 'Beta', 'v': 'Alfa'}]
+        B.prendi_openfootball = of_vicina
+        stato['post'].clear()
+        esiti = {}
+        B.aggiorna_lega_leggero(lega, [('2526', '2025-26')], esiti)
+        depositato = stato['post'][-1][1] if stato['post'] else []
+        prova('senza memoria ma con quote nuove si deposita, e la stagione e\' intera',
+              len(depositato) == 2 and any(x.get('q') == [1.9, 3.5, 4.2] for x in depositato),
+              depositato)
+        stato['vecchio'] = False
+
+        # ── la Serie A: legge la memoria dal deposito, non dal file ──
+        sorgente = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                                'scripts', 'build_data.py')
+        testo = io.open(sorgente, encoding='utf-8').read()
+        prova('la Serie A chiede la memoria al deposito',
+              "calendario_di_ieri(LEGA_CASA['id']" in testo)
+        prova('e decide se depositare invece di farlo sempre',
+              re.search(r"vale_il_deposito\(LEGA_CASA\['id'\][^\n]*\n\s+deposita_calendario\(LEGA_CASA",
+                        testo) is not None)
+    finally:
+        server.shutdown()
+        B.time.sleep = vera_pausa
+        for k, v in veri.items():
+            setattr(B, k, v)
+        os.environ.clear(); os.environ.update(vecchio_env)
+
+
 def test_notizie_degli_altri_campionati():
     """Le notizie erano solo Serie A: tre feed italiani, e zero negli altri
     quattro archivi.
@@ -1317,6 +1490,7 @@ def main():
     test_crediti_solo_a_chi_gioca()
     test_notizie_degli_altri_campionati()
     test_cancello_e_deposito()
+    test_memoria_del_deposito()
     test_validatori()
     test_quote()
     test_calendario_ha_le_stesse_quote()
