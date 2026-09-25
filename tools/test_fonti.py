@@ -1428,6 +1428,31 @@ def test_crediti_solo_a_chi_gioca():
     prova('e nessuna chiamata alle quote resta senza il controllo',
           testo.count('prendi_odds_api(') == 2, testo.count('prendi_odds_api('))
 
+    # ── il primo colpo: la sosta non deve lasciare la giornata dopo senza prezzi ──
+    chiamate = []
+    vera = B.prendi_odds_api
+    B.prendi_odds_api = lambda esiti, sport=None, etichetta=None: chiamate.append(sport) or []
+    try:
+        lega = {'id': 'E0', 'odds': 'soccer_epl'}
+        esiti = {}
+        B.quote_se_gioca(esiti, lega, [fra(15), fra(16)], 10, 'E0 quote', primo_colpo=True)
+        prova('IN SOSTA LA GIORNATA A 15 GIORNI SENZA QUOTE SI CHIEDE UNA VOLTA',
+              chiamate == ['soccer_epl'] and 'primo colpo' in ' '.join(esiti), esiti)
+        chiamate.clear()
+        quotata = dict(fra(15), q=[2.0, 3.3, 3.8])
+        B.quote_se_gioca({}, lega, [quotata, fra(15), fra(16)], 10, 'E0 quote', primo_colpo=True)
+        prova('ma se la giornata ha gia\' le quote, il giorno dopo non si richiede',
+              chiamate == [], chiamate)
+        B.quote_se_gioca({}, lega, [fra(15)], 3, 'E0 quote', primo_colpo=False)
+        prova('i giri leggeri il primo colpo non lo tirano', chiamate == [], chiamate)
+        B.quote_se_gioca({}, lega, [fra(25)], 10, 'E0 quote', primo_colpo=True)
+        prova('e una giornata a 25 giorni non la lista nessuno: niente credito',
+              chiamate == [], chiamate)
+    finally:
+        B.prendi_odds_api = vera
+    prova('la Serie A lo tira solo nel giro completo, gli altri quattro nel loro',
+          "primo_colpo=not leggero" in testo and testo.count('primo_colpo=True') == 1)
+
 
 def test_service_worker():
     """Il service worker e il traffico che fa fare a un telefono.

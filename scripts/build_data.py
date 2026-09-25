@@ -2099,6 +2099,15 @@ class RisolutoreNomi(object):
 # serve solo quando la partita e' vicina.
 FINESTRA_QUOTE_COMPLETO = 10
 FINESTRA_QUOTE_LEGGERO = 3
+# Il primo colpo. Il 23 settembre The Odds API dava gia' le partite dal 10
+# al 19 ottobre, diciassette giorni avanti: durante la sosta le quote c'erano,
+# e non le chiedevamo, perche' la finestra e' di dieci. Allargarla e basta
+# costerebbe un credito al giorno per lega per tutta la sosta. Invece il giro
+# completo chiede UNA volta, quando la prossima giornata e' entro diciotto
+# giorni e non ha ancora nessuna quota; da li' la memoria del deposito le
+# tiene, e la finestra normale riprende quando mancano dieci giorni.
+# Costa un credito per lega a sosta, se la giornata e' gia' in lista.
+FINESTRA_PRIMO_COLPO = 18
 
 
 def gioca_presto(calendario, giorni):
@@ -2116,14 +2125,30 @@ def gioca_presto(calendario, giorni):
     return False
 
 
-def quote_se_gioca(esiti, lega, calendario, giorni, etichetta):
+def giornata_senza_quote(calendario, giorni):
+    """La prossima giornata entro tot giorni, se nessuna delle sue partite ha
+    ancora una quota. "Giornata" qui e' il primo giorno in cui si gioca:
+    se il banco lista il turno, lo lista intero, e basta guardare quello."""
+    oggi = datetime.now(timezone.utc).date()
+    minimo, limite = oggi.isoformat(), (oggi + timedelta(days=giorni)).isoformat()
+    date = sorted(p['d'] for p in (calendario or []) if p.get('d') and minimo <= p['d'] <= limite)
+    if not date:
+        return False
+    return not any(p.get('q') or p.get('qex') for p in calendario if p.get('d') == date[0])
+
+
+def quote_se_gioca(esiti, lega, calendario, giorni, etichetta, primo_colpo=False):
     """Le quote, ma solo se c'e' qualcosa da quotare. Quando si salta lo si
     DICE: un credito risparmiato in silenzio e un guasto silenzioso si
     somigliano troppo perche' valga la pena confonderli."""
     if not gioca_presto(calendario, giorni):
-        esiti['%s quote' % lega['id']] = ('saltata: nessuna partita entro %d giorni '
-                                          '(risparmiato 1 credito)' % giorni)
-        return []
+        if not (primo_colpo and giornata_senza_quote(calendario, FINESTRA_PRIMO_COLPO)):
+            esiti['%s quote' % lega['id']] = ('saltata: nessuna partita entro %d giorni '
+                                              '(risparmiato 1 credito)' % giorni)
+            return []
+        esiti['%s primo colpo' % lega['id']] = (
+            'la prossima giornata e\' entro %d giorni e non ha quote: 1 credito'
+            % FINESTRA_PRIMO_COLPO)
     return prendi_odds_api(esiti, lega['odds'], etichetta)
 
 
@@ -2188,7 +2213,8 @@ def costruisci_lega(lega, stagioni, esiti):
     # e le quote vere, che sono il motivo per cui tutto questo vale la pena:
     # l'ancoraggio al mercato e' la cosa piu' forte che l'app abbia.
     quote = risolutore.applica(
-        quote_se_gioca(mie, lega, calendario, FINESTRA_QUOTE_COMPLETO, '%s quote' % lega['id']))
+        quote_se_gioca(mie, lega, calendario, FINESTRA_QUOTE_COMPLETO, '%s quote' % lega['id'],
+                       primo_colpo=True))
     if quote:
         calendario = unisci_calendario(calendario, quote)
     calendario = ricorda_prima_quota(memoria, calendario)
@@ -2621,7 +2647,7 @@ def main():
     # quella che si guarda tutti i giorni, e un credito e' un credito.
     quote_casa = quote_se_gioca(esiti, LEGA_CASA, calendario,
                                 FINESTRA_QUOTE_LEGGERO if leggero else FINESTRA_QUOTE_COMPLETO,
-                                'The Odds API')
+                                'The Odds API', primo_colpo=not leggero)
     calendario = unisci_calendario(calendario, quote_casa)
     calendario = ricorda_prima_quota(vecchio_cal, calendario)
     if tsdb_future:
