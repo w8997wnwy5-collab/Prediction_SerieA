@@ -1,0 +1,41 @@
+name: Backtest del valore
+
+# A mano. Spende richieste OddsPapi (250 al mese sul piano gratis), quindi il
+# budget si sceglie a ogni giro. Le partite gia' scaricate stanno nella cache
+# PRIVATA delle Action e non si ripagano: i giri successivi allungano il
+# campione invece di rifare quello che c'e'.
+on:
+  workflow_dispatch:
+    inputs:
+      budget:
+        description: "Richieste OddsPapi da spendere in questo giro"
+        required: false
+        default: "190"
+
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Riprendi le partite gia scaricate
+        uses: actions/cache/restore@v4
+        with:
+          path: .cache_oddspapi
+          key: oddspapi-v1-${{ github.run_id }}
+          restore-keys: oddspapi-v1-
+      - name: Il valore esiste?
+        env:
+          ODDSPAPI_KEY: ${{ secrets.ODDSPAPI_KEY }}
+          BUDGET: ${{ inputs.budget || '190' }}
+          CACHE_DIR: .cache_oddspapi
+        run: python3 scripts/backtest_valore.py
+      - name: Tieni quello che si e scaricato
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: .cache_oddspapi
+          key: oddspapi-v1-${{ github.run_id }}

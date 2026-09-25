@@ -1,2 +1,5 @@
 __pycache__/
 *.pyc
+
+# lo storico OddsPapi non si ripubblica: resta nella cache privata delle Action
+.cache_oddspapi/
