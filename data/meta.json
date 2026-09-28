@@ -1,5 +1,5 @@
 {
- "aggiornato": "2026-09-27T19:19:13+00:00",
+ "aggiornato": "2026-09-28T01:43:04+00:00",
  "esito": "ok",
  "ultima_partita": "2026-09-20",
  "partite_totali": 1950,
@@ -37,7 +37,7 @@
   "ESPN calendario": "non disponibile: HTTP Error 403: Forbidden",
   "ESPN arbitri": "810 partite sono senza arbitro, ma nessuna è stata agganciata a ESPN: senza il suo identificativo non posso chiederne il dettaglio",
   "marcatori": "saltati: nessuna chiave FOOTBALL_DATA_TOKEN",
-  "notizie ANSA": "10 titoli tenuti su 54 (scartati: 44 nessuna squadra)",
+  "notizie ANSA": "10 titoli tenuti su 51 (scartati: 41 nessuna squadra)",
   "notizie Football Italia": "9 titoli tenuti su 20 (scartati: 11 nessuna squadra)",
   "notizie Repubblica": "2 titoli tenuti su 25 (scartati: 23 nessuna squadra)",
   "notizie": "21 titoli tenuti, 0 segnalano un'assenza, 0 la panchina",
