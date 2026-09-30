@@ -1,5 +1,5 @@
 {
- "aggiornato": "2026-09-30T16:06:34+00:00",
+ "aggiornato": "2026-09-30T21:32:51+00:00",
  "esito": "ok",
  "ultima_partita": "2026-09-20",
  "partite_totali": 1950,
@@ -14,7 +14,7 @@
  "crediti_quote": 233,
  "in_arrivo_con_orario": 70,
  "marcatori": 0,
- "notizie": 28,
+ "notizie": 29,
  "notizie_assenze": 2,
  "stagioni": [
   "2021-22",
@@ -38,9 +38,9 @@
   "ESPN arbitri": "810 partite sono senza arbitro, ma nessuna è stata agganciata a ESPN: senza il suo identificativo non posso chiederne il dettaglio",
   "marcatori": "saltati: nessuna chiave FOOTBALL_DATA_TOKEN",
   "notizie ANSA": "18 titoli tenuti su 73 (scartati: 55 nessuna squadra)",
-  "notizie Football Italia": "7 titoli tenuti su 20 (scartati: 13 nessuna squadra)",
+  "notizie Football Italia": "8 titoli tenuti su 20 (scartati: 12 nessuna squadra)",
   "notizie Repubblica": "3 titoli tenuti su 25 (scartati: 1 doppio, 21 nessuna squadra)",
-  "notizie": "28 titoli tenuti, 2 segnalano un'assenza, 0 la panchina",
+  "notizie": "29 titoli tenuti, 2 segnalano un'assenza, 0 la panchina",
   "deposito I1": "ok: 330 partite depositate",
   "memoria E0": "ok: 330 partite dal deposito",
   "E0 quote": "saltata: nessuna partita entro 3 giorni (risparmiato 1 credito)",
@@ -54,7 +54,7 @@
   "SP1 quote": "saltata: nessuna partita entro 3 giorni (risparmiato 1 credito)",
   "SP1 nomi (leggero)": "nessun nome da risolvere",
   "deposito SP1": "ok: 311 partite depositate",
-  "memoria F1": "ok: 262 partite dal deposito",
+  "memoria F1": "ok: 261 partite dal deposito",
   "F1 quote": "saltata: nessuna partita entro 3 giorni (risparmiato 1 credito)",
   "F1 nomi (leggero)": "nessun nome da risolvere",
   "deposito F1": "ok: 261 partite depositate"
