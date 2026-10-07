@@ -619,7 +619,11 @@ async function registra(env, cosa, riassunto, dettaglio) {
 }
 async function adminRegistro(env) {
   const p = await env.CODICI.list({ prefix: 'log:', limit: 150 });
-  return json({ righe: p.keys.map((k) => k.metadata || { cosa: '?', r: k.name }) });
+  let battito = null;
+  try { battito = JSON.parse(await env.CODICI.get('sveglia') || 'null'); } catch (e) { battito = null; }
+  /* del gettone di GitHub si dice solo SE c'e', mai cos'e' */
+  return json({ righe: p.keys.map((k) => k.metadata || { cosa: '?', r: k.name }),
+                sveglia: battito, gettoneGithub: !!env.GITHUB_TOKEN });
 }
 
 /* Chi sta chiedendo, in termini di classifica: l'impronta, e che grado ha. */
@@ -1097,9 +1101,24 @@ async function lanciaGiro(ms, env) {
   return stato;
 }
 
+/* Il battito. Ogni volta che la sveglia suona — ogni mezz'ora, anche quando
+   non c'e' nessun giro da lanciare — si scrive l'ora. Serve a sapere da
+   fuori se la sveglia c'e': il primo giorno non c'era, e da fuori un Worker
+   senza sveglia e uno con la sveglia che non suona sembravano uguali. */
+async function sveglia(ms, cron, env) {
+  const stato = await lanciaGiro(ms, env);
+  try {
+    const prima = JSON.parse(await env.CODICI.get('sveglia') || '{}');
+    const ora = { quando: new Date(ms).toISOString(), ora: oraRoma(ms), cron: cron || '',
+                  ultimoGiro: prima.ultimoGiro || null };
+    if (stato !== null) ora.ultimoGiro = { ora: oraRoma(ms), modo: GIRI_ROMA[oraRoma(ms)], stato };
+    await env.CODICI.put('sveglia', JSON.stringify(ora));
+  } catch (e) { /* il battito non deve fermare il giro */ }
+}
+
 export default {
   async scheduled(event, env, ctx) {
-    ctx.waitUntil(lanciaGiro(event.scheduledTime, env));
+    ctx.waitUntil(sveglia(event.scheduledTime, event.cron, env));
   },
 
   async fetch(req, env) {

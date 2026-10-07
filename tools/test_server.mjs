@@ -728,12 +728,27 @@ async function entra(env, codice) {
     prova('e il gettone nel registro non c\'e\'',
           !JSON.stringify(reg.corpo).includes('gettone-github-finto'));
 
+    /* il battito: la sveglia scrive l'ora anche quando non c'e' niente da lanciare */
+    const r1 = await leggi(await chiedi(env, '/api/admin/registro', { admin: env.SEGRETO_ADMIN }));
+    prova('IL BATTITO: DA FUORI SI VEDE QUANDO LA SVEGLIA HA SUONATO L\'ULTIMA VOLTA',
+          r1.corpo.sveglia && r1.corpo.sveglia.ora === '11:47' &&
+          r1.corpo.sveglia.ultimoGiro && r1.corpo.sveglia.ultimoGiro.stato === 401,
+          JSON.stringify(r1.corpo.sveglia));
+    prova('e si sa SE il gettone di GitHub c\'e\', senza vederlo',
+          r1.corpo.gettoneGithub === true && !JSON.stringify(r1.corpo).includes('gettone-github-finto'));
+    await scatta('2026-10-08T10:17:00Z');            /* 12:17 a Roma: niente da lanciare */
+    const r2 = await leggi(await chiedi(env, '/api/admin/registro', { admin: env.SEGRETO_ADMIN }));
+    prova('e il battito si aggiorna anche quando non c\'e\' un giro, tenendo l\'ultimo giro',
+          r2.corpo.sveglia.ora === '12:17' && r2.corpo.sveglia.ultimoGiro.ora === '11:47',
+          JSON.stringify(r2.corpo.sveglia));
+
     const senza = ambiente();
     chiamate.length = 0;
     await scatta('2026-10-08T05:17:00Z', senza);
     const reg2 = await leggi(await chiedi(senza, '/api/admin/registro', { admin: senza.SEGRETO_ADMIN }));
     prova('senza gettone non si chiama GitHub, e lo si dice',
           chiamate.length === 0 && reg2.corpo.righe.some(r => /GITHUB_TOKEN/.test(r.r)));
+    prova('e il registro dice che il gettone manca', reg2.corpo.gettoneGithub === false);
   } finally {
     globalThis.fetch = veraFetch;
   }

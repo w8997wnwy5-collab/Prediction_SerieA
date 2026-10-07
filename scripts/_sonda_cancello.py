@@ -157,6 +157,21 @@ def main():
                     tipi[r.get('cosa', '?')] = tipi.get(r.get('cosa', '?'), 0) + 1
                 print('/api/admin/registro -> 200,', len(righe), 'righe', tipi)
                 print('VERDETTO SERVER: e\' la versione nuova (quote dal server, punti, orari, registro).')
+                d = json.loads(corpo)
+                if 'gettoneGithub' not in d:
+                    print('SVEGLIA: questo Worker non ha ancora il battito: e\' il codice di prima.')
+                else:
+                    print('SVEGLIA: gettone di GitHub', 'PRESENTE' if d.get('gettoneGithub') else 'MANCANTE')
+                    b = d.get('sveglia')
+                    if not b:
+                        print('SVEGLIA: mai suonata. Il Cron Trigger su Cloudflare non c\'e\' (o non e\' ancora passata mezz\'ora).')
+                    else:
+                        print('SVEGLIA: ultimo battito', b.get('quando'), '(ora di Roma', b.get('ora') + ')',
+                              '| cron', b.get('cron'))
+                        g = b.get('ultimoGiro')
+                        if g:
+                            print('SVEGLIA: ultimo giro lanciato alle', g.get('ora'), g.get('modo'),
+                                  '-> GitHub ha risposto', g.get('stato'), '(204 = partito)')
             except Exception:                   # noqa: BLE001
                 print('/api/admin/registro -> 200 ma corpo illeggibile')
         else:
