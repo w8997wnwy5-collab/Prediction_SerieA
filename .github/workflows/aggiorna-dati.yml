@@ -1,6 +1,13 @@
 name: Aggiorna dati Serie A
 
 on:
+  # L'OROLOGIO VERO ADESSO E' IL WORKER. Queste righe "cron" sono state
+  # l'orologio fino al 25 settembre; poi il programmatore di GitHub si e'
+  # intasato e i giri partivano con ore di ritardo (quello delle 05:17 a
+  # mezzogiorno). Il Worker su Cloudflare lancia i giri all'ora di Roma col
+  # bottone qui sotto (workflow_dispatch), e GitHub li fa partire subito.
+  # Queste restano come rete di sicurezza: il lavoro "guardia" le spegne da
+  # sole finche' il Worker sta lanciando (vedi sotto).
   schedule:
     # Il giro completo una volta al giorno, alle 05:17 UTC (07:17 in Svizzera
     # d'estate): archivio, xG, arbitri, tutto.
@@ -34,7 +41,14 @@ on:
     # in meno: 179 crediti al mese di margine per i giri lanciati a mano.
     - cron: '47 9,12,15,17 * * *'
     - cron: '17 23 * * *'
-  workflow_dispatch:          # bottone "Run workflow" nella scheda Actions
+  workflow_dispatch:          # bottone "Run workflow", e il Worker che lancia i giri
+    inputs:
+      modo:
+        description: 'completo o leggero'
+        required: false
+        default: 'completo'
+        type: choice
+        options: [completo, leggero]
   push:
     branches: [main]
     paths:
@@ -43,13 +57,44 @@ on:
 
 permissions:
   contents: write
+  actions: read          # alla guardia: per vedere se il Worker ha gia' lanciato
 
 concurrency:
   group: aggiorna-dati
   cancel-in-progress: false
 
 jobs:
+  # LA GUARDIA. Un giro arrivato dall'orologio di GitHub, con le sue ore di
+  # ritardo, e' un doppione se il Worker sta gia' lanciando i giri: e i
+  # doppioni costano, perche' ogni giro leggero con partite vicine spende
+  # cinque crediti di quote. Quindi: se nelle ultime sei ore c'e' stato un
+  # giro lanciato col bottone (cioe' dal Worker), questo si ferma qui. Se
+  # il Worker tace da sei ore — gettone scaduto, Cloudflare giu' — si torna
+  # all'orologio di GitHub, in ritardo ma vivo. Nel dubbio si gira.
+  guardia:
+    runs-on: ubuntu-latest
+    outputs:
+      salta: ${{ steps.conta.outputs.salta }}
+    steps:
+      - id: conta
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENTO: ${{ github.event_name }}
+        run: |
+          if [ "$EVENTO" != "schedule" ]; then echo "salta=no" >> "$GITHUB_OUTPUT"; exit 0; fi
+          da=$(date -u -d '6 hours ago' +%Y-%m-%dT%H:%M:%SZ)
+          n=$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/aggiorna-dati.yml/runs?event=workflow_dispatch&created=%3E${da}&per_page=1" --jq '.total_count' 2>/dev/null || echo 0)
+          if [ "${n:-0}" -gt 0 ] 2>/dev/null; then
+            echo "Il Worker ha lanciato $n giri nelle ultime sei ore: questo, arrivato in ritardo, non serve."
+            echo "salta=si" >> "$GITHUB_OUTPUT"
+          else
+            echo "Nessun giro dal Worker nelle ultime sei ore: giro io."
+            echo "salta=no" >> "$GITHUB_OUTPUT"
+          fi
+
   aggiorna:
+    needs: guardia
+    if: needs.guardia.outputs.salta != 'si'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -82,7 +127,7 @@ jobs:
           # Adesso la condizione nomina i giri LEGGERI invece del completo:
           # cosi' anche il bottone a mano e i push fanno il giro completo,
           # che e' quello che uno si aspetta quando lo lancia apposta.
-          MODO: ${{ (github.event.schedule == '47 9,12,15,17 * * *' || github.event.schedule == '17 23 * * *') && 'leggero' || 'completo' }}
+          MODO: ${{ inputs.modo || ((github.event.schedule == '47 9,12,15,17 * * *' || github.event.schedule == '17 23 * * *') && 'leggero' || 'completo') }}
         run: python scripts/build_data.py
 
       # I punti della classifica si mettono QUI e da nessun'altra parte: qui
@@ -105,7 +150,7 @@ jobs:
           # e' apposta, cosi' niente si rompe mentre il Worker non c'e' ancora.
           MONTHLINE_API: ${{ secrets.MONTHLINE_API }}
           MONTHLINE_ADMIN: ${{ secrets.MONTHLINE_ADMIN }}
-          MODO: ${{ (github.event.schedule == '47 9,12,15,17 * * *' || github.event.schedule == '17 23 * * *') && 'leggero' || 'completo' }}
+          MODO: ${{ inputs.modo || ((github.event.schedule == '47 9,12,15,17 * * *' || github.event.schedule == '17 23 * * *') && 'leggero' || 'completo') }}
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"

@@ -1016,7 +1016,92 @@ async function postSalda(req, env) {
   return json({ saldate, punti });
 }
 
+/* ══════════════════════════════════════════════════════════════════════════
+   L'OROLOGIO DEI GIRI
+
+   I giri dei dati girano su GitHub, e per un mese l'orologio era quello di
+   GitHub: le righe "cron" dentro la Action. Fino al 25 settembre partivano
+   puntuali. Poi il loro programmatore si e' intasato, e il giro delle 7:17
+   partiva a mezzogiorno, quelli prima delle partite a orari sparsi, uno al
+   giorno saltava. Di giorno feriale non se ne accorge nessuno; la domenica
+   vuol dire quote non rinfrescate prima del fischio — e il modello ci si
+   ancora — e classifica saldata a pranzo.
+
+   Un giro lanciato a mano, invece, GitHub lo fa partire subito. Quindi
+   l'orologio sta qui: Cloudflare chiama il Worker ogni mezz'ora (al minuto 17
+   e 47, "17,47 * * * *" nei Cron Triggers), e il Worker, alle ore giuste,
+   chiede a GitHub di lanciare il giro. L'ora e' quella di ROMA, non UTC:
+   le partite si giocano all'ora italiana, e col cambio d'ora i giri restano
+   attaccati ai fischi invece di scivolare di un'ora.
+
+     07:17  completo   risultati, archivio, calendario, saldo della classifica
+     11:47  leggero    prima delle 12:30
+     14:47  leggero    prima delle 15:00
+     17:47  leggero    prima delle 18:00
+     19:47  leggero    prima delle 20:45
+     01:17  leggero    i risultati della sera
+
+   Serve un gettone di GitHub (GITHUB_TOKEN, segreto del Worker) che possa
+   solo lanciare le Action di questo repository. Senza, non succede niente di
+   male: lo si scrive nel registro, e GitHub continua col suo orologio. */
+const GIRI_ROMA = {
+  '07:17': 'completo', '11:47': 'leggero', '14:47': 'leggero',
+  '17:47': 'leggero', '19:47': 'leggero', '01:17': 'leggero',
+};
+const REPO_DATI = 'w8997wnwy5-collab/Prediction_SerieA';
+
+function oraRoma(ms) {
+  try {
+    return new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Rome', hourCycle: 'h23',
+                                              hour: '2-digit', minute: '2-digit' })
+      .format(new Date(ms));
+  } catch (e) {
+    return '';
+  }
+}
+
+async function lanciaGiro(ms, env) {
+  const quando = oraRoma(ms);
+  const modo = GIRI_ROMA[quando];
+  if (!modo) return null;
+  if (!env.GITHUB_TOKEN) {
+    await registra(env, 'giro', 'giro ' + modo + ' delle ' + quando +
+                   ' non lanciato: manca il segreto GITHUB_TOKEN');
+    return 0;
+  }
+  let stato = 0;
+  try {
+    const r = await fetch('https://api.github.com/repos/' + (env.REPO_DATI || REPO_DATI) +
+                          '/actions/workflows/aggiorna-dati.yml/dispatches', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + env.GITHUB_TOKEN,
+        'Accept': 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+        'User-Agent': 'monthline-worker',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ ref: 'main', inputs: { modo } }),
+    });
+    stato = r.status;
+  } catch (e) {
+    stato = -1;
+  }
+  /* Si scrive solo quando va male: sei righe al giorno di "tutto bene"
+     seppellirebbero i saldi, che nel registro sono la cosa da trovare. */
+  if (stato !== 204) {
+    await registra(env, 'giro', 'giro ' + modo + ' delle ' + quando + ' NON lanciato: ' +
+                   (stato === 401 || stato === 403 ? 'il gettone di GitHub non vale o non basta'
+                                                   : 'GitHub ha risposto ' + stato));
+  }
+  return stato;
+}
+
 export default {
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(lanciaGiro(event.scheduledTime, env));
+  },
+
   async fetch(req, env) {
     const url = new URL(req.url);
     const via = url.pathname;

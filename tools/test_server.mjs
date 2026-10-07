@@ -676,6 +676,69 @@ async function entra(env, codice) {
   }
 }
 
+/* ═══ 11. l'orologio dei giri: alle ore di Roma, non di GitHub ═══ */
+{
+  const env = ambiente();
+  env.GITHUB_TOKEN = 'gettone-github-finto';
+  const chiamate = [];
+  const veraFetch = globalThis.fetch;
+  let risposta = 204;
+  globalThis.fetch = async (url, opz) => {
+    chiamate.push({ url: String(url), opz });
+    return new Response(null, { status: risposta });
+  };
+  const scatta = async (iso, e = env) => {
+    const attese = [];
+    await worker.scheduled({ scheduledTime: Date.parse(iso), cron: '17,47 * * * *' }, e,
+                           { waitUntil: (p) => attese.push(p) });
+    await Promise.all(attese);
+  };
+  try {
+    await scatta('2026-10-08T05:17:00Z');            /* 07:17 a Roma, ora legale */
+    const primo = chiamate[0];
+    const corpo = primo ? JSON.parse(primo.opz.body) : {};
+    prova('alle 7:17 di Roma parte il giro completo',
+          chiamate.length === 1 && corpo.inputs && corpo.inputs.modo === 'completo' && corpo.ref === 'main',
+          JSON.stringify(corpo));
+    prova('chiedendolo a GitHub col gettone, sulla Action giusta',
+          primo && /aggiorna-dati\.yml\/dispatches$/.test(primo.url) &&
+          primo.opz.headers.Authorization === 'Bearer gettone-github-finto', primo && primo.url);
+
+    chiamate.length = 0;
+    await scatta('2026-10-26T06:17:00Z');            /* 07:17 a Roma, ora solare */
+    prova('COL CAMBIO D\'ORA IL GIRO RESTA ALLE 7:17 ITALIANE',
+          chiamate.length === 1 && JSON.parse(chiamate[0].opz.body).inputs.modo === 'completo');
+
+    chiamate.length = 0;
+    await scatta('2026-10-08T12:47:00Z');            /* 14:47 a Roma: prima delle 15 */
+    prova('prima delle partite delle 15 parte un giro leggero',
+          chiamate.length === 1 && JSON.parse(chiamate[0].opz.body).inputs.modo === 'leggero');
+
+    chiamate.length = 0;
+    await scatta('2026-10-08T06:17:00Z');            /* 08:17 a Roma: niente */
+    await scatta('2026-10-08T06:47:00Z');
+    prova('alle altre mezz\'ore non parte niente', chiamate.length === 0, chiamate.length);
+
+    risposta = 401;
+    await scatta('2026-10-08T09:47:00Z');            /* 11:47 a Roma, ma il gettone e' scaduto */
+    const reg = await leggi(await chiedi(env, '/api/admin/registro', { admin: env.SEGRETO_ADMIN }));
+    prova('un giro che GitHub rifiuta finisce nel registro, col motivo',
+          reg.corpo.righe.some(r => r.cosa === 'giro' && /11:47/.test(r.r) && /gettone/.test(r.r)),
+          JSON.stringify(reg.corpo.righe));
+    prova('e il gettone nel registro non c\'e\'',
+          !JSON.stringify(reg.corpo).includes('gettone-github-finto'));
+
+    const senza = ambiente();
+    chiamate.length = 0;
+    await scatta('2026-10-08T05:17:00Z', senza);
+    const reg2 = await leggi(await chiedi(senza, '/api/admin/registro', { admin: senza.SEGRETO_ADMIN }));
+    prova('senza gettone non si chiama GitHub, e lo si dice',
+          chiamate.length === 0 && reg2.corpo.righe.some(r => /GITHUB_TOKEN/.test(r.r)));
+  } finally {
+    globalThis.fetch = veraFetch;
+  }
+}
+
 /* ── resoconto ── */
 const larghezza = Math.max(...ESITI.map(([n]) => n.length));
 let falliti = 0;
