@@ -1008,9 +1008,15 @@ prova('e nessuna selezione finisce in due schedine',
   var src = estrai('cercaConsigliate');
   prova('la ricerca delle consigliate esiste', !!src);
   if (!src) return;
-  var cerca = new Function('LIVELLI', 'CONS_GAMBE_MAX', 'CONS_PASSO', 'quotaGamba',
+  var q10 = /var LIVELLO_QUOTA10 = (\{[^\n]*\});/.exec(html);
+  var LIVELLO_QUOTA10 = q10 ? eval('(' + q10[1] + ')') : null;      // eslint-disable-line no-eval
+  prova('c\'e\' il livello Quota 10, da 9 a 11, almeno due gambe',
+        LIVELLO_QUOTA10 && LIVELLO_QUOTA10.min === 9 && LIVELLO_QUOTA10.max === 11 && LIVELLO_QUOTA10.gambe === 2,
+        q10 && q10[1]);
+  var cerca = new Function('LIVELLI', 'LIVELLO_QUOTA10', 'CONS_GAMBE_MAX', 'CONS_PASSO', 'quotaGamba',
                            'return ' + src + ';')(
-    LIVELLI, 6, 0.005, function (c) { return Math.round((1 / c.p) * 0.944 * 100) / 100; });
+    LIVELLI, LIVELLO_QUOTA10 || {max: 11}, 6, 0.005,
+    function (c) { return Math.round((1 / c.p) * 0.944 * 100) / 100; });
   var cand = [];
   /* In ogni partita due mercati alla stessa probabilita' (quindi alla stessa
      quota): uno sta sul mercato, l'altro no. Devono vincere sempre i primi. */
