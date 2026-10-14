@@ -1081,6 +1081,37 @@ prova('e nessuna selezione finisce in due schedine',
         s8.pAttivo < s8.pVinci);
 })();
 
+/* ─── le piu' sicure: una gamba per partita, le n partite migliori ─── */
+(function () {
+  var html;
+  try { html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8'); } catch (e) { return; }
+  var i = html.indexOf('function sicureDi(');
+  prova('la scelta delle piu\' sicure esiste', i >= 0);
+  if (i < 0) return;
+  var d = 0, fine = -1;
+  for (var k = html.indexOf('{', i); k < html.length; k++) {
+    if (html[k] === '{') d++;
+    else if (html[k] === '}') { d--; if (!d) { fine = k + 1; break; } }
+  }
+  var sicureDi = new Function('return ' + html.slice(i, fine) + ';')();
+  var cand = [
+    { iPartita: 'A', id: 'U45', p: 0.88 }, { iPartita: 'A', id: 'U35', p: 0.74 },
+    { iPartita: 'B', id: 'U45', p: 0.80 }, { iPartita: 'B', id: '1', p: 0.82, alMercato: true },
+    { iPartita: 'C', id: 'O15', p: 0.70 }, { iPartita: 'D', id: 'U45', p: 0.86 },
+  ];
+  var tre = sicureDi(cand, 3);
+  prova('una gamba sola per partita, la piu\' probabile', tre.length === 3 &&
+        tre[0].iPartita === 'A' && tre[0].id === 'U45' &&
+        tre.filter(function (c) { return c.iPartita === 'B'; })[0].id === '1',
+        JSON.stringify(tre));
+  prova('e le partite migliori in ordine: la piu\' debole resta fuori',
+        tre.map(function (c) { return c.iPartita; }).join('') === 'ADB', tre.map(function (c) { return c.iPartita; }));
+  var pari = sicureDi([{ iPartita: 'X', id: 'U45', p: 0.8 }, { iPartita: 'X', id: '1X', p: 0.8, alMercato: true }], 1);
+  prova('a pari probabilita\' vince la gamba sul mercato', pari[0].id === '1X');
+  prova('le 10 piu\' sicure non si registrano in classifica oltre le 8 gambe del server',
+        /if\(n <= 8\) h \+= bottoneGioca/.test(html));
+})();
+
 var largh = esiti.reduce(function (a, e) { return Math.max(a, e[0].length); }, 0);
 var falliti = 0;
 esiti.forEach(function (e) {

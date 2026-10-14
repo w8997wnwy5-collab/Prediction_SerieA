@@ -642,6 +642,7 @@ details.note summary:active{opacity:.6;}
 .csgx{font-family:var(--mono);font-size:14px;font-weight:600;text-align:right;white-space:nowrap;}
 .csgx span{display:block;font-size:11px;color:var(--mute);font-weight:400;}
 .csgf{display:flex;margin-top:10px;}
+.forme.stretti .formab{flex:1 1 0;min-width:0;padding:9px 6px;text-align:center;}
 .csgl.dieci{color:var(--c1);background:var(--card2);border:1px solid var(--line);}
 .csgd{margin:10px 0 2px;}
 .csgdr{display:flex;align-items:center;gap:9px;font-size:12px;color:var(--mute);margin:3px 0;}
@@ -4686,9 +4687,10 @@ var CONS_PASSO = 0.005;          // caselle di mezzo punto percentuale di quota
    la sua fascia d'incertezza e' stretta perche' non c'e' niente da stimare,
    e il criterio del pavimento piu' alto la scambiava per sicurezza. */
 var CONS_ESCLUSI = MONETE;
-function candidatiConsigliata(){
+function candidatiConsigliata(quotaMin){
+  var minimo = quotaMin == null ? CONS_QUOTA_GAMBA_MIN : quotaMin;
   var cand = candidatiTutteLeLeghe().filter(function(c){
-    return c.p > 0 && quotaGamba(c) >= CONS_QUOTA_GAMBA_MIN && CONS_ESCLUSI.indexOf(c.id) < 0;
+    return c.p > 0 && quotaGamba(c) >= minimo && CONS_ESCLUSI.indexOf(c.id) < 0;
   });
   cand.forEach(function(c){ c.alMercato = ancorataAlMercato(c); });
   if(!cand.length) return cand;
@@ -5004,6 +5006,120 @@ function cardDieci(){
   return h;
 }
 
+/* ══════════════════════════════════════════════════════════════
+   LE PIU' SICURE: 7, 8, 9 O 10 PARTITE
+
+   "Una da sette, otto, dieci partite praticamente gia' prese": la domanda e'
+   giusta, la risposta onesta e' che non esiste. Prese una per una all'85%,
+   dieci insieme escono il 20% delle volte — e la quota resta bassa, perche'
+   il banco quelle probabilita' le conosce. Quello che esiste e' la
+   combinazione PIU' SICURA possibile, e qui c'e' quella.
+
+   Trovarla e' semplice, ed e' esatto: le partite sono indipendenti, quindi
+   la probabilita' della schedina e' il prodotto delle gambe, e il prodotto
+   piu' alto con n gambe si ottiene prendendo in ogni partita la gamba piu'
+   probabile e poi le n partite migliori. Nessuna ricerca, nessuna
+   approssimazione.
+
+   Le gambe sono quelle della Consigliata (pari e dispari fuori, cinque
+   campionati, la stessa finestra di giorni) ma senza il pavimento di quota
+   1.15: qui le gambe a 1.08 sono proprio quelle che servono. Restano fuori,
+   come in tutta l'app, quelle sopra l'88%: "almeno un gol" a 1.03 non e'
+   una giocata. */
+var SICURE_N = [7, 8, 9, 10];
+
+function sicureDi(cand, n){
+  var meglio = {};
+  cand.forEach(function(c){
+    var m = meglio[c.iPartita];
+    if(!m || c.p > m.p + 1e-9 || (Math.abs(c.p - m.p) <= 1e-9 && c.alMercato && !m.alMercato)) meglio[c.iPartita] = c;
+  });
+  return Object.keys(meglio).map(function(k){ return meglio[k]; })
+               .sort(function(a, b){ return b.p - a.p; }).slice(0, n);
+}
+
+function sceltaSicure(n){
+  S.sicureN = n;
+  try{ localStorage.setItem('seriea_sicure_n', String(n)); }catch(e){}
+  render();
+}
+function quanteSicure(){
+  if(S.sicureN) return S.sicureN;
+  var n = 8;
+  try{ n = parseInt(localStorage.getItem('seriea_sicure_n') || '8', 10) || 8; }catch(e){}
+  return SICURE_N.indexOf(n) >= 0 ? n : 8;
+}
+
+function cardSicure(){
+  var voluto = quanteSicure();
+  var cand = candidatiConsigliata(1.01);
+  var scelte = sicureDi(cand, voluto);
+  if(scelte.length < 3) return '';
+  var n = scelte.length;
+  var ps = scelte.map(function(c){ return c.p; });
+  var qs = scelte.map(function(c){ return quotaGamba(c); });
+  var tutte = ps.reduce(function(t, p){ return t * p; }, 1);
+  var quota = qs.reduce(function(t, q){ return t * q; }, 1);
+  var dist = distribuzioneEsatte(ps);
+  var media = ps.reduce(function(t, p){ return t + p; }, 0);
+  var chiave = 'cons-sicure-' + n;
+  if(!S._schedineMostrate) S._schedineMostrate = {};
+  S._schedineMostrate[chiave] = scelte;
+  var piuLeghe = S.leghe && S.leghe.length > 1;
+  var righe = [];
+  for(var k = n; k >= Math.max(0, n - 3); k--){
+    var pk = k === n - 3 ? dist.slice(0, k + 1).reduce(function(t, x){ return t + x; }, 0) : dist[k];
+    righe.push({et: (k === n - 3 ? k + ' o meno' : k + ' su ' + n), p: pk});
+  }
+  var testo = ['MONTHLINE · LE ' + n + ' PIU\' SICURE — quota ' + nu(quota, 2) + ', escono tutte il ' + pc(tutte, 1)];
+  scelte.forEach(function(g, i){
+    testo.push((i + 1) + '. ' + g.nome + ' — ' + g.partita.c + ' - ' + g.partita.v + ' (' +
+               dataBreve(g.partita.d) + (g.partita.o ? ' ' + g.partita.o : '') +
+               (g.lega ? ', ' + g.lega.nome : '') + ') @' + nu(quotaGamba(g), 2));
+  });
+
+  var h = '<div class="h2" style="margin-top:22px">Le più sicure<span class="r">tutti i campionati</span></div>';
+  h += '<div class="forme stretti">' + SICURE_N.map(function(x){
+    return '<button class="formab' + (x === voluto ? ' on' : '') + '" onclick="sceltaSicure(' + x + ')">' +
+      '<b>' + x + ' partite</b><em>' + pc(sicureDi(cand, x).reduce(function(t, c){ return t * c.p; }, 1)) +
+      '</em></button>';
+  }).join('') + '</div>';
+  h += '<div class="card csg">';
+  h += '<div class="csgh"><span class="csgl facile">' + n + ' partite</span>' +
+       (n < voluto ? '<span class="csgg">ce ne sono solo ' + n + ' in arrivo</span>' : '') +
+       '<div class="csgq">' + nu(quota, 2) + '<span>quota</span></div></div>';
+  h += '<div class="csgp"><div class="csgv">' + nu(100 * tutte, tutte < 0.1 ? 1 : 0) + '<small>%</small></div>' +
+       '<div class="csgs">escono tutte <b>' + quanteVolte(tutte) + '</b></div></div>';
+  h += '<div class="csgd">' + righe.map(function(r){
+    return '<div class="csgdr"><span>' + esc(r.et) + '</span><i><b style="width:' +
+      Math.max(1, Math.round(100 * r.p)) + '%"></b></i><em>' + pc(r.p, r.p < 0.1 ? 1 : 0) + '</em></div>';
+  }).join('') + '</div>';
+  /* il caso piu' probabile, detto in parole: di solito non e' "tutte" */
+  var moda = dist.indexOf(Math.max.apply(null, dist)), errori = n - moda;
+  h += '<div class="csgs" style="margin:6px 0 4px">In media ne prendi <b>' + nu(media, 1) + ' su ' + n +
+       '</b>. Il caso più probabile è ' + (errori === 0 ? 'prenderle tutte' :
+       (errori === 1 ? '<b>sbagliarne una</b>' : '<b>sbagliarne ' + errori + '</b>')) + '.</div>';
+  h += scelte.map(function(g, i){
+    return '<div class="csgr"><div class="csgn"><b>' + esc(g.nome) + '</b>' +
+      '<em>' + esc(g.partita.c) + ' – ' + esc(g.partita.v) + '</em>' +
+      '<em class="csgm">' + (piuLeghe && g.lega ? esc(g.lega.nome) + ' · ' : '') +
+        esc(dataBreve(g.partita.d)) + (g.partita.o ? ' · ' + esc(g.partita.o) : '') + '</em></div>' +
+      '<div class="csgx">' + pc(g.p) + '<span>' + nu(quotaGamba(g), 2) + '</span></div>' +
+      segnaQui(chiave, i) + '</div>';
+  }).join('');
+  h += '<div class="note" style="margin-top:8px"><p>Sono le ' + n + ' partite più sicure dei cinque ' +
+    'campionati, una gamba per partita: nessun\'altra combinazione da ' + n + ' esce più spesso. ' +
+    '<b>Non sono "già prese"</b>: prese tutte insieme escono ' + quanteVolte(tutte) + '. Ogni gamba porta ' +
+    'il ricarico del banco, quindi in media tornano ' + Math.round(100 * Math.pow(1 - ricarico().v, n)) +
+    ' centesimi per franco giocato.</p></div>';
+  h += '<div class="csgf"><button class="copia" data-t="' + esc(testo.join('\n')) +
+       '" onclick="copiaSchedina(this)">copia</button></div>';
+  /* il server della classifica accetta fino a otto gambe */
+  if(n <= 8) h += bottoneGioca({id: chiave, nome: n + ' più sicure'}, scelte, null);
+  h += '</div>';
+  return h;
+}
+
 function tabConsigliata(){
   if(!(S._prossime||[]).length) S._prossime = prossimePartite();
   var tutte = consigliate();
@@ -5029,6 +5145,7 @@ function tabConsigliata(){
       'possono cambiare quando arrivano.</div>';
   }
   h += tutte.map(cardConsigliata).join('');
+  h += cardSicure();
   h += cardDieci();
   h += cardAccesso();
   h += '<div class="note" style="margin-bottom:14px">In ogni livello, fra tutte le combinazioni di ' +
