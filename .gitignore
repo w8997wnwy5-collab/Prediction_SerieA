@@ -3,3 +3,4 @@ __pycache__/
 
 # lo storico OddsPapi non si ripubblica: resta nella cache privata delle Action
 .cache_oddspapi/
+.cache_coppe/
