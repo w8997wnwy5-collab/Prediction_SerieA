@@ -997,7 +997,9 @@ prova('e nessuna selezione finisce in due schedine',
   prova('la Difficile e\' una multipla vera: almeno cinque gambe, quota da sei in su',
         LIVELLI[2].gambe >= 5 && LIVELLI[2].min >= 6, JSON.stringify(LIVELLI[2]));
   prova('pari e dispari non entrano: e\' una moneta, non un consiglio',
-        /CONS_ESCLUSI = \['DISP', 'PARI'\]/.test(html));
+        /var MONETE = \['DISP', 'PARI'\]/.test(html) && /CONS_ESCLUSI = MONETE/.test(html));
+  prova('e nemmeno la piu\' solida della Giornata puo\' essere una moneta',
+        /var perSolidita = voci\.filter\(function\(m\)\{ return MONETE\.indexOf\(m\.id\) < 0; \}\)/.test(html));
   prova('niente puntata nella Consigliata',
         !/puntata\(\)/.test(estrai('tabConsigliata') + estrai('cardConsigliata')));
 
@@ -1029,6 +1031,54 @@ prova('e nessuna selezione finisce in due schedine',
   prova('a parita\' di quota vince la gamba ancorata al mercato',
         totale > 0 && ancorate === totale, ancorate + ' su ' + totale);
   prova('le cinque gambe ci sono, per la Difficile', Object.keys(tab[5]).length > 0);
+})();
+
+/* ─── le 10 della giornata: i conti esatti, su casi che si fanno a mano ─── */
+(function () {
+  var html;
+  try { html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8'); } catch (e) { return; }
+  function estrai(n) {
+    var i = html.indexOf('function ' + n + '(');
+    if (i < 0) return null;
+    var d = 0;
+    for (var k = html.indexOf('{', i); k < html.length; k++) {
+      if (html[k] === '{') d++;
+      else if (html[k] === '}') { d--; if (!d) return html.slice(i, k + 1); }
+    }
+    return null;
+  }
+  var srcD = estrai('distribuzioneEsatte'), srcB = estrai('binomiale'), srcS = estrai('sistemaEsatto');
+  prova('i conti delle 10 esistono', !!(srcD && srcB && srcS));
+  if (!(srcD && srcB && srcS)) return;
+  var f = new Function(srcD + srcB + srcS + '; return {d: distribuzioneEsatte, s: sistemaEsatto, b: binomiale};')();
+  var vicino = function (a, b) { return Math.abs(a - b) < 1e-9; };
+
+  var d = f.d([0.5, 0.5]);
+  prova('due monete: 0, 1 o 2 con 25%, 50%, 25%', vicino(d[0], 0.25) && vicino(d[1], 0.5) && vicino(d[2], 0.25), d);
+  var d3 = f.d([0.9, 0.8, 0.7]);
+  prova('e la distribuzione fa sempre 1', vicino(d3.reduce(function (t, x) { return t + x; }, 0), 1));
+  prova('tutte e tre = il prodotto', vicino(d3[3], 0.9 * 0.8 * 0.7));
+  prova('le colonne di un 8 su 10 sono 45, di un 9 su 10 sono 10', f.b(10, 8) === 45 && f.b(10, 9) === 10);
+
+  /* due gambe a quota 2 e 50%: la singola "1 su 2" ha 2 colonne, vince se
+     ne esce almeno una (75%), rientra sempre quando vince (una colonna da 2
+     ripaga le 2), e torna in media esattamente il franco */
+  var s = f.s([0.5, 0.5], [2, 2], 1);
+  prova('un sistema 1 su 2 conta colonne, vincite e rientri a mano',
+        s.colonne === 2 && vicino(s.pVinci, 0.75) && vicino(s.pAttivo, 0.75) && vicino(s.ritorno, 1),
+        JSON.stringify(s));
+  /* con il ricarico ogni colonna da k gambe torna (1-r)^k per franco */
+  var ps = [0.8, 0.75, 0.7, 0.78, 0.72, 0.77, 0.74, 0.76, 0.69, 0.79];
+  var qs = ps.map(function (p) { return (1 / p) * 0.944; });
+  var s8 = f.s(ps, qs, 8), s10 = f.s(ps, qs, 10);
+  prova('il ritorno per franco di un 8 su 10 e\' il ricarico alla ottava',
+        Math.abs(s8.ritorno - Math.pow(0.944, 8)) < 1e-9, s8.ritorno);
+  prova('e quello delle 10 tutte insieme il ricarico alla decima',
+        Math.abs(s10.ritorno - Math.pow(0.944, 10)) < 1e-9, s10.ritorno);
+  prova('col sistema 8/10 si vince piu\' spesso che con le 10 tutte insieme',
+        s8.pVinci > s10.pVinci && s8.colonne === 45);
+  prova('ma "vinci" e "rientri" non sono la stessa cosa: con 8 giuste una colonna non ripaga 45',
+        s8.pAttivo < s8.pVinci);
 })();
 
 var largh = esiti.reduce(function (a, e) { return Math.max(a, e[0].length); }, 0);

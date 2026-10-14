@@ -72,12 +72,16 @@ function chiedi(env, via, opz = {}) {
   }), env);
 }
 const leggi = async r => ({ stato: r.status, corpo: await r.json().catch(() => null) });
+/* Le date dei campioni si contano da OGGI. Qui c'erano "10 ottobre", "11
+   ottobre" scritti a mano: il 14 ottobre quattro partite erano finite nel
+   passato e tre prove sono cadute su un server che non aveva niente. */
+const fraGiorni = (n) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
 
 /* ── un campionato finto con dieci partite ── */
 async function preparaDati(env, lega = 'I1', quante = 10) {
   const cal = [];
   for (let i = 0; i < quante; i++) {
-    cal.push({ d: '2026-10-' + String(10 + i).padStart(2, '0'), c: 'Casa' + i, v: 'Via' + i,
+    cal.push({ d: fraGiorni(10 + i), c: 'Casa' + i, v: 'Via' + i,
                q: [2.1, 3.3, 3.4] });
   }
   await env.DATI.put('cal:' + lega, JSON.stringify({ aggiornato: 'ora', calendario: cal }));
@@ -581,7 +585,7 @@ async function entra(env, codice) {
   const senza = await chiedi(env, '/api/admin/carica/E0', { metodo: 'POST', corpo: { calendario: [] } });
   prova('caricare i dati senza segreto non si puo', senza.status === 401);
   const con = await leggi(await chiedi(env, '/api/admin/carica/E0', {
-    metodo: 'POST', admin: env.SEGRETO_ADMIN, corpo: { calendario: [{ d: '2026-10-10', c: 'A', v: 'B' }] } }));
+    metodo: 'POST', admin: env.SEGRETO_ADMIN, corpo: { calendario: [{ d: fraGiorni(10), c: 'A', v: 'B' }] } }));
   prova('col segreto si', con.stato === 200 && con.corpo.partite === 1);
   const vuoto = await chiedi(env, '/api/admin/carica/E0', {
     metodo: 'POST', admin: env.SEGRETO_ADMIN, corpo: { sbagliato: true } });
@@ -601,7 +605,7 @@ async function entra(env, codice) {
         resta.corpo.calendario.length === 12, resta.corpo && resta.corpo.calendario &&
         resta.corpo.calendario.length);
 
-  const corto = [{ d: '2026-10-10', c: 'Casa0', v: 'Via0' }, { d: '2026-10-11', c: 'Casa1', v: 'Via1' }];
+  const corto = [{ d: fraGiorni(10), c: 'Casa0', v: 'Via0' }, { d: fraGiorni(11), c: 'Casa1', v: 'Via1' }];
   const dimezzato = await leggi(await chiedi(env, '/api/admin/carica/I1', {
     metodo: 'POST', admin: env.SEGRETO_ADMIN, corpo: { calendario: corto } }));
   prova('uno che perde piu\' di meta\' delle partite nemmeno',
@@ -609,7 +613,7 @@ async function entra(env, codice) {
         JSON.stringify(dimezzato.corpo));
 
   const quasi = [];
-  for (let i = 0; i < 7; i++) quasi.push({ d: '2026-10-1' + i, c: 'Casa' + i, v: 'Via' + i });
+  for (let i = 0; i < 7; i++) quasi.push({ d: fraGiorni(10 + i), c: 'Casa' + i, v: 'Via' + i });
   const normale = await leggi(await chiedi(env, '/api/admin/carica/I1', {
     metodo: 'POST', admin: env.SEGRETO_ADMIN, corpo: { calendario: quasi } }));
   prova('uno che ne perde meno di meta\' si', normale.stato === 200 && normale.corpo.partite === 7,
@@ -630,7 +634,7 @@ async function entra(env, codice) {
   prova('ma a stagione finita il vuoto e\' la verita\', e passa', fine.stato === 200, fine.stato);
 
   const primo = await leggi(await chiedi(env2, '/api/admin/carica/SP1', {
-    metodo: 'POST', admin: env2.SEGRETO_ADMIN, corpo: { calendario: [{ d: '2026-10-10', c: 'A', v: 'B' }] } }));
+    metodo: 'POST', admin: env2.SEGRETO_ADMIN, corpo: { calendario: [{ d: fraGiorni(10), c: 'A', v: 'B' }] } }));
   prova('e il primo deposito di un campionato nuovo passa', primo.stato === 200, primo.stato);
 
   const senza = await chiedi(env, '/api/admin/calendario/I1');

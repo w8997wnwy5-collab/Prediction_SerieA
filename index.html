@@ -642,6 +642,21 @@ details.note summary:active{opacity:.6;}
 .csgx{font-family:var(--mono);font-size:14px;font-weight:600;text-align:right;white-space:nowrap;}
 .csgx span{display:block;font-size:11px;color:var(--mute);font-weight:400;}
 .csgf{display:flex;margin-top:10px;}
+.csgl.dieci{color:var(--c1);background:var(--card2);border:1px solid var(--line);}
+.csgd{margin:10px 0 2px;}
+.csgdr{display:flex;align-items:center;gap:9px;font-size:12px;color:var(--mute);margin:3px 0;}
+.csgdr span{width:64px;flex:none;}
+.csgdr i{flex:1;height:7px;border-radius:4px;background:var(--line2);overflow:hidden;}
+.csgdr i b{display:block;height:100%;border-radius:4px;background:var(--c1);}
+.csgdr em{width:44px;flex:none;text-align:right;font-style:normal;font-family:var(--mono);color:var(--ink);}
+.csgm .debole,.csgn em .debole{color:var(--warn);font-weight:600;}
+.tabimp .csgm{font-size:10.5px;color:var(--mute);}
+.csg .tabimp table{width:100%;border-collapse:collapse;font-size:12.5px;}
+.csg .tabimp th{font-size:9.5px;text-transform:uppercase;letter-spacing:.5px;color:var(--mute);
+  text-align:right;padding:6px 3px;font-weight:600;}
+.csg .tabimp td{padding:8px 3px;border-top:1px solid var(--line2);text-align:right;
+  font-family:var(--mono);white-space:nowrap;}
+.csg .tabimp th:first-child,.csg .tabimp td:first-child{text-align:left;font-family:var(--sys);white-space:normal;}
 
 /* la schermata del nome, al primo avvio */
 .benv{min-height:100dvh;display:flex;flex-direction:column;align-items:center;
@@ -1200,6 +1215,8 @@ var MERCATI_PRESET = MERCATI_VISTI.slice();
 var MERCATI_NON_VISTI = ['MG13', 'MG24', 'MG25', 'MG12', 'MG14', 'MG23', 'MG34', 'MG15',
                          'PTO05', 'PTO15', 'PT1', 'PTX', 'PT2', 'PT1X', 'PTX2', 'PTGG',
                          'STO05', 'STO15', 'GENT', 'PIU2T'];
+/* I mercati che sono una moneta: in elenco si', come consiglio mai. */
+var MONETE = ['DISP', 'PARI'];
 var CHIAVE_MERCATI = 'seriea_mercati_v4';           // si vede nella sezione Dati: serve a sapere cosa si sta guardando
 var CHIAVE_CACHE = 'seriea_modello_v3';
 
@@ -2040,7 +2057,14 @@ function sceltePartita(p, quante){
     presa[fam] = 1;
     perScarto.push(m);
   });
-  var perSolidita = voci.slice().sort(function(a, b){ return b.p05 - a.p05; });
+  /* Pari e dispari restano nell'elenco dei mercati, ma non possono essere
+     "la piu' solida": valgono 50% in ogni partita e il modello non ne sa
+     niente. Vincevano la gara del pavimento proprio per quello — una fascia
+     d'incertezza stretta perche' non c'e' niente da stimare — e il 10 ottobre
+     Napoli-Frosinone e' finita in copertina con "numero di reti dispari" al
+     50%. E' uscita, ma era una moneta. (Stessa regola della Consigliata.) */
+  var perSolidita = voci.filter(function(m){ return MONETE.indexOf(m.id) < 0; })
+                        .sort(function(a, b){ return b.p05 - a.p05; });
   /* LA PIÙ SOLIDA, quella che va in copertina.
 
      Non è il primo della classifica per probabilità: quello è sempre "Almeno
@@ -4661,7 +4685,7 @@ var CONS_PASSO = 0.005;          // caselle di mezzo punto percentuale di quota
    di piu' del lancio di una moneta, e finiva in schedina proprio per quello —
    la sua fascia d'incertezza e' stretta perche' non c'e' niente da stimare,
    e il criterio del pavimento piu' alto la scambiava per sicurezza. */
-var CONS_ESCLUSI = ['DISP', 'PARI'];
+var CONS_ESCLUSI = MONETE;
 function candidatiConsigliata(){
   var cand = candidatiTutteLeLeghe().filter(function(c){
     return c.p > 0 && quotaGamba(c) >= CONS_QUOTA_GAMBA_MIN && CONS_ESCLUSI.indexOf(c.id) < 0;
@@ -4807,6 +4831,179 @@ function cardConsigliata(x){
   '</div>';
 }
 
+/* ══════════════════════════════════════════════════════════════
+   LE 10 DELLA GIORNATA
+
+   La giocata piu' semplice che si possa chiedere: la piu' solida di ogni
+   partita di Serie A, tutte insieme. Il 10-12 ottobre sono entrate tutte e
+   dieci. Prima delle partite, la probabilita' che succedesse era il 4.2%:
+   una giornata ogni ventiquattro. Questa carta dice quel numero PRIMA, ogni
+   settimana, insieme a quello che serve per decidere come giocarle.
+
+   I conti sono esatti, non simulati. Con dieci gambe indipendenti gli esiti
+   sono 2^10 = 1024 e si contano tutti: la distribuzione di "quante ne
+   escono" (una Poisson-binomiale, perche' ogni gamba ha la sua
+   probabilita'), e per ogni sistema quanto torna in ogni esito.
+
+   Un sistema k su n e' l'insieme di tutte le multiple da k delle n gambe,
+   una colonna ciascuna. Con 8 su 10 le colonne sono 45: se ne escono otto
+   vince una colonna sola, che da sola non ripaga le 45 — e la carta lo dice,
+   perche' "vinci qualcosa" e "rientri della spesa" sono due domande diverse.
+
+   E il ritorno medio, detto per franco giocato: ogni gamba porta il ricarico
+   del banco, quindi una colonna da k gambe ne porta k. E' sempre sotto il
+   franco, e piu' gambe ha la colonna piu' scende. I sistemi non creano
+   valore: scambiano un premio piu' piccolo con una probabilita' piu' alta.
+   ══════════════════════════════════════════════════════════════ */
+function distribuzioneEsatte(ps){
+  var d = [1];
+  ps.forEach(function(p){
+    var n = [];
+    for(var k = 0; k <= d.length; k++) n.push(0);
+    for(var j = 0; j < d.length; j++){ n[j] += d[j] * (1 - p); n[j + 1] += d[j] * p; }
+    d = n;
+  });
+  return d;                                   /* d[k] = P(ne escono esattamente k) */
+}
+function binomiale(n, k){
+  var r = 1;
+  for(var i = 1; i <= k; i++) r = r * (n - k + i) / i;
+  return Math.round(r);
+}
+function sistemaEsatto(ps, qs, k){
+  var n = ps.length, colonne = binomiale(n, k);
+  var pVinci = 0, pAttivo = 0, atteso = 0;
+  for(var m = 0; m < (1 << n); m++){
+    var pr = 1, quote = [];
+    for(var i = 0; i < n; i++){
+      if(m & (1 << i)){ pr *= ps[i]; quote.push(qs[i]); } else pr *= 1 - ps[i];
+    }
+    if(quote.length < k) continue;
+    /* quanto torna: la somma dei prodotti delle quote su tutte le colonne
+       azzeccate, cioe' il polinomio simmetrico elementare di grado k */
+    var e = [1];
+    for(var j = 0; j < k; j++) e.push(0);
+    quote.forEach(function(q){ for(var j = k; j >= 1; j--) e[j] += e[j - 1] * q; });
+    pVinci += pr;
+    atteso += pr * e[k];
+    if(e[k] >= colonne - 1e-9) pAttivo += pr;
+  }
+  return {k: k, n: n, colonne: colonne, pVinci: pVinci, pAttivo: pAttivo, ritorno: atteso / colonne};
+}
+
+/* Le gambe: la piu' solida di ogni partita della giornata di Serie A, la
+   stessa che si legge in copertina nella Giornata. */
+function dieciDellaGiornata(){
+  var gambe = null;
+  var raccogli = function(lega){
+    var fuori = [];
+    partiteGiornata().forEach(function(p, i){
+      var sc = sceltePartita(p, 1);
+      var a = sc && sc.ancora;
+      if(!a) return;
+      fuori.push({iPartita: LEGA_CASA + ':' + i, partita: p, id: a.id, nome: a.nome,
+                  p: a.p, p05: a.p05, lega: lega || null});
+    });
+    return fuori;
+  };
+  perOgniLega(function(lega){ if(lega.id === LEGA_CASA) gambe = raccogli(lega); });
+  if(gambe === null && S.lega === LEGA_CASA) gambe = raccogli(null);
+  return (gambe || []).sort(function(a, b){ return b.p - a.p; }).slice(0, 10);
+}
+
+var _dieciCache = null;
+function contiDieci(gambe){
+  var firma = ricarico().v + '|' + gambe.map(function(c){ return c.iPartita + c.id + Math.round(c.p * 1000); }).join(',');
+  if(_dieciCache && _dieciCache.firma === firma) return _dieciCache.v;
+  var ps = gambe.map(function(c){ return c.p; });
+  var qs = gambe.map(function(c){ return quotaGamba(c); });
+  var n = gambe.length;
+  var v = {
+    dist: distribuzioneEsatte(ps),
+    media: ps.reduce(function(t, p){ return t + p; }, 0),
+    tutte: sistemaEsatto(ps, qs, n),
+    quotaTutte: qs.reduce(function(t, q){ return t * q; }, 1),
+    sistemi: [n - 1, n - 2].filter(function(k){ return k >= 2; })
+                           .map(function(k){ return sistemaEsatto(ps, qs, k); }),
+    senzaDebole: n >= 3 ? sistemaEsatto(ps.slice(0, n - 1), qs.slice(0, n - 1), n - 1) : null,
+    quotaSenzaDebole: qs.slice(0, n - 1).reduce(function(t, q){ return t * q; }, 1)
+  };
+  _dieciCache = {firma: firma, v: v};
+  return v;
+}
+
+function cardDieci(){
+  var gambe = dieciDellaGiornata();
+  var n = gambe.length;
+  if(n < 3) return '';
+  var c = contiDieci(gambe);
+  var chiave = 'cons-dieci';
+  if(!S._schedineMostrate) S._schedineMostrate = {};
+  S._schedineMostrate[chiave] = gambe;
+  var debole = gambe[n - 1];
+  var perFranco = function(x){ return Math.round(x * 100) + ' cent'; };
+  var righe = [];
+  for(var k = n; k >= Math.max(0, n - 3); k--){
+    var pk = k === n - 3 ? c.dist.slice(0, k + 1).reduce(function(t, x){ return t + x; }, 0) : c.dist[k];
+    righe.push({et: (k === n - 3 ? k + ' o meno' : k + ' su ' + n), p: pk});
+  }
+  var testo = ['MONTHLINE · LE ' + n + ' DI SERIE A — tutte insieme quota ' + nu(c.quotaTutte, 2) +
+               ', escono tutte il ' + pc(c.tutte.pVinci, 1)];
+  gambe.forEach(function(g, i){
+    testo.push((i + 1) + '. ' + g.nome + ' — ' + g.partita.c + ' - ' + g.partita.v + ' (' +
+               dataBreve(g.partita.d) + (g.partita.o ? ' ' + g.partita.o : '') + ') @' + nu(quotaGamba(g), 2));
+  });
+
+  var h = '<div class="h2" style="margin-top:22px">Le ' + n + ' di Serie A<span class="r">la più solida di ogni partita</span></div>';
+  h += '<div class="card csg">';
+  h += '<div class="csgh"><span class="csgl dieci">Tutte e ' + n + '</span>' +
+       '<div class="csgq">' + nu(c.quotaTutte, 2) + '<span>quota</span></div></div>';
+  h += '<div class="csgp"><div class="csgv">' + nu(100 * c.tutte.pVinci, 1) + '<small>%</small></div>' +
+       '<div class="csgs">escono tutte <b>' + quanteVolte(c.tutte.pVinci) + '</b></div></div>';
+  h += '<div class="csgd">' + righe.map(function(r){
+    return '<div class="csgdr"><span>' + esc(r.et) + '</span><i><b style="width:' +
+      Math.max(1, Math.round(100 * r.p)) + '%"></b></i><em>' + pc(r.p, r.p < 0.1 ? 1 : 0) + '</em></div>';
+  }).join('') + '</div>';
+  h += '<div class="csgs" style="margin:6px 0 4px">In media ne prendi <b>' + nu(c.media, 1) + ' su ' + n +
+       '</b>.</div>';
+  h += gambe.map(function(g, i){
+    return '<div class="csgr"><div class="csgn"><b>' + esc(g.nome) + '</b>' +
+      '<em>' + esc(g.partita.c) + ' – ' + esc(g.partita.v) + '</em>' +
+      '<em class="csgm">' + esc(dataBreve(g.partita.d)) + (g.partita.o ? ' · ' + esc(g.partita.o) : '') +
+        (i === n - 1 ? ' · <span class="debole">la più debole</span>' : '') + '</em></div>' +
+      '<div class="csgx">' + pc(g.p) + '<span>' + nu(quotaGamba(g), 2) + '</span></div>' +
+      segnaQui(chiave, i) + '</div>';
+  }).join('');
+
+  /* i modi di giocarle, uno sotto l'altro, con le stesse quattro domande */
+  var modi = [{nome: 'Tutte e ' + n, s: c.tutte}];
+  c.sistemi.forEach(function(s){
+    var errori = n - s.k;
+    modi.push({nome: n + ' con ' + errori + (errori === 1 ? ' errore' : ' errori'),
+               sotto: 'sistema ' + s.k + '/' + n, s: s});
+  });
+  if(c.senzaDebole) modi.push({nome: (n - 1) + ' senza la più debole',
+                               sotto: 'via ' + debole.partita.c + '–' + debole.partita.v, s: c.senzaDebole});
+  h += '<div class="tabimp" style="margin-top:12px"><table><tr><th>come</th><th>colonne</th>' +
+       '<th>vinci</th><th>rientri</th><th>torna</th></tr>' +
+    modi.map(function(m){
+      return '<tr><td>' + esc(m.nome) + (m.sotto ? '<br><span class="csgm">' + esc(m.sotto) + '</span>' : '') +
+        '</td><td>' + m.s.colonne + '</td><td>' + pc(m.s.pVinci, m.s.pVinci < 0.1 ? 1 : 0) + '</td><td>' +
+        pc(m.s.pAttivo, m.s.pAttivo < 0.1 ? 1 : 0) + '</td><td>' + perFranco(m.s.ritorno) + '</td></tr>';
+    }).join('') + '</table></div>';
+  var s2 = c.sistemi[c.sistemi.length - 1];
+  h += '<div class="note" style="margin-top:4px"><p><b>Vinci</b> = almeno una colonna entra. ' +
+    '<b>Rientri</b> = torna almeno quanto hai speso in tutto. <b>Torna</b> = quanto torna in media per ' +
+    'ogni franco giocato: sempre sotto il franco, per il ricarico del banco su ogni gamba.</p>' +
+    (s2 ? '<p>Col sistema da ' + s2.colonne + ' colonne vinci spesso (' + pc(s2.pVinci) + '), ma se ne ' +
+      'sbagli due vince una colonna sola e non ripaga le altre: rientri solo il ' + pc(s2.pAttivo) +
+      ' delle volte.</p>' : '') + '</div>';
+  h += '<div class="csgf"><button class="copia" data-t="' + esc(testo.join('\n')) +
+       '" onclick="copiaSchedina(this)">copia</button></div>';
+  h += '</div>';
+  return h;
+}
+
 function tabConsigliata(){
   if(!(S._prossime||[]).length) S._prossime = prossimePartite();
   var tutte = consigliate();
@@ -4832,6 +5029,7 @@ function tabConsigliata(){
       'possono cambiare quando arrivano.</div>';
   }
   h += tutte.map(cardConsigliata).join('');
+  h += cardDieci();
   h += cardAccesso();
   h += '<div class="note" style="margin-bottom:14px">In ogni livello, fra tutte le combinazioni di ' +
     'quella quota nei cinque campionati, c\'è quella che esce più spesso. Più sale la quota, più ' +
