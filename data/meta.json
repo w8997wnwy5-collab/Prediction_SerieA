@@ -1,5 +1,5 @@
 {
- "aggiornato": "2026-10-19T21:45:35+00:00",
+ "aggiornato": "2026-10-20T01:52:59+00:00",
  "esito": "ok",
  "ultima_partita": "2026-10-16",
  "partite_totali": 1961,
@@ -47,17 +47,17 @@
   "memoria E0": "ok: 311 partite dal deposito",
   "E0 quote": "non disponibile: HTTP Error 401: Unauthorized",
   "E0 nomi (leggero)": "nessun nome da risolvere",
-  "deposito E0": "ok: 311 partite depositate",
+  "deposito E0": "ok: 310 partite depositate",
   "memoria D1": "ok: 252 partite dal deposito",
-  "D1 quote": "saltata: nessuna partita entro 3 giorni (risparmiato 1 credito)",
+  "D1 quote": "non disponibile: HTTP Error 401: Unauthorized",
   "D1 nomi (leggero)": "nessun nome da risolvere",
   "deposito D1": "ok: 252 partite depositate",
   "memoria SP1": "ok: 292 partite dal deposito",
   "SP1 quote": "non disponibile: HTTP Error 401: Unauthorized",
   "SP1 nomi (leggero)": "nessun nome da risolvere",
-  "deposito SP1": "ok: 292 partite depositate",
+  "deposito SP1": "ok: 291 partite depositate",
   "memoria F1": "ok: 243 partite dal deposito",
-  "F1 quote": "saltata: nessuna partita entro 3 giorni (risparmiato 1 credito)",
+  "F1 quote": "non disponibile: HTTP Error 401: Unauthorized",
   "F1 nomi (leggero)": "nessun nome da risolvere",
   "deposito F1": "ok: 243 partite depositate"
  }
