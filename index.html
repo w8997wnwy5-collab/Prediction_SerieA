@@ -4676,8 +4676,10 @@ var CONS_GAMBE_MIN = 2, CONS_GAMBE_MAX = 6;
 /* QUOTA 10: la piu' probabile a quella quota, senza minimo di gambe oltre
    le due. Rigiocate 133 giornate di Serie A (tools/misura_dieci.js): alla
    stessa quota di banco delle dieci "piu' solide" insieme, la combinazione
-   piu' probabile ha in media DUE gambe, prometteva l'11% contro il 6.5% ed
-   e' uscita 15 volte contro 12. Il ricarico si paga una volta per gamba:
+   piu' probabile ha in media DUE gambe, prometteva l'11.5% contro il 6.7% ed
+   e' uscita 15 volte contro 8 (col modello di oggi, forma stretta dei gol
+   compresa: con quello di prima erano 15 contro 12, stessa conclusione).
+   Il ricarico si paga una volta per gamba:
    dieci gambe lo pagano dieci volte. */
 var LIVELLO_QUOTA10 = {id:'quota10', nome:'Quota 10', min:9.00, max:11.00, gambe:2};
 /* Sotto 1.15 una gamba non e' una giocata, e' una constatazione: in schedina
@@ -4809,7 +4811,7 @@ function cardQuota10(){
       'valgono quota ' + nu(c.quotaTutte, 1) + ' ed escono il <b>' + pc(c.tutte.pVinci, 1) + '</b>. ' +
       'Questa, a quota ' + nu(o.quota, 2) + ', esce il <b>' + pc(o.p, 1) + '</b>: con meno gambe il ricarico ' +
       'del banco si paga meno volte.</p><p>Rigiocato su 133 giornate di Serie A, alla stessa quota: le dieci ' +
-      'insieme sono uscite 12 volte, la combinazione corta 15.</p></div>';
+      'insieme sono uscite 8 volte, la combinazione corta 15.</p></div>';
   }
   return h;
 }

@@ -176,6 +176,27 @@ for (var t = 0; t < 2000; t++) {
 }
 prova('la scorciatoia dà gli stessi numeri della matrice intera', peggio < 1e-12, peggio.toExponential(2));
 
+/* ── la forma stretta dei gol: stessa media, meno zeri ──────────────────── */
+var scartoMedia = 0, scartoPoisson = 0, sempreMenoZeri = true;
+[0.05, 0.3, 0.8, 1.3, 2.1, 3.5, 5].forEach(function (m) {
+  var d = M.distribuzioneGol(m, 11), uno = M.distribuzioneGol(m, 11, 1), s = 0, tot = 0;
+  for (var k = 0; k < 11; k++) { s += k * d[k]; tot += d[k]; }
+  scartoMedia = Math.max(scartoMedia, Math.abs(s / tot - m) / m);
+  for (k = 0; k < 11; k++) scartoPoisson = Math.max(scartoPoisson, Math.abs(uno[k] - M.poisson(k, m)));
+  if (m >= 0.3 && !(d[0] < uno[0])) sempreMenoZeri = false;
+});
+prova('la forma stretta tiene la media dei gol attesi (entro lo 0.1%)', scartoMedia < 1e-3, scartoMedia.toExponential(2));
+prova('con nu = 1 e\' il Poisson di sempre, cifra per cifra', scartoPoisson === 0);
+prova('e a parita\' di media fa meno partite a secco del Poisson', sempreMenoZeri);
+prova('il modello usa la forma misurata, 1.10', M.DISPERSIONE === 1.10);
+var dueStrade = 0;
+for (t = 0; t < 300; t++) {
+  var l3 = 0.1 + Math.random() * 4, m3 = 0.1 + Math.random() * 4, r3 = (Math.random() - 0.5) * 0.3;
+  var e3 = M.esiti(M.matriceRisultati(l3, m3, r3, 11, 1)), s3 = M._sintesi(l3, m3, r3, 1);
+  dueStrade = Math.max(dueStrade, Math.abs(s3.squilibrio - (e3.casa - e3.via)), Math.abs(s3.over - e3.over25));
+}
+prova('e la scorciatoia resta esatta anche col Poisson puro', dueStrade < 1e-12, dueStrade.toExponential(2));
+
 /* ── l'ancoraggio raggiunge davvero il mercato ──────────────────────────── */
 var quote = [1.55, 4.20, 6.00], quoteOU = [1.80, 2.00];
 var anc = M.ancoraMercato(1.8, 0.9, -0.05, { q: quote, qou: quoteOU, peso1x2: 1, pesoOU: 1 });

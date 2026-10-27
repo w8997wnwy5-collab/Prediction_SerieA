@@ -29,6 +29,17 @@
      alla stessa quota: le dieci promettono 6.5% ed escono 12 volte;
      la piu' probabile corta (2 gambe in media) promette 11.0% ed esce 15
 
+   DI NUOVO, 27 ottobre 2026, con la forma stretta dei gol nel modello
+   (DISPERSIONE 1.10, tools/misura_dispersione.js): stesse 133 giornate
+     ogni gamba: promessa 76.3%, presa 75.3% — dentro il rumore (+-1.2)
+     dieci su dieci: 8 giornate (6.0%), attese 9.0 (6.7%)
+     alla stessa quota: le dieci promettono 6.7% ed escono 8 volte;
+     la piu' probabile corta promette 11.5% ed esce 15
+   Le dieci giuste sono passate da 12 a 8 senza che l'attesa cambiasse
+   (8.6 prima, 9.0 adesso): 12 era stata fortuna, 8 e' un po' di sfortuna,
+   tutte e due a meno di un sigma e mezzo dall'atteso. La conclusione
+   sulla quota 10 resta la stessa, e piu' netta.
+
    uso: node tools/misura_dieci.js
 */
 var fs = require('fs');

@@ -6,7 +6,9 @@
    difesa; i gol attesi di una partita escono da attacco di uno, difesa
    dell'altro e vantaggio del campo. Le partite vecchie pesano meno di quelle
    recenti. Una correzione sui punteggi bassi rimette a posto lo 0-0 e l'1-1,
-   che il Poisson puro sottostima.
+   che il Poisson puro sottostima, e i gol di ogni squadra seguono un Poisson
+   un po' piu' stretto del solito (DISPERSIONE): a parita' di gol attesi,
+   meno partite a secco e meno goleade, come nelle partite vere.
 
    Sopra ci sta un secondo modello identico ma stimato sui TIRI IN PORTA invece
    che sui gol: i tiri sono più numerosi, quindi più stabili, e dicono in
@@ -28,6 +30,69 @@ function poisson(k, lam) {
 function limita(v, min, max) { return v < min ? min : (v > max ? max : v); }
 function media(a) { var t = 0, i; for (i = 0; i < a.length; i++) t += a[i]; return a.length ? t / a.length : 0; }
 function giorni(a, b) { return (Date.parse(b + 'T00:00:00Z') - Date.parse(a + 'T00:00:00Z')) / 86400000; }
+
+/* ──────────── quanti gol fa una squadra: un Poisson un po' più stretto ────────────
+
+   Il Poisson dice: se ti aspetti 1.3 gol, ecco quante volte ne fai zero, uno,
+   due. È il modo standard di farlo e sbaglia in un punto preciso, misurato su
+   9205 partite dei cinque campionati (tools/misura_dispersione.js): a parità
+   di gol attesi le partite vere hanno MENO zeri e meno goleade, e più uno e
+   due. Una squadra resta a secco meno spesso di quanto il Poisson creda — e
+   il conto che ne soffre di più è proprio il Gol/NoGol: il Poisson lo dava
+   tre punti sotto il vero, stagione dopo stagione.
+
+   Si corregge con la versione "stretta" del Poisson (Conway-Maxwell-Poisson):
+   P(k) proporzionale a lambda^k / (k!)^nu. Con nu = 1 è il Poisson di sempre,
+   sopra 1 la distribuzione si stringe intorno alla media. La si comanda con
+   la MEDIA, non con lambda, così "gol attesi" vuol dire ancora gol attesi in
+   tutto il resto del motore: una tabella per ogni nu traduce la media nel
+   lambda che la dà.
+
+   nu = 1.10 è scelto sulle stagioni 2021-22 .. 2023-24 e verificato sulle tre
+   dopo, che nella scelta non sono entrate: il risultato esatto si prevede
+   meglio dello 0.17% (z 5.5) con le quote di chiusura e dello 0.15% (z 4.6)
+   con quelle di apertura; il Gol passa da -3.0 a -1.6 punti dal vero. Il
+   modello si STIMA ancora col Poisson: le medie che ne escono sono giuste
+   anche se la forma non lo è, ed è solo la forma che qui si cambia. */
+var DISPERSIONE = 1.10;
+var LOGFATT = [0];
+for (_i = 1; _i < 25; _i++) LOGFATT[_i] = LOGFATT[_i - 1] + Math.log(_i);
+var _tabelleGol = {};
+function _tabellaGol(nu, n) {
+  var chiave = nu + '|' + n;
+  if (_tabelleGol[chiave]) return _tabelleGol[chiave];
+  var PASSI = 1400, a = Math.log(0.002), b = Math.log(80), s, k;
+  var ll = new Array(PASSI + 1), medie = new Array(PASSI + 1);
+  for (s = 0; s <= PASSI; s++) {
+    var l = a + s * (b - a) / PASSI, z = 0, m = 0;
+    for (k = 0; k < n; k++) { var w = Math.exp(k * l - nu * LOGFATT[k]); z += w; m += k * w; }
+    ll[s] = l; medie[s] = m / z;
+  }
+  var potenze = [1];
+  for (k = 1; k < n; k++) potenze.push(Math.pow(k, nu));
+  return (_tabelleGol[chiave] = { ll: ll, medie: medie, potenze: potenze });
+}
+/* Le probabilità di 0, 1, ... n-1 gol per una squadra che ne aspetta "media". */
+function distribuzioneGol(media, n, nu) {
+  n = n || 11;
+  nu = nu == null ? DISPERSIONE : nu;
+  var p = new Array(n), k;
+  if (nu === 1) { for (k = 0; k < n; k++) p[k] = poisson(k, media); return p; }
+  if (!(media > 0)) { for (k = 0; k < n; k++) p[k] = k === 0 ? 1 : 0; return p; }
+  var t = _tabellaGol(nu, n), lo = 0, hi = t.medie.length - 1, l;
+  if (media <= t.medie[lo]) l = t.ll[lo];
+  else if (media >= t.medie[hi]) l = t.ll[hi];
+  else {
+    while (hi - lo > 1) { var c = (lo + hi) >> 1; if (t.medie[c] < media) lo = c; else hi = c; }
+    l = t.ll[lo] + (media - t.medie[lo]) * (t.ll[hi] - t.ll[lo]) / (t.medie[hi] - t.medie[lo]);
+  }
+  /* p[k] = p[k-1] * lambda / k^nu: un esponenziale solo invece di n */
+  var lam = Math.exp(l), z = 1;
+  p[0] = 1;
+  for (k = 1; k < n; k++) { p[k] = p[k - 1] * lam / t.potenze[k]; z += p[k]; }
+  for (k = 0; k < n; k++) p[k] /= z;
+  return p;
+}
 
 /* Correzione Dixon-Coles: solo i quattro risultati bassi vengono ritoccati. */
 function tau(x, y, lam, mu, rho) {
@@ -287,10 +352,9 @@ function attesi(par, i, j, agg) {
   ];
 }
 
-function matriceRisultati(lam, mu, rho, n) {
+function matriceRisultati(lam, mu, rho, n, nu) {
   n = n || 11;
-  var pl = [], pm = [], i, j;
-  for (i = 0; i < n; i++) { pl.push(poisson(i, lam)); pm.push(poisson(i, mu)); }
+  var pl = distribuzioneGol(lam, n, nu), pm = distribuzioneGol(mu, n, nu), i, j;
   var m = [], tot = 0;
   for (i = 0; i < n; i++) {
     m.push([]);
@@ -382,9 +446,8 @@ function fondiTre(p, q, w) {
    la correzione di Dixon-Coles tocca quattro caselle e basta — così i conti
    diventano lineari invece che quadratici, e le quattro caselle si aggiustano
    a mano alla fine. Il risultato è identico alla matrice, cifra per cifra. */
-function _sintesi(lam, mu, rho) {
-  var n = 11, pl = new Array(n), pm = new Array(n), i;
-  for (i = 0; i < n; i++) { pl[i] = poisson(i, lam); pm[i] = poisson(i, mu); }
+function _sintesi(lam, mu, rho, nu) {
+  var n = 11, pl = distribuzioneGol(lam, n, nu), pm = distribuzioneGol(mu, n, nu), i;
   var sl = 0, sm = 0, casa = 0, via = 0, cumL = 0, cumM = 0;
   var cm = new Array(n), cl = new Array(n);
   for (i = 0; i < n; i++) { cl[i] = cumL; cumL += pl[i]; cm[i] = cumM; cumM += pm[i]; }
@@ -407,7 +470,7 @@ function _sintesi(lam, mu, rho) {
 /* Due incognite, due bersagli, entrambi monotoni: il totale fa salire l'Over,
    e spostare gol dalla trasferta alla casa fa salire lo squilibrio. Due bisezioni
    annidate ci arrivano senza derivate e senza poter divergere. */
-function _risolvi(lam, mu, rho, bersaglioSquilibrio, bersaglioOver) {
+function _risolvi(lam, mu, rho, bersaglioSquilibrio, bersaglioOver, nu) {
   var totale = lam + mu;
   if (!(totale > 0)) return [lam, mu];
 
@@ -420,7 +483,7 @@ function _risolvi(lam, mu, rho, bersaglioSquilibrio, bersaglioOver) {
     for (k = 0; k < 17; k++) {
       mid = (lo + hi) / 2;
       g = conQuota(mid, T);
-      if (_sintesi(g[0], g[1], rho).squilibrio < bersaglioSquilibrio) lo = mid; else hi = mid;
+      if (_sintesi(g[0], g[1], rho, nu).squilibrio < bersaglioSquilibrio) lo = mid; else hi = mid;
     }
     return (lo + hi) / 2;
   }
@@ -432,7 +495,7 @@ function _risolvi(lam, mu, rho, bersaglioSquilibrio, bersaglioOver) {
   for (k = 0; k < 17; k++) {
     mid = (lo + hi) / 2;
     g = conQuota(quotaPerSquilibrio(mid), mid);
-    if (_sintesi(g[0], g[1], rho).over < bersaglioOver) lo = mid; else hi = mid;
+    if (_sintesi(g[0], g[1], rho, nu).over < bersaglioOver) lo = mid; else hi = mid;
   }
   mid = (lo + hi) / 2;
   return conQuota(quotaPerSquilibrio(mid), mid);
@@ -503,7 +566,7 @@ function ancoraMercato(lam, mu, rho, opz) {
                      pesoUsato: 0, mercato1x2: q, mercatoOver: pOU };
   if ((!q || w1 <= 0) && (pOU == null || wOU <= 0)) return senzaNulla;
 
-  var base = matriceRisultati(lam, mu, rho, 11), e = esiti(base);
+  var base = matriceRisultati(lam, mu, rho, 11, opz.dispersione), e = esiti(base);
   var mie = [e.casa, e.pari, e.via];
   var bersaglioSq = null, bersaglioOver = null;
   if (q && w1 > 0) {
@@ -513,7 +576,7 @@ function ancoraMercato(lam, mu, rho, opz) {
   if (pOU != null && wOU > 0) {
     bersaglioOver = fondiLogit(e.over25, pOU, wOU);
   }
-  var g = _risolvi(lam, mu, rho, bersaglioSq, bersaglioOver);
+  var g = _risolvi(lam, mu, rho, bersaglioSq, bersaglioOver, opz.dispersione);
   return { lam: g[0], mu: g[1],
            fattoreCasa: lam > 0 ? g[0] / lam : 1, fattoreVia: mu > 0 ? g[1] / mu : 1,
            usato: true, pesoUsato: Math.max(q ? w1 : 0, pOU != null ? wOU : 0),
@@ -2089,7 +2152,7 @@ function valutaBacktest(res, opzioni) {
 /* ─────────────────────────── esportazione ─────────────────────────── */
 
 var API = {
-  poisson: poisson, tau: tau, giorni: giorni, limita: limita, media: media,
+  poisson: poisson, distribuzioneGol: distribuzioneGol, DISPERSIONE: DISPERSIONE, tau: tau, giorni: giorni, limita: limita, media: media,
   prepara: prepara, stima: stima, stimaRho: stimaRho, costruisci: costruisci,
   attesi: attesi, matriceRisultati: matriceRisultati, esiti: esiti, prevedi: prevedi,
   ancoraMercato: ancoraMercato, daQuoteOU: daQuoteOU,
