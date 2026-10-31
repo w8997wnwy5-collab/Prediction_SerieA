@@ -1,5 +1,5 @@
 {
- "aggiornato": "2026-10-30T21:42:21+00:00",
+ "aggiornato": "2026-10-31T02:27:59+00:00",
  "esito": "ok",
  "ultima_partita": "2026-10-29",
  "partite_totali": 1990,
@@ -40,7 +40,7 @@
   "ESPN calendario": "non disponibile: HTTP Error 400: Bad Request",
   "ESPN arbitri": "850 partite sono senza arbitro, ma nessuna è stata agganciata a ESPN: senza il suo identificativo non posso chiederne il dettaglio",
   "marcatori": "saltati: nessuna chiave FOOTBALL_DATA_TOKEN",
-  "notizie ANSA": "50 titoli tenuti su 75 (scartati: 25 nessuna squadra)",
+  "notizie ANSA": "48 titoli tenuti su 73 (scartati: 25 nessuna squadra)",
   "notizie Football Italia": "16 titoli tenuti su 20 (scartati: 4 nessuna squadra)",
   "notizie Repubblica": "12 titoli tenuti su 25 (scartati: 4 doppio, 9 nessuna squadra)",
   "notizie": "60 titoli tenuti, 4 segnalano un'assenza, 0 la panchina",
@@ -52,14 +52,14 @@
   "memoria D1": "ok: 243 partite dal deposito",
   "D1 quote": "non disponibile: HTTP Error 401: Unauthorized",
   "D1 nomi (leggero)": "nessun nome da risolvere",
-  "deposito D1": "ok: 243 partite depositate",
+  "deposito D1": "ok: 242 partite depositate",
   "memoria SP1": "ok: 280 partite dal deposito",
   "SP1 quote": "non disponibile: HTTP Error 401: Unauthorized",
   "SP1 nomi (leggero)": "nessun nome da risolvere",
-  "deposito SP1": "ok: 280 partite depositate",
+  "deposito SP1": "ok: 279 partite depositate",
   "memoria F1": "ok: 234 partite dal deposito",
   "F1 quote": "non disponibile: HTTP Error 401: Unauthorized",
   "F1 nomi (leggero)": "nessun nome da risolvere",
-  "deposito F1": "ok: 234 partite depositate"
+  "deposito F1": "ok: 231 partite depositate"
  }
 }
