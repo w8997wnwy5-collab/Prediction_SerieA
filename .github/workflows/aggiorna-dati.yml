@@ -140,6 +140,25 @@ jobs:
           MONTHLINE_ADMIN: ${{ secrets.MONTHLINE_ADMIN }}
         run: node scripts/salda.js
 
+      # Lo storico della Consigliata: le giornate appena finite, rigiocate con
+      # l'app vera alla mattina della prima partita (scripts/storico_consigliata.js).
+      # Il browser si installa solo quando c'e' davvero una giornata nuova da
+      # rigiocare — una o due volte a settimana — e se qualcosa va storto i
+      # dati si pubblicano lo stesso: lo storico si rifa' al giro dopo.
+      - name: Storico della Consigliata, c'e' una giornata nuova?
+        id: storico
+        continue-on-error: true
+        run: node scripts/storico_consigliata.js --controlla
+
+      - name: Rigioca le giornate finite
+        if: steps.storico.outputs.serve == 'si'
+        continue-on-error: true
+        timeout-minutes: 20
+        run: |
+          npm install --no-save --no-package-lock --no-audit --no-fund playwright@1.56.1
+          npx playwright install --with-deps chromium
+          node scripts/storico_consigliata.js
+
       - name: Committa se qualcosa è cambiato
         env:
           FOOTBALL_DATA_TOKEN: ${{ secrets.FOOTBALL_DATA_TOKEN }}

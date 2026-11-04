@@ -755,7 +755,8 @@ async function getClassifica(req, env) {
    Adesso il telefono dice COSA gioca, e il prezzo lo fa il server, con le
    quote vere dei bookmaker che ha gia' in calendario:
 
-     1X2 e doppia chance   dalle quote dell'1X2, tolto il margine
+     1X2 e doppia chance   dalle quote dell'1X2, tolto il margine col metodo
+                           di Shin (come l'app: tools/misura_ritocchi.js)
      tutti i mercati gol   da due Poisson tarate sulle quote dell'1X2 e
                            dell'Over/Under 2.5: il totale dei gol si tara
                            sull'Over 2.5, la divisione fra le due squadre
@@ -776,6 +777,25 @@ function probEque(q) {
   if (!Array.isArray(q) || !q.every((x) => x > 1)) return null;
   const inv = q.map((x) => 1 / x), s = inv.reduce((a, b) => a + b, 0);
   return inv.map((x) => x / s);
+}
+/* L'1X2 senza margine, col metodo di Shin: il banco carica di piu'
+   sull'esito improbabile, e dividere in proporzione glielo lascia. E' lo
+   stesso conto di daQuote in modello.js, cosi' app e classifica dicono lo
+   stesso numero. Sull'Over/Under (due esiti) resta la proporzione: li'
+   cambiare non ha dato niente. */
+function probShin(q) {
+  const base = probEque(q);
+  if (!base || q.length !== 3) return base;
+  const inv = q.map((x) => 1 / x), s = inv.reduce((a, b) => a + b, 0);
+  if (!(s > 1.0001)) return base;
+  const conZ = (z) => inv.map((x) => (Math.sqrt(z * z + 4 * (1 - z) * x * x / s) - z) / (2 * (1 - z)));
+  let lo = 0, hi = 0.4;
+  for (let k = 0; k < 50; k++) {
+    const z = (lo + hi) / 2, p = conZ(z);
+    if (p[0] + p[1] + p[2] > 1) lo = z; else hi = z;
+  }
+  const p = conZ((lo + hi) / 2), t = p[0] + p[1] + p[2];
+  return p.map((x) => x / t);
 }
 function poisson(k, l) {
   let p = Math.exp(-l);
@@ -820,7 +840,7 @@ function divisione(T, diff) {
 
 /* La probabilita' di un mercato, o null se il server non la sa. */
 function probMercato(p, id) {
-  const x1x2 = probEque(p.qex) || probEque(p.q);
+  const x1x2 = probShin(p.qex) || probShin(p.q);
   const pou = probEque(p.qou);
   const quale = { '1': 0, 'X': 1, '2': 2 };
   if (id in quale) return x1x2 ? x1x2[quale[id]] : null;

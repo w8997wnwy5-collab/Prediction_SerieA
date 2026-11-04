@@ -339,8 +339,16 @@ async function entra(env, codice) {
   /* il prezzo onesto, calcolato qui a parte: quota equa senza margine, meno
      il ricarico della classifica, a due decimali */
   const equa = (q, i) => { const inv = q.map(x => 1 / x); return inv[i] / inv.reduce((a, b) => a + b, 0); };
+  /* l'1X2 si prezza col metodo di Shin: qui rifatto a mano, per conto suo */
+  const shin = (q, i) => {
+    const inv = q.map(x => 1 / x), s = inv.reduce((a, b) => a + b, 0);
+    const conZ = (z) => inv.map(x => (Math.sqrt(z * z + 4 * (1 - z) * x * x / s) - z) / (2 * (1 - z)));
+    let lo = 0, hi = 0.4;
+    for (let k = 0; k < 60; k++) { const z = (lo + hi) / 2, p = conZ(z); if (p[0] + p[1] + p[2] > 1) lo = z; else hi = z; }
+    const p = conZ((lo + hi) / 2); return p[i] / (p[0] + p[1] + p[2]);
+  };
   const prezzo = (pr) => Math.round((1 / pr) * (1 - 0.056) * 100) / 100;
-  const q1Roma = prezzo(equa([2.2, 3.2, 3.4], 0));
+  const q1Roma = prezzo(shin([2.2, 3.2, 3.4], 0));
   const qOver = prezzo(equa([1.9, 1.95], 0));
 
   const cod = await creaCodice(env, { tipo: 'vip', nome: 'uno' });

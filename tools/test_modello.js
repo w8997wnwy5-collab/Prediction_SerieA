@@ -197,6 +197,39 @@ for (t = 0; t < 300; t++) {
 }
 prova('e la scorciatoia resta esatta anche col Poisson puro', dueStrade < 1e-12, dueStrade.toExponential(2));
 
+/* ── il ricarico tolto con Shin ─────────────────────────────────────────── */
+var qShin = [2.2, 3.2, 3.4], sh = M.daQuote(qShin);
+var invS = qShin.map(function (x) { return 1 / x; }), sumS = invS[0] + invS[1] + invS[2];
+prova('Shin: le tre probabilita\' fanno uno', Math.abs(sh[0] + sh[1] + sh[2] - 1) < 1e-12);
+prova('Shin: alla favorita va piu\' della proporzione, al piu\' improbabile meno',
+      sh[0] > invS[0] / sumS && sh[2] < invS[2] / sumS,
+      sh.map(function (x) { return x.toFixed(4); }).join(' '));
+var senzaMargine = M.daQuote([1 / 0.5, 1 / 0.3, 1 / 0.2]);
+prova('Shin: senza margine non tocca niente',
+      Math.abs(senzaMargine[0] - 0.5) < 1e-9 && Math.abs(senzaMargine[2] - 0.2) < 1e-9);
+
+/* ── l'1X2 mostrato e' quello del mercato; i rossi non spostano la media ── */
+var modS = M.costruisci(doc.partite, { primoTempo: false, iterazioni: 120, ancoraggio: 1 });
+var cS = modS.squadre[0], vS = modS.squadre[1], quoteS = [1.9, 3.5, 4.2], ouS = [1.85, 1.95];
+var mkS = M.daQuote(quoteS);
+var simS = M.simula(modS, cS, vS, { N: 400, q: quoteS, qou: ouS });
+prova('con peso 1 l\'1X2 della simulazione e\' quello del mercato',
+      Math.abs(simS.fasce.casa.p - mkS[0]) < 1e-9 && Math.abs(simS.fasce.pari.p - mkS[1]) < 1e-9 &&
+      Math.abs(simS.fasce.via.p - mkS[2]) < 1e-9 && Math.abs(simS.fasce.c1x.p - mkS[0] - mkS[1]) < 1e-9,
+      simS.fasce.casa.p.toFixed(4) + ' vs ' + mkS[0].toFixed(4));
+prova('e la fascia resta intorno al numero mostrato',
+      simS.fasce.casa.p05 <= simS.fasce.casa.p + 1e-12 && simS.fasce.casa.p95 >= simS.fasce.casa.p - 1e-12);
+var prS = M.prevedi(modS, cS, vS, { q: quoteS, qou: ouS });
+prova('e anche la previsione dice lo stesso 1X2', Math.abs(prS.pari - mkS[1]) < 1e-9);
+var senzaRossi = M.simula(modS, cS, vS, { N: 400, q: quoteS, qou: ouS, pRossoCasa: 0, pRossoVia: 0 });
+var conRossi = M.simula(modS, cS, vS, { N: 400, q: quoteS, qou: ouS, pRossoCasa: 0.3, pRossoVia: 0.3 });
+prova('i rossi non spostano la probabilita\'',
+      Math.abs(conRossi.fasce.o25.p - senzaRossi.fasce.o25.p) < 1e-12 && Math.abs(conRossi.fasce.gol.p - senzaRossi.fasce.gol.p) < 1e-12,
+      conRossi.fasce.o25.p.toFixed(6) + ' / ' + senzaRossi.fasce.o25.p.toFixed(6));
+prova('ma allargano la fascia',
+      (conRossi.fasce.o25.p95 - conRossi.fasce.o25.p05) > (senzaRossi.fasce.o25.p95 - senzaRossi.fasce.o25.p05) &&
+      conRossi.quotaRossi.casa > 0.2);
+
 /* ── l'ancoraggio raggiunge davvero il mercato ──────────────────────────── */
 var quote = [1.55, 4.20, 6.00], quoteOU = [1.80, 2.00];
 var anc = M.ancoraMercato(1.8, 0.9, -0.05, { q: quote, qou: quoteOU, peso1x2: 1, pesoOU: 1 });

@@ -40,6 +40,17 @@
    tutte e due a meno di un sigma e mezzo dall'atteso. La conclusione
    sulla quota 10 resta la stessa, e piu' netta.
 
+   E DI NUOVO, 4 novembre 2026, col ricarico tolto con Shin, l'1X2 del
+   mercato e i rossi fuori dalla media (tools/misura_ritocchi.js):
+     ogni gamba: promessa 76.0%, presa 74.8% — ancora dentro il rumore
+     dieci su dieci: 7 giornate (5.3%), attese 8.6 (6.4%)
+     alla stessa quota: le dieci promettono 6.4% ed escono 7 volte;
+     la piu' probabile corta promette 11.0% ed esce 14
+   Il 74.8 della sola Serie A non e' un difetto nuovo: sulle 9360 partite
+   dei cinque campionati la stessa regola, con lo stesso modello, promette
+   76.8% e prende 76.8% (chiusura), 77.0% e 77.4% (venerdi'), come o
+   meglio della versione del 27 ottobre.
+
    uso: node tools/misura_dieci.js
 */
 var fs = require('fs');

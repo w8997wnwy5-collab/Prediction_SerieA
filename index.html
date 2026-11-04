@@ -653,6 +653,19 @@ details.note summary:active{opacity:.6;}
 .csgdr i b{display:block;height:100%;border-radius:4px;background:var(--c1);}
 .csgdr em{width:44px;flex:none;text-align:right;font-style:normal;font-family:var(--mono);color:var(--ink);}
 .csgm .debole,.csgn em .debole{color:var(--warn);font-weight:600;}
+/* Come e' andata: lo storico della Consigliata */
+.storr{display:flex;align-items:center;gap:8px;padding:9px 0 3px;}
+.storr .csgl{width:80px;flex:none;text-align:center;font-size:10px;letter-spacing:.2px;padding:4px 5px;white-space:nowrap;}
+.stop{flex:1;display:flex;gap:3px;flex-wrap:wrap;min-width:0;}
+.stop i{width:11px;height:11px;border-radius:50%;background:var(--line2);flex:none;}
+.stop i.si{background:var(--ok);}
+.stop i.no{background:var(--warn-soft);box-shadow:inset 0 0 0 1.5px var(--warn);}
+.stop b{font-family:var(--mono);font-size:11.5px;font-weight:600;color:var(--mute);min-width:15px;text-align:center;}
+.stop b.tutte{color:var(--ok);}
+.stoc{font-family:var(--mono);font-size:13px;font-weight:600;text-align:right;white-space:nowrap;}
+.stoc span{display:block;font-family:var(--sys);font-size:10.5px;font-weight:400;color:var(--mute);}
+.stov{font-size:11.5px;color:var(--mute);padding:0 0 8px 88px;border-bottom:1px solid var(--line2);}
+.stov b{color:var(--ink);font-weight:600;}
 .tabimp .csgm{font-size:10.5px;color:var(--mute);}
 .csg .tabimp table{width:100%;border-collapse:collapse;font-size:12.5px;}
 .csg .tabimp th{font-size:9.5px;text-transform:uppercase;letter-spacing:.5px;color:var(--mute);
@@ -4676,9 +4689,9 @@ var CONS_GAMBE_MIN = 2, CONS_GAMBE_MAX = 6;
 /* QUOTA 10: la piu' probabile a quella quota, senza minimo di gambe oltre
    le due. Rigiocate 133 giornate di Serie A (tools/misura_dieci.js): alla
    stessa quota di banco delle dieci "piu' solide" insieme, la combinazione
-   piu' probabile ha in media DUE gambe, prometteva l'11.5% contro il 6.7% ed
-   e' uscita 15 volte contro 8 (col modello di oggi, forma stretta dei gol
-   compresa: con quello di prima erano 15 contro 12, stessa conclusione).
+   piu' probabile ha in media DUE gambe, prometteva l'11.0% contro il 6.4% ed
+   e' uscita 14 volte contro 7 (col modello del 4 novembre; con quelli di
+   prima erano 15 contro 8 e 15 contro 12: stessa conclusione ogni volta).
    Il ricarico si paga una volta per gamba:
    dieci gambe lo pagano dieci volte. */
 var LIVELLO_QUOTA10 = {id:'quota10', nome:'Quota 10', min:9.00, max:11.00, gambe:2};
@@ -4811,7 +4824,7 @@ function cardQuota10(){
       'valgono quota ' + nu(c.quotaTutte, 1) + ' ed escono il <b>' + pc(c.tutte.pVinci, 1) + '</b>. ' +
       'Questa, a quota ' + nu(o.quota, 2) + ', esce il <b>' + pc(o.p, 1) + '</b>: con meno gambe il ricarico ' +
       'del banco si paga meno volte.</p><p>Rigiocato su 133 giornate di Serie A, alla stessa quota: le dieci ' +
-      'insieme sono uscite 8 volte, la combinazione corta 15.</p></div>';
+      'insieme sono uscite 7 volte, la combinazione corta 14.</p></div>';
   }
   return h;
 }
@@ -5152,6 +5165,100 @@ function cardSicure(){
   return h;
 }
 
+/* ══════════════════════════════════════════════════════════════
+   COME E' ANDATA: lo storico vero della Consigliata
+
+   "Stai sbagliando tanto ultimamente" e' la domanda giusta, e senza numeri
+   non ha risposta: una Difficile al 13% perde sette volte su otto anche
+   quando il modello ha ragione, e tre perse di fila non dicono niente. Qui
+   ci sono le giornate passate, ognuna rigiocata con questa stessa app alla
+   mattina della prima partita (scripts/storico_consigliata.js, nel giro dei
+   dati), e per ogni livello: quante ne sono entrate, quante ne erano attese,
+   e quanto spesso capita PER CASO un risultato cosi'. Se le entrate stanno
+   vicino alle attese, la sfortuna e' sfortuna. Se no, e' il modello.
+   ══════════════════════════════════════════════════════════════ */
+function caricaStorico(){
+  if(S._storicoInCorso || S.storico !== undefined) return;
+  S._storicoInCorso = true;
+  prendi('data/storico-consigliata.json').then(function(x){
+    S.storico = (x && x.giornate && x.giornate.length) ? x : null;
+  }).catch(function(){ S.storico = null; }).then(function(){
+    S._storicoInCorso = false;
+    render();
+  });
+}
+/* La coda esatta: con quelle probabilita', quanto spesso se ne prendono
+   cosi' poche (o cosi' tante). */
+function codaStorico(ps, k){
+  var d = M.distribuzioneEsiti(ps), sotto = 0, sopra = 0;
+  for(var j = 0; j < d.length; j++){ if(j <= k) sotto += d[j]; if(j >= k) sopra += d[j]; }
+  return {sotto: sotto, sopra: sopra};
+}
+function giudizioStorico(vinte, attese, coda){
+  if(coda.sotto < 0.10) return 'meno del previsto: per caso succede il ' + pc(coda.sotto) + ' delle volte';
+  if(coda.sopra < 0.10) return 'più del previsto: per caso succede il ' + pc(coda.sopra) + ' delle volte';
+  return 'in linea con l\'atteso';
+}
+function cardStorico(){
+  if(S.storico === undefined){ caricaStorico(); return ''; }
+  if(!S.storico) return '';
+  var gg = S.storico.giornate.slice(0, 10).reverse();        /* dalla piu' vecchia alla piu' recente */
+  var somma = function(l){ return l.reduce(function(t, x){ return t + x; }, 0); };
+  var h = '<div class="h2" style="margin-top:22px">Come è andata<span class="r">ultime ' + gg.length +
+    ' giornate</span></div><div class="card csg">';
+  var nomi = {facile: 'Facile', media: 'Media', difficile: 'Difficile', quota10: 'Quota 10'};
+  ['facile', 'media', 'difficile', 'quota10'].forEach(function(id){
+    var esiti = [], ps = [], vinte = 0;
+    gg.forEach(function(g){
+      var l = (g.livelli || []).filter(function(x){ return x.id === id; })[0];
+      if(!l || l.vinta == null || l.p == null){ esiti.push(null); return; }
+      esiti.push(!!l.vinta); ps.push(l.p); if(l.vinta) vinte++;
+    });
+    if(!ps.length) return;
+    var attese = somma(ps), coda = codaStorico(ps, vinte);
+    h += '<div class="storr"><span class="csgl ' + id + '">' + nomi[id] + '</span><div class="stop">' +
+      esiti.map(function(e){ return '<i class="' + (e === null ? '' : (e ? 'si' : 'no')) + '"></i>'; }).join('') +
+      '</div><div class="stoc">' + vinte + ' su ' + ps.length + '<span>attese ' + nu(attese, 1) + '</span></div></div>' +
+      '<div class="stov">' + esc(giudizioStorico(vinte, attese, coda)) + '</div>';
+  });
+  /* le 10 di Serie A: quante ne sono entrate, giornata per giornata */
+  var dieci = gg.filter(function(g){ return g.dieci && g.dieci.n >= 9; });
+  if(dieci.length){
+    var tutte = dieci.filter(function(g){ return g.dieci.prese === g.dieci.n; }).length;
+    var pTutte = dieci.map(function(g){ return g.dieci.tutte; });
+    var codaT = codaStorico(pTutte, tutte);
+    h += '<div class="storr"><span class="csgl dieci">Le 10</span><div class="stop">' +
+      dieci.map(function(g){ return '<b class="' + (g.dieci.prese === g.dieci.n ? 'tutte' : '') + '">' + g.dieci.prese + '</b>'; }).join('') +
+      '</div><div class="stoc">' + nu(somma(dieci.map(function(g){ return g.dieci.prese; })) / dieci.length, 1) +
+      '<span>attese ' + nu(somma(dieci.map(function(g){ return g.dieci.attese; })) / dieci.length, 1) + '</span></div></div>' +
+      '<div class="stov">tutte giuste <b>' + tutte + ' volte</b> su ' + dieci.length + ', attese ' + nu(somma(pTutte), 1) +
+      ' — ' + esc(giudizioStorico(tutte, somma(pTutte), codaT)) + '</div>';
+  }
+  /* le piu' sicure, nella misura scelta qui sopra */
+  var n = quanteSicure(), es = [], ps2 = [], v2 = 0;
+  gg.forEach(function(g){
+    var x = (g.sicure || []).filter(function(y){ return y.n === n; })[0];
+    if(!x || x.vinta == null){ es.push(null); return; }
+    es.push(!!x.vinta); ps2.push(x.p); if(x.vinta) v2++;
+  });
+  if(ps2.length){
+    h += '<div class="storr"><span class="csgl dieci">Sicure ' + n + '</span><div class="stop">' +
+      es.map(function(e){ return '<i class="' + (e === null ? '' : (e ? 'si' : 'no')) + '"></i>'; }).join('') +
+      '</div><div class="stoc">' + v2 + ' su ' + ps2.length + '<span>attese ' + nu(somma(ps2), 1) + '</span></div></div>' +
+      '<div class="stov">' + esc(giudizioStorico(v2, somma(ps2), codaStorico(ps2, v2))) + '</div>';
+  }
+  /* e le singole: la piu' solida di ogni partita, cinque campionati */
+  var sn = 0, sp = 0, sv = 0;
+  gg.forEach(function(g){ if(g.solide){ sn += g.solide.n; sp += g.solide.promesse; sv += g.solide.prese; } });
+  h += '<div class="note" style="margin-top:10px"><p>Le singole, cioè <b>la più solida</b> di ogni partita nei ' +
+    'cinque campionati: entrate <b>' + sv + ' su ' + sn + '</b> (' + pc(sn ? sv / sn : 0) + '), promesse ' +
+    pc(sn ? sp / sn : 0) + '.</p><p>Un pallino a giornata, dal più vecchio a sinistra. Le multiple perdono ' +
+    'spesso anche quando il modello è giusto: una Difficile al 13% perde sette volte su otto. Quello che conta ' +
+    'è se le entrate stanno vicino alle attese.</p><p class="csgm">Come: ' + esc(S.storico.come || '') + '.</p></div>';
+  h += '</div>';
+  return h;
+}
+
 function tabConsigliata(){
   if(!(S._prossime||[]).length) S._prossime = prossimePartite();
   var tutte = consigliate();
@@ -5160,7 +5267,7 @@ function tabConsigliata(){
     return cardAccesso() +
       '<div class="card"><div class="empty"><b>Nessuna schedina per ora</b>' +
       'Le schedine si costruiscono sulle partite in arrivo: appena il calendario ' +
-      'della prossima giornata ha le partite, compaiono qui.</div></div>';
+      'della prossima giornata ha le partite, compaiono qui.</div></div>' + cardStorico();
   }
   var giorni = [];
   trovate.forEach(function(x){ x.scelta.scelte.forEach(function(c){ giorni.push(c.partita.d); }); });
@@ -5180,6 +5287,7 @@ function tabConsigliata(){
   h += cardQuota10();
   h += cardSicure();
   h += cardDieci();
+  h += cardStorico();
   h += cardAccesso();
   h += '<div class="note" style="margin-bottom:14px">In ogni livello, fra tutte le combinazioni di ' +
     'quella quota nei cinque campionati, c\'è quella che esce più spesso. Più sale la quota, più ' +
@@ -5834,7 +5942,9 @@ function renderPartita(){
       '</div>'+
       '<div class="note"><p>Ogni giro pesca una versione plausibile delle forze delle due squadre, '+
       'tira a sorte se qualcuno resta in dieci — con l\'effetto misurato sull\'archivio, non inventato — '+
-      'e poi lascia decidere al caso i gol. Da '+sim.N+' partite rigiocate esce una fascia, non un numero.</p>'+
+      'e poi lascia decidere al caso i gol. Da '+sim.N+' partite rigiocate esce una fascia, non un numero. '+
+      'I rossi allargano la fascia ma non spostano la probabilità: il rischio di un rosso è già dentro '+
+      'le quote, e contarlo due volte la peggiorava.</p>'+
       (storica!=null && Math.abs(storica-pr.casa)>0.015
         ? '<p>Storicamente, quando il modello ha detto <b>'+pc(pr.casa)+'</b> in questa fascia, è finita così '+
           'il <b>'+pc(storica)+'</b> delle volte. Il numero corretto con la storia è quello.</p>'

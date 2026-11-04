@@ -580,7 +580,12 @@ function ancoraMercato(lam, mu, rho, opz) {
   return { lam: g[0], mu: g[1],
            fattoreCasa: lam > 0 ? g[0] / lam : 1, fattoreVia: mu > 0 ? g[1] / mu : 1,
            usato: true, pesoUsato: Math.max(q ? w1 : 0, pOU != null ? wOU : 0),
-           mercato1x2: q, mercatoOver: pOU };
+           mercato1x2: q, mercatoOver: pOU,
+           /* L'1X2 a cui si mira, intero: con peso 1 e' quello del mercato. La
+              matrice ne rifa' lo squilibrio e i gol, ma il pareggio lo decide
+              la sua forma, e la forma lo da' un punto sotto il vero; il mercato
+              no (tools/misura_ritocchi.js). Chi mostra l'1X2 usa questo. */
+           bersaglio1x2: (q && w1 > 0) ? fondiTre(mie, q, w1) : null };
 }
 
 /* I gol attesi del solo modello, prima che il mercato ci metta bocca. */
@@ -631,6 +636,10 @@ function prevedi(modello, casa, via, opz) {
     var m = matriceRisultati(anc.lam, anc.mu, rho, 11);
     e = esiti(m);
     e.lambdaCasa = anc.lam; e.lambdaVia = anc.mu; e.matrice = m;
+    if (anc.bersaglio1x2) {
+      e.casa = anc.bersaglio1x2[0]; e.pari = anc.bersaglio1x2[1]; e.via = anc.bersaglio1x2[2];
+      e.puntiCasa = e.casa * 3 + e.pari; e.puntiVia = e.via * 3 + e.pari;
+    }
   } else {
     e = puro;
   }
@@ -1146,7 +1155,15 @@ function elencoTempi(s, nomiSquadre) {
        pesca una versione diversa fra quelle plausibili;
      · la partita fila liscia            → invece qualcuno può restare in dieci,
        e l'effetto è misurato sull'archivio.
-   Quello che esce non è una probabilità, ma una fascia di probabilità. */
+   Quello che esce non è una probabilità, ma una fascia di probabilità.
+
+   I rossi pero' allargano la FASCIA e non spostano la PROBABILITA'. Il rischio
+   che qualcuno resti in dieci e' gia' dentro le quote, e dentro le partite su
+   cui il modello e' stimato: tirarlo a sorte anche nella media lo contava due
+   volte, e allargava la forma dei gol proprio dove va stretta. Misurato su
+   3956 partite mai viste: senza i rossi nella media il risultato esatto si
+   prevede meglio dello 0.04% (z 3.5, tools/misura_ritocchi.js). Quindi la
+   media si fa sui giri senza rossi, la fascia su tutti. */
 function simula(modello, casa, via, opz) {
   opz = opz || {};
   var N = opz.N || 3000;
@@ -1185,12 +1202,14 @@ function simula(modello, casa, via, opz) {
   var esitiSim = [], conta = {}, k, campi;
   var somma = null, sommaGolC = 0, sommaGolV = 0;
   var risultatiConta = {};
-  var rossoCasa = 0, rossoVia = 0;
+  var rossoCasa = 0, rossoVia = 0, nLisci = 0;
   campi = campiMercato();
   var quoteHT = quotePrimoTempo(modello, i, j, agg);
   if (quoteHT) campi = campi.concat(CAMPI_TEMPI);
   somma = {};
   for (k = 0; k < campi.length; k++) somma[campi[k]] = 0;
+  var lisci = {};                     /* le stesse somme, solo sui giri senza rossi */
+  for (k = 0; k < campi.length; k++) lisci[campi[k]] = 0;
   var quadrati = {};
   for (k = 0; k < campi.length; k++) quadrati[campi[k]] = 0;
   var campione = [];
@@ -1234,19 +1253,24 @@ function simula(modello, casa, via, opz) {
     lam = limita(lam * fattC, 0.05, 7);
     mu = limita(mu * fattV, 0.05, 7);
     /* imprevisti: qualcuno resta in dieci */
-    if (rnd() < pRossoC) { lam *= rosso.attacco; mu *= rosso.difesa; rossoCasa++; }
-    if (rnd() < pRossoV) { mu *= rosso.attacco; lam *= rosso.difesa; rossoVia++; }
+    var liscia = true;
+    if (rnd() < pRossoC) { lam *= rosso.attacco; mu *= rosso.difesa; rossoCasa++; liscia = false; }
+    if (rnd() < pRossoV) { mu *= rosso.attacco; lam *= rosso.difesa; rossoVia++; liscia = false; }
     var m = matriceRisultati(lam, mu, rho, 11);
     var s = mercatiDaMatrice(m);
     if (quoteHT) mercatiTempi(lam, mu, rho, quoteHT, s);
     for (k = 0; k < campi.length; k++) {
       somma[campi[k]] += s[campi[k]];
       quadrati[campi[k]] += s[campi[k]] * s[campi[k]];
+      if (liscia) lisci[campi[k]] += s[campi[k]];
     }
     campione.push(s);
-    var gc = 0, gv = 0;
-    for (var a = 0; a < m.length; a++) for (var b = 0; b < m.length; b++) { gc += m[a][b] * a; gv += m[a][b] * b; }
-    sommaGolC += gc; sommaGolV += gv;
+    if (liscia) {
+      nLisci++;
+      var gc = 0, gv = 0;
+      for (var a = 0; a < m.length; a++) for (var b = 0; b < m.length; b++) { gc += m[a][b] * a; gv += m[a][b] * b; }
+      sommaGolC += gc; sommaGolV += gv;
+    }
   }
 
   var quantiCampioni = opz.campioni || 0;
@@ -1254,7 +1278,8 @@ function simula(modello, casa, via, opz) {
     var v = new Array(N);
     for (var q = 0; q < N; q++) v[q] = campione[q][campo];
     v.sort(function (a, b) { return a - b; });
-    var f = { p: somma[campo] / N, p05: v[Math.floor(N * 0.05)], p95: v[Math.floor(N * 0.95)],
+    var f = { p: nLisci ? lisci[campo] / nLisci : somma[campo] / N,
+              p05: v[Math.floor(N * 0.05)], p95: v[Math.floor(N * 0.95)],
               p25: v[Math.floor(N * 0.25)] };
     if (quantiCampioni) {
       /* Per combinare più partite non bastano media e fascia: serve un campione.
@@ -1274,8 +1299,25 @@ function simula(modello, casa, via, opz) {
   }
   var fasce = {};
   for (k = 0; k < campi.length; k++) fasce[campi[k]] = fascia(campi[k]);
+  /* L'1X2 e le doppie chance: quelli a cui l'ancoraggio mira, interi (con peso
+     1, quelli del mercato). La fascia si sposta con loro, cosi' resta intorno
+     al numero che si mostra. */
+  var mira = ancCentro.usato ? ancCentro.bersaglio1x2 : null;
+  if (mira) {
+    var bersagli = { casa: mira[0], pari: mira[1], via: mira[2],
+                     c1x: mira[0] + mira[1], cx2: mira[1] + mira[2], c12: mira[0] + mira[2] };
+    Object.keys(bersagli).forEach(function (campo) {
+      var f = fasce[campo];
+      if (!f) return;
+      var d = bersagli[campo] - f.p;
+      f.p = bersagli[campo];
+      f.p05 = limita(f.p05 + d, 0, 1); f.p25 = limita(f.p25 + d, 0, 1); f.p95 = limita(f.p95 + d, 0, 1);
+      if (f.campioni) f.campioni = f.campioni.map(function (x) { return limita(x + d, 0, 1); });
+    });
+  }
+  var nMedia = nLisci || N;
   return {
-    N: N, fasce: fasce, golCasa: sommaGolC / N, golVia: sommaGolV / N,
+    N: N, fasce: fasce, golCasa: sommaGolC / nMedia, golVia: sommaGolV / nMedia,
     quotaRossi: { casa: rossoCasa / N, via: rossoVia / N },
     effettoRosso: rosso, ancoraggio: ancCentro, quotePrimoTempo: quoteHT
   };
@@ -1685,13 +1727,39 @@ function rps(p, esito) {
   }
   return t / 2;
 }
-/* Dalle quote alle probabilità: si toglie il ricarico del bookmaker in proporzione. */
+/* Dalle quote alle probabilità: si toglie il ricarico del bookmaker.
+
+   Toglierlo "in proporzione" (dividere per la somma) vuol dire credere che
+   il banco carichi uguale su tutti e tre gli esiti. Non lo fa: carica di
+   piu' sull'esito improbabile, quello che la gente gioca per sognare, e la
+   divisione in proporzione gli lascia in mano troppa probabilita'. Il metodo
+   di Shin toglie il ricarico come lo mette davvero un banco che si difende
+   da chi ne sa piu' di lui.
+
+   Misurato (tools/misura_ritocchi.js), stimato sulle stagioni 2021-24 e
+   visto sulle tre dopo, con la quota media dei bookmaker (ricarico ~5%):
+   l'1X2 si prevede meglio dello 0.08% (z 2.5) con le quote di chiusura e
+   dello 0.08% (z 2.3) con quelle del venerdi'. Con Betfair, che di ricarico
+   ne ha mezzo punto, i due metodi danno lo stesso numero: serve dove Betfair
+   manca, che in Ligue 1 e' meta' delle partite. */
 function daQuote(q) {
   if (!q || q.length < 3) return null;
   var inv = [1 / q[0], 1 / q[1], 1 / q[2]];
   var s = inv[0] + inv[1] + inv[2];
   if (!(s > 0)) return null;
-  return [inv[0] / s, inv[1] / s, inv[2] / s];
+  if (!(s > 1.0001)) return [inv[0] / s, inv[1] / s, inv[2] / s];
+  function conZ(z) {
+    return inv.map(function (x) { return (Math.sqrt(z * z + 4 * (1 - z) * x * x / s) - z) / (2 * (1 - z)); });
+  }
+  var lo = 0, hi = 0.4, k, p;
+  for (k = 0; k < 50; k++) {
+    var z = (lo + hi) / 2;
+    p = conZ(z);
+    if (p[0] + p[1] + p[2] > 1) lo = z; else hi = z;
+  }
+  p = conZ((lo + hi) / 2);
+  var t = p[0] + p[1] + p[2];
+  return [p[0] / t, p[1] / t, p[2] / t];
 }
 
 /* ─────────────────────────── costruzione modello ─────────────────────────── */
@@ -1997,16 +2065,16 @@ function probabilitaDaCampione(cam, peso, opz) {
     lam = limita((tot + dif) / 2, 0.05, 7);
     mu = limita((tot - dif) / 2, 0.05, 7);
   }
-  var w = opz.ancoraggio || 0;
+  var w = opz.ancoraggio || 0, mira = null;
   if (w > 0 && (cam.q || cam.qou)) {
     var a = ancoraMercato(lam, mu, cam.rho, {
       q: cam.q, qou: cam.qou, peso1x2: w,
       pesoOU: opz.ancoraggioOU == null ? w : opz.ancoraggioOU });
-    lam = a.lam; mu = a.mu;
+    lam = a.lam; mu = a.mu; mira = a.bersaglio1x2;
   }
   var m = matriceRisultati(lam, mu, cam.rho, 11);
   var e = esiti(m);
-  return { p: [e.casa, e.pari, e.via], over: e.over25, totale: e.totale, lam: lam, mu: mu };
+  return { p: mira || [e.casa, e.pari, e.via], over: e.over25, totale: e.totale, lam: lam, mu: mu };
 }
 
 function misura(coppie) {
